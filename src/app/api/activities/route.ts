@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { createAlert, alertGroupMembers } from '@/lib/alerts'
+import { sendActivityInvite } from '@/lib/sms'
 
 // GET activities for the current user (upcoming + past)
 export async function GET(req: NextRequest) {
@@ -226,6 +227,50 @@ export async function POST(req: NextRequest) {
       body: `${whozinUser.first_name} created "${activity_name.trim()}" in ${group?.name ?? 'your group'}`,
       link: `/app/activities/${activity.id}`,
     })
+
+    // Send SMS invites to all group members
+    const memberUserIds = groupMembers.map((m) => m.user_id)
+    const { data: memberUsers } = await admin
+      .from('whozin_users')
+      .select('id, phone, country_code')
+      .in('id', memberUserIds)
+
+    // Format date/time for SMS
+    let dateTimeStr = ''
+    if (activity_date) {
+      const d = new Date(activity_date + 'T00:00:00')
+      dateTimeStr = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+      if (activity_time) {
+        const [h, m] = activity_time.split(':')
+        const hour = parseInt(h)
+        const ampm = hour >= 12 ? 'pm' : 'am'
+        const h12 = hour % 12 || 12
+        dateTimeStr += ` at ${h12}:${m} ${ampm}`
+      }
+    }
+
+    // Send SMS and create invite records
+    for (const member of (memberUsers ?? [])) {
+      const phone = member.phone.startsWith('+') ? member.phone : `+${member.country_code}${member.phone}`
+
+      const result = await sendActivityInvite(
+        phone,
+        whozinUser.first_name,
+        activity_name.trim(),
+        dateTimeStr || 'TBD'
+      )
+
+      // Create invite record to track SMS replies
+      await admin.from('whozin_invite').insert({
+        activity_id: activity.id,
+        user_id: member.id,
+        batch_number: 1,
+        status: 'pending',
+        sms_sid: result.success ? result.sid : null,
+        sent_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + (finalResponseTimer * 60 * 1000)).toISOString(),
+      })
+    }
   }
 
   return NextResponse.json(activity)
