@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
+import { createClient } from '@/lib/supabase/client'
 
 interface Member {
   membership_id: string
@@ -21,9 +22,19 @@ interface GroupDetail {
   name: string
   creator_id: string
   chat_enabled: boolean
+  members_visible: boolean
   is_owner: boolean
   current_user_id: string
+  creator_is_pro: boolean
   members: Member[]
+}
+
+interface ChatMessage {
+  id: string
+  body: string
+  created_at: string
+  sender_id: string
+  sender: { id: string; first_name: string; last_name: string; avatar_url: string | null }
 }
 
 interface Contact {
@@ -34,8 +45,8 @@ interface Contact {
   avatar_url: string | null
 }
 
-type Tab = 'details' | 'chat'
-type Modal = null | 'add-phone' | 'add-groups'
+type Tab = 'details' | 'chat' | 'members'
+type Modal = null | 'add-phone' | 'add-friends'
 
 export default function GroupDetailPage() {
   const router = useRouter()
@@ -44,10 +55,11 @@ export default function GroupDetailPage() {
 
   const [group, setGroup] = useState<GroupDetail | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('details')
+  const [tab, setTab] = useState<Tab | null>(null)
   const [modal, setModal] = useState<Modal>(null)
   const [groupName, setGroupName] = useState('')
   const [chatEnabled, setChatEnabled] = useState(false)
+  const [membersVisible, setMembersVisible] = useState(true)
   const [saving, setSaving] = useState(false)
   const nameTimeout = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -67,6 +79,9 @@ export default function GroupDetailPage() {
   // Drag reorder state
   const [dragIndex, setDragIndex] = useState<number | null>(null)
 
+  // Remove member confirm
+  const [removingMember, setRemovingMember] = useState<Member | null>(null)
+
   const loadGroup = useCallback(async () => {
     const res = await fetch(`/api/groups/${groupId}`)
     if (res.ok) {
@@ -74,6 +89,11 @@ export default function GroupDetailPage() {
       setGroup(data)
       setGroupName(data.name)
       setChatEnabled(data.chat_enabled)
+      setMembersVisible(data.members_visible ?? true)
+      // Default tab: host sees details, non-host sees chat
+      if (tab === null) {
+        setTab(data.is_owner ? 'details' : 'chat')
+      }
     }
     setLoading(false)
   }, [groupId])
@@ -93,13 +113,27 @@ export default function GroupDetailPage() {
     }, 800)
   }
 
-  async function handleChatToggle(enabled: boolean) {
-    setChatEnabled(enabled)
+  async function saveGroupSettings(updates: { chat_enabled?: boolean; members_visible?: boolean }) {
+    const payload = {
+      name: groupName,
+      chat_enabled: updates.chat_enabled ?? chatEnabled,
+      members_visible: updates.members_visible ?? membersVisible,
+    }
     await fetch(`/api/groups/${groupId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: groupName, chat_enabled: enabled }),
+      body: JSON.stringify(payload),
     })
+  }
+
+  async function handleChatToggle(enabled: boolean) {
+    setChatEnabled(enabled)
+    saveGroupSettings({ chat_enabled: enabled })
+  }
+
+  async function handleMembersVisibleToggle(visible: boolean) {
+    setMembersVisible(visible)
+    saveGroupSettings({ members_visible: visible })
   }
 
   function formatPhone(value: string): string {
@@ -166,10 +200,11 @@ export default function GroupDetailPage() {
     loadGroup()
   }
 
-  async function openAddFromGroups() {
-    setModal('add-groups')
+  async function openAddFriends() {
+    setModal('add-friends')
+    setContactSearch('')
     setLoadingContacts(true)
-    const res = await fetch('/api/groups/contacts')
+    const res = await fetch('/api/friends')
     if (res.ok) {
       const data = await res.json()
       setContacts(data)
@@ -211,7 +246,7 @@ export default function GroupDetailPage() {
   if (loading) {
     return (
       <div className="min-h-dvh flex flex-col bg-surface">
-        <AppHeader />
+        <AppHeader showBack />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
@@ -222,7 +257,7 @@ export default function GroupDetailPage() {
   if (!group) {
     return (
       <div className="min-h-dvh flex flex-col bg-surface">
-        <AppHeader />
+        <AppHeader showBack />
         <div className="flex-1 flex items-center justify-center px-4">
           <p className="text-muted">Group not found.</p>
         </div>
@@ -233,43 +268,110 @@ export default function GroupDetailPage() {
   const existingMemberIds = new Set(group.members.map((m) => m.user_id))
   const filteredContacts = contacts
     .filter((c) => !existingMemberIds.has(c.id))
-    .filter((c) =>
-      contactSearch
-        ? `${c.first_name} ${c.last_name}`.toLowerCase().includes(contactSearch.toLowerCase())
-        : true
-    )
+    .filter((c) => {
+      if (!contactSearch) return true
+      const q = contactSearch.toLowerCase()
+      const name = `${c.first_name} ${c.last_name}`.toLowerCase()
+      const phone = (c.phone || '').replace(/\D/g, '')
+      const searchDigits = q.replace(/\D/g, '')
+      return name.includes(q) || (searchDigits && phone.includes(searchDigits))
+    })
 
   return (
     <div className="min-h-dvh flex flex-col bg-surface">
-      <AppHeader />
+      <AppHeader showBack />
 
       {/* Tab bar */}
-      <div className="bg-background flex relative border-b border-border/40">
-        <button
-          onClick={() => setTab('details')}
-          className={`flex-1 py-3 text-[13px] font-semibold text-center transition-colors ${
-            tab === 'details' ? 'text-primary' : 'text-muted'
-          }`}
-        >
-          Group Details
-        </button>
-        <button
-          onClick={() => setTab('chat')}
-          className={`flex-1 py-3 text-[13px] font-semibold text-center transition-colors flex items-center justify-center gap-1.5 ${
-            tab === 'chat' ? 'text-primary' : 'text-muted'
-          }`}
-        >
-          Chat
-          <span className="text-[9px] font-bold bg-primary/15 text-primary px-1.5 py-0.5 rounded-full">PRO</span>
-        </button>
-        <div
-          className="absolute bottom-0 h-[2.5px] bg-primary rounded-full transition-all duration-300"
-          style={{ width: '50%', left: tab === 'details' ? '0%' : '50%' }}
-        />
-      </div>
+      {(() => {
+        const chatActive = group.chat_enabled && group.creator_is_pro
+        const tabs: { key: Tab; label: string; badge?: string }[] = []
+
+        if (group.is_owner) {
+          tabs.push({ key: 'details', label: 'Group Details' })
+          tabs.push({ key: 'chat', label: 'Chat', badge: !chatActive ? 'PRO' : undefined })
+        } else {
+          if (chatActive) tabs.push({ key: 'chat', label: 'Chat' })
+          if (group.members_visible) tabs.push({ key: 'members', label: 'Members' })
+        }
+
+        // If only one tab or none, don't show tab bar for non-hosts
+        if (!group.is_owner && tabs.length <= 1) return null
+
+        const tabWidth = `${100 / tabs.length}%`
+        const activeIndex = tabs.findIndex((t) => t.key === tab)
+
+        return (
+          <div className="bg-background flex relative border-b border-border/40">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex-1 py-3 text-[13px] font-semibold text-center transition-colors flex items-center justify-center gap-1.5 ${
+                  tab === t.key ? 'text-primary' : 'text-muted'
+                }`}
+              >
+                {t.label}
+                {t.badge && (
+                  <span className="text-[9px] font-bold bg-primary/15 text-primary px-1.5 py-0.5 rounded-full">{t.badge}</span>
+                )}
+              </button>
+            ))}
+            <div
+              className="absolute bottom-0 h-[2.5px] bg-primary rounded-full transition-all duration-300"
+              style={{ width: tabWidth, left: `${activeIndex * (100 / tabs.length)}%` }}
+            />
+          </div>
+        )
+      })()}
 
       <div className="flex-1 overflow-y-auto pb-8">
-        {tab === 'details' ? (
+        {/* Non-host group name banner (since they don't see Group Details) */}
+        {!group.is_owner && (
+          <div className="bg-background border-b border-border/30 px-4 py-2.5">
+            <p className="text-[15px] font-bold text-foreground text-center">{group.name}</p>
+          </div>
+        )}
+
+        {/* Non-host with nothing available */}
+        {!group.is_owner && !(group.chat_enabled && group.creator_is_pro) && !group.members_visible && (
+          <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
+            <p className="text-[13px] text-muted">The group host hasn&apos;t enabled any features yet.</p>
+          </div>
+        )}
+
+        {/* Read-only Members tab for non-hosts */}
+        {tab === 'members' && !group.is_owner && (
+          <div className="px-4 pt-4">
+            <p className="text-[12px] text-muted mb-3">{group.members.length} member{group.members.length !== 1 ? 's' : ''}</p>
+            <div className="space-y-2">
+              {group.members.map((member) => {
+                const isCurrentUser = member.user_id === group.current_user_id
+                return (
+                  <div key={member.membership_id} className="bg-background border border-border/50 rounded-xl p-3.5 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                    <div className="w-10 h-10 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {member.avatar_url ? (
+                        <img src={member.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8892a7" strokeWidth={1.5}>
+                          <circle cx="12" cy="8" r="4" />
+                          <path d="M4 21v-1a8 8 0 0116 0v1" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-foreground truncate">
+                        {member.first_name} {member.last_name}
+                        {isCurrentUser && <span className="text-[11px] text-muted font-normal ml-1">(You)</span>}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {tab === 'details' && (
           <div className="px-4 pt-4">
             {/* Group Info card */}
             <div className="bg-background border border-border/50 rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-4">
@@ -311,6 +413,22 @@ export default function GroupDetailPage() {
                   }`} />
                 </button>
               </div>
+
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-[13px] text-foreground">Allow members to see who&apos;s in the group</span>
+                <button
+                  role="switch"
+                  aria-checked={membersVisible}
+                  onClick={() => handleMembersVisibleToggle(!membersVisible)}
+                  className={`relative w-[46px] h-[28px] rounded-full transition-colors duration-200 flex-shrink-0 ${
+                    membersVisible ? 'bg-primary' : 'bg-[#d5d9e2]'
+                  }`}
+                >
+                  <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                    membersVisible ? 'translate-x-[18px]' : ''
+                  }`} />
+                </button>
+              </div>
             </div>
 
             {/* Add member buttons */}
@@ -321,10 +439,10 @@ export default function GroupDetailPage() {
               + Add Member
             </button>
             <button
-              onClick={openAddFromGroups}
+              onClick={openAddFriends}
               className="w-full py-3 mb-4 text-[14px] font-semibold text-primary bg-primary/8 rounded-xl active:bg-primary/15 transition-colors border border-primary/20"
             >
-              + Add from your groups
+              + Add from Friends
             </button>
 
             {/* Member list */}
@@ -390,7 +508,7 @@ export default function GroupDetailPage() {
                     {/* Remove button (not for owner) */}
                     {!isOwner && group.is_owner && (
                       <button
-                        onClick={() => handleRemoveMember(member.membership_id)}
+                        onClick={() => setRemovingMember(member)}
                         className="p-1.5 text-danger/60 active:text-danger flex-shrink-0"
                         aria-label="Remove member"
                       >
@@ -405,22 +523,10 @@ export default function GroupDetailPage() {
               })}
             </div>
           </div>
-        ) : (
-          /* Chat tab placeholder */
-          <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.5}>
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
-            </div>
-            <h3 className="text-[16px] font-bold text-foreground mb-1">Group Chat</h3>
-            <p className="text-[13px] text-muted mb-4">
-              Chat is a Pro feature. Upgrade your membership to enable group chat.
-            </p>
-            <button className="btn-primary px-6 py-2.5 text-[13px]">
-              Upgrade to Pro
-            </button>
-          </div>
+        )}
+
+        {tab === 'chat' && (
+          <GroupChat group={group} />
         )}
       </div>
 
@@ -489,16 +595,54 @@ export default function GroupDetailPage() {
         </BottomSheet>
       )}
 
-      {/* Add from Groups Modal */}
-      {modal === 'add-groups' && (
+      {/* Remove Member Confirm Modal */}
+      {removingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop bg-black/40" onClick={() => setRemovingMember(null)}>
+          <div
+            className="modal-panel bg-background rounded-2xl p-6 w-full max-w-xs shadow-2xl mx-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center mx-auto mb-3">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
+            </div>
+            <h3 className="text-[16px] font-bold text-foreground mb-1">Remove Member</h3>
+            <p className="text-[13px] text-muted mb-5">
+              Remove <span className="font-semibold text-foreground">{removingMember.first_name} {removingMember.last_name}</span> from this group? They won&apos;t be deleted from the app.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRemovingMember(null)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-[14px] font-semibold text-muted active:bg-surface transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleRemoveMember(removingMember.membership_id)
+                  setRemovingMember(null)
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-danger text-white text-[14px] font-semibold active:opacity-80 transition-opacity"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add from Friends Modal */}
+      {modal === 'add-friends' && (
         <BottomSheet onClose={() => setModal(null)}>
-          <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Add member from groups</h3>
+          <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Add from Friends</h3>
 
           <input
             type="text"
             value={contactSearch}
             onChange={(e) => setContactSearch(e.target.value)}
-            placeholder="Search by name"
+            placeholder="Search by name or phone..."
             className="input-field mb-4"
             autoFocus
           />
@@ -509,7 +653,7 @@ export default function GroupDetailPage() {
             </div>
           ) : filteredContacts.length === 0 ? (
             <p className="text-[13px] text-muted text-center py-8">
-              {contacts.length === 0 ? 'No contacts from your groups yet.' : 'No matching contacts.'}
+              {contacts.length === 0 ? 'No friends yet. Add members by phone to build your list!' : 'No matching friends.'}
             </p>
           ) : (
             <div className="space-y-2 max-h-[50dvh] overflow-y-auto">
@@ -551,6 +695,270 @@ export default function GroupDetailPage() {
           )}
         </BottomSheet>
       )}
+    </div>
+  )
+}
+
+function GroupChat({ group }: { group: GroupDetail }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [loadingMessages, setLoadingMessages] = useState(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+
+  const chatAvailable = group.chat_enabled && group.creator_is_pro
+
+  // Load messages
+  useEffect(() => {
+    if (!chatAvailable) { setLoadingMessages(false); return }
+
+    fetch(`/api/groups/${group.id}/messages`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setMessages(data)
+      })
+      .finally(() => setLoadingMessages(false))
+  }, [group.id, chatAvailable])
+
+  // Subscribe to real-time messages via Broadcast
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
+
+  useEffect(() => {
+    if (!chatAvailable) return
+
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`group-chat-${group.id}`)
+      .on('broadcast', { event: 'new_message' }, ({ payload }) => {
+        const msg = payload as ChatMessage
+        // Skip our own messages (already shown via optimistic insert)
+        if (msg.sender_id === group.current_user_id) return
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [...prev, msg]
+        })
+      })
+      .subscribe()
+
+    channelRef.current = channel
+    return () => { supabase.removeChannel(channel) }
+  }, [group.id, group.current_user_id, chatAvailable])
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  async function handleSend() {
+    const text = input.trim()
+    if (!text || sending) return
+    setInput('')
+    setSending(true)
+
+    // Optimistic insert
+    const optimistic: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      body: text,
+      created_at: new Date().toISOString(),
+      sender_id: group.current_user_id,
+      sender: {
+        id: group.current_user_id,
+        first_name: 'You',
+        last_name: '',
+        avatar_url: null,
+      },
+    }
+    setMessages((prev) => [...prev, optimistic])
+
+    try {
+      const res = await fetch(`/api/groups/${group.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: text }),
+      })
+      if (res.ok) {
+        const saved = await res.json()
+        // Replace optimistic with real message
+        setMessages((prev) =>
+          prev.map((m) => (m.id === optimistic.id ? { ...optimistic, id: saved.id, created_at: saved.created_at } : m))
+        )
+        // Broadcast to other clients
+        const me = group.members.find((m) => m.id === group.current_user_id)
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'new_message',
+          payload: {
+            id: saved.id,
+            body: text,
+            created_at: saved.created_at,
+            sender_id: group.current_user_id,
+            sender: me
+              ? { id: me.id, first_name: me.first_name, last_name: me.last_name, avatar_url: me.avatar_url }
+              : { id: group.current_user_id, first_name: '?', last_name: '', avatar_url: null },
+          },
+        })
+      } else {
+        // Remove optimistic on error
+        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
+        const err = await res.json()
+        alert(err.error || 'Failed to send message')
+      }
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
+    }
+    setSending(false)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  function formatTime(iso: string) {
+    const d = new Date(iso)
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  }
+
+  function formatDateSeparator(iso: string) {
+    const d = new Date(iso)
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    if (d.toDateString() === today.toDateString()) return 'Today'
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  }
+
+  // Not available state
+  if (!chatAvailable) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.5}>
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        </div>
+        <h3 className="text-[16px] font-bold text-foreground mb-1">Group Chat</h3>
+        <p className="text-[13px] text-muted mb-4">
+          {!group.chat_enabled
+            ? 'Chat is disabled for this group. The group owner can enable it in Group Details.'
+            : 'Chat requires a Pro membership. The group owner needs to upgrade to enable chat for everyone.'}
+        </p>
+        {group.is_owner && !group.creator_is_pro && (
+          <button className="btn-primary px-6 py-2.5 text-[13px]">
+            Upgrade to Pro
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Messages area */}
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-3">
+        {loadingMessages ? (
+          <div className="flex justify-center py-12">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.5}>
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+              </svg>
+            </div>
+            <p className="text-[13px] text-muted">No messages yet. Start the conversation!</p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {messages.map((msg, i) => {
+              const isMe = msg.sender_id === group.current_user_id
+              const prevMsg = i > 0 ? messages[i - 1] : null
+              const sameSender = prevMsg?.sender_id === msg.sender_id
+              const showDateSep = !prevMsg || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString()
+
+              return (
+                <div key={msg.id}>
+                  {showDateSep && (
+                    <div className="flex justify-center my-3">
+                      <span className="text-[10px] font-semibold text-muted bg-surface px-3 py-1 rounded-full">
+                        {formatDateSeparator(msg.created_at)}
+                      </span>
+                    </div>
+                  )}
+                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep ? 'mt-0.5' : 'mt-3'}`}>
+                    {/* Avatar for others */}
+                    {!isMe && !sameSender && (
+                      <div className="w-7 h-7 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                        {msg.sender?.avatar_url ? (
+                          <img src={msg.sender.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] font-bold text-muted">
+                            {msg.sender?.first_name?.[0] || '?'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {!isMe && sameSender && !showDateSep && <div className="w-7 mr-2 flex-shrink-0" />}
+
+                    <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
+                      {/* Sender name for others */}
+                      {!isMe && !sameSender && (
+                        <p className="text-[10px] font-semibold text-muted mb-0.5 ml-1">
+                          {msg.sender?.first_name} {msg.sender?.last_name}
+                        </p>
+                      )}
+                      <div
+                        className={`px-3.5 py-2 rounded-2xl text-[14px] leading-relaxed ${
+                          isMe
+                            ? 'bg-primary text-white rounded-br-md'
+                            : 'bg-background border border-border/50 text-foreground rounded-bl-md'
+                        }`}
+                      >
+                        {msg.body}
+                      </div>
+                      <p className={`text-[9px] text-muted mt-0.5 ${isMe ? 'text-right mr-1' : 'ml-1'}`}>
+                        {formatTime(msg.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Input bar */}
+      <div className="border-t border-border/50 bg-background px-3 py-2.5 flex items-end gap-2">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Message..."
+          rows={1}
+          className="flex-1 resize-none bg-surface border border-border/50 rounded-2xl px-4 py-2.5 text-[14px]
+                     placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
+                     max-h-32 overflow-y-auto"
+          style={{ minHeight: '40px' }}
+        />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || sending}
+          className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0
+                     disabled:opacity-40 active:scale-95 transition-all"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }

@@ -37,6 +37,23 @@ export async function GET() {
     .in('id', groupIds)
     .order('created_at', { ascending: false })
 
+  // Get unread chat alerts per group for this user
+  const { data: unreadAlerts } = await admin
+    .from('whozin_alerts')
+    .select('link')
+    .eq('user_id', userId)
+    .eq('type', 'chat_message')
+    .eq('read', false)
+
+  const unreadGroupIds = new Set(
+    (unreadAlerts ?? [])
+      .map((a) => {
+        const match = a.link?.match(/\/app\/groups\/([^/]+)/)
+        return match?.[1] ?? null
+      })
+      .filter(Boolean)
+  )
+
   const result = (groups ?? []).map((g) => ({
     id: g.id,
     name: g.name,
@@ -44,6 +61,7 @@ export async function GET() {
     chat_enabled: g.chat_enabled,
     member_count: g.whozin_group_members?.[0]?.count ?? 0,
     is_owner: g.creator_id === userId,
+    has_unread_chat: unreadGroupIds.has(g.id),
     created_at: g.created_at,
   }))
 

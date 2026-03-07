@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
 import { sendSmsInvite } from '@/lib/sms'
+import { createAlert, alertGroupMembers } from '@/lib/alerts'
 
 // POST add member to group
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -97,6 +98,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Get group name and new member name for alerts
+  const { data: groupData } = await admin.from('whozin_groups').select('name').eq('id', groupId).single()
+  const { data: targetUser } = await admin.from('whozin_users').select('first_name, last_name').eq('id', targetUserId).single()
+  const groupName = groupData?.name || 'a group'
+  const inviterName = `${whozinUser.first_name} ${whozinUser.last_name}`.trim() || 'Someone'
+  const targetName = targetUser ? `${targetUser.first_name} ${targetUser.last_name}`.trim() : 'Someone'
+
+  // Alert the new member they were added to the group
+  await createAlert({
+    user_id: targetUserId,
+    type: 'group_invite',
+    title: `Added to ${groupName}`,
+    body: `${inviterName} added you to the group "${groupName}".`,
+    link: `/app/groups/${groupId}`,
+  })
+
+  // Alert existing group members that someone joined
+  await alertGroupMembers(groupId, whozinUser.id, {
+    type: 'member_joined',
+    title: `New member in ${groupName}`,
+    body: `${targetName} was added to "${groupName}".`,
+    link: `/app/groups/${groupId}`,
+  })
+
+  // Auto-add to friends pool (both directions)
+  await Promise.all([
+    admin.from('whozin_friends').upsert(
+      { user_id: whozinUser.id, friend_id: targetUserId },
+      { onConflict: 'user_id,friend_id' }
+    ),
+    admin.from('whozin_friends').upsert(
+      { user_id: targetUserId, friend_id: whozinUser.id },
+      { onConflict: 'user_id,friend_id' }
+    ),
+  ])
 
   return NextResponse.json({ success: true, user_id: targetUserId })
 }

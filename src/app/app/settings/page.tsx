@@ -17,9 +17,10 @@ export default function SettingsPage() {
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [membership, setMembership] = useState('Free')
+  const [membership, setMembership] = useState('free')
   const [pushNotifications, setPushNotifications] = useState(false)
   const [hideFromSearch, setHideFromSearch] = useState(false)
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [blockPhoneNumber, setBlockPhoneNumber] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEmailUpdate, setShowEmailUpdate] = useState(false)
@@ -34,15 +35,29 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setFirstName(user.user_metadata?.first_name || '')
-        setLastName(user.user_metadata?.last_name || '')
-        setEmail(user.email || '')
-        setAvatarUrl(user.user_metadata?.avatar_url || null)
-      }
+    fetch('/api/user/profile')
+      .then((r) => r.json())
+      .then((profile) => {
+        if (profile.id) {
+          setFirstName(profile.first_name || '')
+          setLastName(profile.last_name || '')
+          setEmail(profile.email || '')
+          setAvatarUrl(profile.avatar_url || null)
+          setMembership(profile.membership_tier || 'free')
+          setPushNotifications(profile.push_notifications_enabled ?? false)
+          setHideFromSearch(profile.hide_from_invites ?? false)
+          setProfileLoaded(true)
+        }
+      })
+  }, [])
+
+  async function saveProfile(updates: Record<string, unknown>) {
+    await fetch('/api/user/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
     })
-  }, [supabase.auth])
+  }
 
   function toggleSection(key: SectionKey) {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -76,7 +91,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-dvh flex flex-col bg-surface">
-      <AppHeader />
+      <AppHeader showBack />
 
       {/* Welcome banner */}
       <div className="bg-background border-b border-border/60 py-4 text-center">
@@ -207,15 +222,18 @@ export default function SettingsPage() {
         >
           <div className="space-y-3">
             <Field label="Current Membership">
-              <div className="input-field text-foreground/70 select-none">{membership}</div>
+              <div className="input-field text-foreground/70 select-none capitalize">{membership}</div>
             </Field>
             <div className="flex items-center gap-3 pt-1">
-              <button className="text-[13px] text-primary font-semibold px-3">Cancel</button>
               <button
-                onClick={() => setMembership(membership === 'Free' ? 'Premium' : 'Free')}
+                onClick={() => {
+                  const newTier = membership === 'free' ? 'pro' : 'free'
+                  setMembership(newTier)
+                  saveProfile({ membership_tier: newTier })
+                }}
                 className="btn-primary flex-1 py-2.5"
               >
-                Change
+                {membership === 'free' ? 'Upgrade to Pro' : 'Downgrade to Free'}
               </button>
             </div>
           </div>
@@ -230,7 +248,7 @@ export default function SettingsPage() {
         >
           <div className="flex items-center justify-between">
             <span className="text-[14px] text-foreground">Receive Push Notifications</span>
-            <Toggle checked={pushNotifications} onChange={setPushNotifications} />
+            <Toggle checked={pushNotifications} onChange={(v) => { setPushNotifications(v); saveProfile({ push_notifications_enabled: v }) }} />
           </div>
         </Section>
 
@@ -244,7 +262,7 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[14px] text-foreground">Hide myself from being invited</span>
-              <Toggle checked={hideFromSearch} onChange={setHideFromSearch} />
+              <Toggle checked={hideFromSearch} onChange={(v) => { setHideFromSearch(v); saveProfile({ hide_from_invites: v }) }} />
             </div>
             <p className="text-[12px] text-muted leading-relaxed">
               You won&apos;t appear in friends&apos; contacts when they create a new activity.

@@ -14,6 +14,7 @@ interface GroupItem {
   chat_enabled: boolean
   member_count: number
   is_owner: boolean
+  has_unread_chat: boolean
   created_at: string
 }
 
@@ -71,7 +72,7 @@ export default function GroupsListPage() {
 
   return (
     <div className="min-h-dvh flex flex-col bg-surface">
-      <AppHeader />
+      <AppHeader showBack />
 
       <div className="flex-1 pb-20 px-4">
         {/* Create Group button */}
@@ -132,7 +133,11 @@ export default function GroupsListPage() {
               <button
                 key={group.id}
                 onClick={() => router.push(`/app/groups/${group.id}`)}
-                className="w-full bg-background border border-primary/20 rounded-xl p-4 flex items-center gap-3 active:bg-surface transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter"
+                className={`w-full bg-background rounded-xl p-4 flex items-center gap-3 active:bg-surface transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter ${
+                  group.is_owner
+                    ? 'border-[1.5px] border-primary/40 ring-1 ring-primary/10'
+                    : 'border border-border/50'
+                }`}
                 style={{ animationDelay: `${i * 0.03}s` }}
               >
                 {/* Group avatar */}
@@ -150,9 +155,15 @@ export default function GroupsListPage() {
 
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {group.chat_enabled && (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#4285F4" stroke="none">
-                      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                    </svg>
+                    group.has_unread_chat ? (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="#4285F4" stroke="none">
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                      </svg>
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                      </svg>
+                    )
                   )}
                   <div className="flex items-center gap-1 text-muted">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>

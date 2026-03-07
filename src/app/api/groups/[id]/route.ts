@@ -29,6 +29,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Group not found' }, { status: 404 })
   }
 
+  // Get creator's membership tier to determine Pro chat access
+  const { data: creator } = await admin
+    .from('whozin_users')
+    .select('membership_tier')
+    .eq('id', group.creator_id)
+    .single()
+
   const { data: members } = await admin
     .from('whozin_group_members')
     .select('id, user_id, priority_order, whozin_users(id, first_name, last_name, phone, avatar_url, status)')
@@ -39,6 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ...group,
     is_owner: group.creator_id === whozinUser.id,
     current_user_id: whozinUser.id,
+    creator_is_pro: creator?.membership_tier === 'pro',
     members: (members ?? []).map((m) => ({
       membership_id: m.id,
       user_id: m.user_id,
@@ -60,7 +68,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { error } = await admin
     .from('whozin_groups')
-    .update({ name: body.name, chat_enabled: body.chat_enabled, updated_at: new Date().toISOString() })
+    .update({
+      name: body.name,
+      chat_enabled: body.chat_enabled,
+      members_visible: body.members_visible,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
