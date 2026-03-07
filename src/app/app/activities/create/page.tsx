@@ -21,6 +21,7 @@ type CostType = 'free' | 'pay_me' | 'pay_at_location'
 type Tab = 'details' | 'group'
 
 const RESPONSE_TIMER_OPTIONS = [
+  { value: 0.083, label: '5 sec (test)', pro: false, admin: true },
   { value: 5, label: '5 min', pro: false },
   { value: 15, label: '15 min', pro: true },
   { value: 30, label: '30 min', pro: true },
@@ -439,7 +440,7 @@ export default function CreateActivityPage() {
                 </button>
                 {showTimerDropdown && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/50 rounded-xl shadow-lg z-20 overflow-hidden animate-enter">
-                    {RESPONSE_TIMER_OPTIONS.map((opt) => {
+                    {RESPONSE_TIMER_OPTIONS.filter((opt) => !opt.admin || isPro).map((opt) => {
                       const locked = opt.pro && !isPro
                       return (
                         <button
@@ -460,6 +461,7 @@ export default function CreateActivityPage() {
                           <span>{opt.label}</span>
                           <div className="flex items-center gap-2">
                             {opt.pro && <ProBadge small />}
+                            {opt.admin && <span className="text-[9px] px-1.5 py-0.5 bg-danger/10 text-danger rounded-full font-bold">TEST</span>}
                             {responseTimer === opt.value && (
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M20 6L9 17l-5-5" />
