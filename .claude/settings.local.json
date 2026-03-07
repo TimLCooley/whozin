@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(npx vercel:*)",
+      "Bash(npx:*)",
+      "Bash(netstat:*)",
+      "Bash(npm run:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(node:*)",
+      "Bash(source:*)",
+      "Bash(nslookup:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "Bash(do echo:*)",
+      "Bash(do:*)"
+    ]
+  }
+}
