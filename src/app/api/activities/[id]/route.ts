@@ -110,19 +110,61 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Also mark the invite as responded
+  await admin
+    .from('whozin_invite')
+    .update({ status: 'responded', response: response })
+    .eq('activity_id', id)
+    .eq('user_id', whozinUser.id)
+    .eq('status', 'pending')
+
   // Update capacity_current count
-  const { data: confirmedMembers } = await admin
+  const { count: confirmedCount } = await admin
     .from('whozin_activity_member')
     .select('id', { count: 'exact', head: true })
     .eq('activity_id', id)
     .eq('status', 'confirmed')
 
-  const confirmedCount = confirmedMembers ?? 0
-
   await admin
     .from('whozin_activity')
-    .update({ capacity_current: typeof confirmedCount === 'number' ? confirmedCount : 0 })
+    .update({ capacity_current: confirmedCount ?? 0 })
     .eq('id', id)
 
+  // If someone responded, trigger invite processing (may advance the queue)
+  const { processActivityInvites } = await import('@/lib/invite-processor')
+  await processActivityInvites(id)
+
   return NextResponse.json({ status: newStatus })
+}
+
+// DELETE activity (creator only)
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = getAdminClient()
+
+  const { data: whozinUser } = await admin
+    .from('whozin_users')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .single()
+
+  if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  const { data: activity } = await admin
+    .from('whozin_activity')
+    .select('creator_id')
+    .eq('id', id)
+    .single()
+
+  if (!activity || activity.creator_id !== whozinUser.id) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  await admin.from('whozin_activity').delete().eq('id', id)
+
+  return NextResponse.json({ ok: true })
 }

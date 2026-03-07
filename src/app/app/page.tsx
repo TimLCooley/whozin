@@ -148,7 +148,8 @@ export default function AppHome() {
             {activities.map((activity, i) => (
               <div
                 key={activity.id}
-                className={`bg-background border rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter ${
+                onClick={() => router.push(`/app/activities/${activity.id}`)}
+                className={`bg-background border rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter cursor-pointer active:bg-surface transition-colors ${
                   activity.is_creator ? 'border-primary/30' : 'border-border/50'
                 }`}
                 style={{ animationDelay: `${i * 0.03}s` }}
