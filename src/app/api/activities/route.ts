@@ -62,6 +62,19 @@ export async function GET(req: NextRequest) {
 
   const statusMap = new Map((myStatuses ?? []).map((s) => [s.activity_id, s.status]))
 
+  // Get confirmed counts per activity
+  const { data: allMemberStatuses } = await admin
+    .from('whozin_activity_member')
+    .select('activity_id, status')
+    .in('activity_id', Array.from(activityIds))
+
+  const confirmedCountMap = new Map<string, number>()
+  for (const m of (allMemberStatuses ?? [])) {
+    if (m.status === 'confirmed') {
+      confirmedCountMap.set(m.activity_id, (confirmedCountMap.get(m.activity_id) ?? 0) + 1)
+    }
+  }
+
   // Get creator names
   const creatorIds = [...new Set((activities ?? []).map((a) => a.creator_id))]
   const { data: creators } = await admin
@@ -101,6 +114,7 @@ export async function GET(req: NextRequest) {
       creator_id: a.creator_id,
       is_creator: a.creator_id === whozinUser.id,
       my_status: statusMap.get(a.id) ?? null,
+      confirmed_count: confirmedCountMap.get(a.id) ?? 0,
       creator_name: creator ? `${creator.first_name} ${creator.last_name}` : 'Unknown',
       group_name: group?.name ?? 'Unknown',
       group_id: a.group_id,

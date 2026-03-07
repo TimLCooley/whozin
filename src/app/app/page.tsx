@@ -22,7 +22,7 @@ interface ActivityCard {
   my_status: string | null
   creator_name: string
   group_name: string
-  confirmed_count?: number
+  confirmed_count: number
 }
 
 function formatDate(date: string | null, time: string | null) {
@@ -242,7 +242,9 @@ export default function AppHome() {
                       <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
                     </svg>
                     <span className="text-[12px] font-medium">
-                      {activity.member_count}{activity.max_capacity ? ` / ${activity.max_capacity}` : ''} filled
+                      {activity.max_capacity
+                        ? `${activity.confirmed_count} / ${activity.max_capacity} filled`
+                        : `${activity.confirmed_count} in`}
                     </span>
                   </div>
                 </div>
