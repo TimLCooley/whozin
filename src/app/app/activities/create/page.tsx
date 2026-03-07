@@ -34,6 +34,7 @@ export default function CreateActivityPage() {
   const [tab, setTab] = useState<Tab>('details')
   const [submitting, setSubmitting] = useState(false)
   const [isPro, setIsPro] = useState(false)
+  const [isTestUser, setIsTestUser] = useState(false)
 
   // Activity Details
   const [presets, setPresets] = useState<Preset[]>([])
@@ -75,6 +76,7 @@ export default function CreateActivityPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.membership_tier === 'pro') setIsPro(true)
+        if (data.phone?.replace(/\D/g, '').includes('999')) setIsTestUser(true)
       })
   }, [])
 
@@ -440,7 +442,7 @@ export default function CreateActivityPage() {
                 </button>
                 {showTimerDropdown && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/50 rounded-xl shadow-lg z-20 overflow-hidden animate-enter">
-                    {RESPONSE_TIMER_OPTIONS.filter((opt) => !opt.admin || isPro).map((opt) => {
+                    {RESPONSE_TIMER_OPTIONS.filter((opt) => !opt.admin || isPro || isTestUser).map((opt) => {
                       const locked = opt.pro && !isPro
                       return (
                         <button
