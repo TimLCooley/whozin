@@ -151,7 +151,7 @@ export default function ActivityDetailPage() {
 
   const tabs: { key: Tab; label: string; pro?: boolean }[] = [
     { key: 'details', label: 'Activity Details' },
-    { key: 'group', label: 'Group' },
+    ...(activity.is_creator ? [{ key: 'group' as Tab, label: 'Group' }] : []),
     ...(activity.chat_enabled ? [{ key: 'chat' as Tab, label: 'Chat', pro: true }] : []),
   ]
 
@@ -194,74 +194,85 @@ export default function ActivityDetailPage() {
       <div className="flex-1 overflow-y-auto pb-28">
         {tab === 'details' && (
           <div className="px-4 pt-4 space-y-4 animate-enter">
-            {/* Status banner */}
-            <div className={`rounded-xl p-3 text-center text-[13px] font-semibold ${
-              activity.status === 'full' ? 'bg-green-50 text-green-700 border border-green-200' :
-              activity.status === 'open' ? 'bg-primary/5 text-primary border border-primary/20' :
-              'bg-surface text-muted border border-border/50'
-            }`}>
-              {activity.status === 'full' ? 'Activity is Full!' :
-               activity.status === 'open' ? (activity.priority_invite ? 'Invites in progress...' : 'Open') :
-               activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
-            </div>
-
-            {/* Info cards */}
-            <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} />
-            {activity.location && <InfoRow icon="pin" label="Location" value={activity.location} link />}
-            <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
-            <InfoRow icon="people" label="Spots" value={
-              activity.max_capacity
-                ? `${confirmed.length} / ${activity.max_capacity} filled`
-                : `${confirmed.length} in`
-            } />
-            {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
-            {activity.priority_invite && (
-              <InfoRow icon="timer" label="Response Timer" value={`${activity.response_timer_minutes} min per batch`} />
-            )}
-
-            {/* Clone button (creator only) */}
+            {/* Host view */}
             {activity.is_creator && (
-              <button
-                onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
-                className="w-full bg-background border border-border/50 rounded-xl px-4 py-3 flex items-center gap-3 active:bg-surface transition-colors"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                </svg>
-                <span className="text-[14px] font-semibold text-primary">Clone Activity</span>
-              </button>
+              <>
+                {/* Status banner */}
+                <div className={`rounded-xl p-3 text-center text-[13px] font-semibold ${
+                  activity.status === 'full' ? 'bg-green-50 text-green-700 border border-green-200' :
+                  activity.status === 'open' ? 'bg-primary/5 text-primary border border-primary/20' :
+                  'bg-surface text-muted border border-border/50'
+                }`}>
+                  {activity.status === 'full' ? 'Activity is Full!' :
+                   activity.status === 'open' ? (activity.priority_invite ? 'Invites in progress...' : 'Open') :
+                   activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
+                </div>
+
+                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} trailing={<AddToCalendarButton activity={activity} />} />
+                {activity.location && <InfoRow icon="pin" label="Location" value={activity.location} link />}
+                <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
+                <InfoRow icon="people" label="Spots" value={
+                  activity.max_capacity
+                    ? `${confirmed.length} / ${activity.max_capacity} filled`
+                    : `${confirmed.length} in`
+                } />
+                {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
+                {activity.priority_invite && (
+                  <InfoRow icon="timer" label="Response Timer" value={`${activity.response_timer_minutes} min per batch`} />
+                )}
+
+                {/* Clone button */}
+                <button
+                  onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
+                  className="w-full bg-background border border-border/50 rounded-xl px-4 py-3 flex items-center gap-3 active:bg-surface transition-colors"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                  </svg>
+                  <span className="text-[14px] font-semibold text-primary">Clone Activity</span>
+                </button>
+              </>
             )}
 
-            {/* My response (non-creator) */}
-            {!activity.is_creator && activity.my_status && activity.my_status !== 'tbd' && (
-              <div className="bg-background border border-border/50 rounded-xl p-4">
-                <p className="text-[13px] font-medium text-foreground/70 mb-3">Your Response</p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => handleResponse('in')}
-                    disabled={responding || isFull}
-                    className={`flex-1 py-3 rounded-xl text-[14px] font-bold transition-colors ${
-                      activity.my_status === 'confirmed'
-                        ? 'bg-[#00C853] text-white'
-                        : 'bg-surface text-foreground border border-border/50 active:bg-primary/5'
-                    } disabled:opacity-50`}
-                  >
-                    {activity.my_status === 'confirmed' ? "You're In!" : 'IN'}
-                  </button>
-                  <button
-                    onClick={() => handleResponse('out')}
-                    disabled={responding}
-                    className={`flex-1 py-3 rounded-xl text-[14px] font-bold transition-colors ${
-                      activity.my_status === 'out'
-                        ? 'bg-red-500 text-white'
-                        : 'bg-surface text-foreground border border-border/50 active:bg-red-50'
-                    }`}
-                  >
-                    {activity.my_status === 'out' ? "You're Out" : 'OUT'}
-                  </button>
-                </div>
-              </div>
+            {/* Invitee view — just the essentials */}
+            {!activity.is_creator && (
+              <>
+                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} trailing={<AddToCalendarButton activity={activity} />} />
+                {activity.location && <InfoRow icon="pin" label="Location" value={activity.location} link />}
+                <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
+
+                {/* Response buttons */}
+                {activity.my_status && activity.my_status !== 'tbd' && (
+                  <div className="bg-background border border-border/50 rounded-xl p-4">
+                    <p className="text-[13px] font-medium text-foreground/70 mb-3">Your Response</p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleResponse('in')}
+                        disabled={responding || (isFull && activity.my_status !== 'confirmed')}
+                        className={`flex-1 py-3 rounded-xl text-[14px] font-bold transition-colors ${
+                          activity.my_status === 'confirmed'
+                            ? 'bg-[#00C853] text-white'
+                            : 'bg-surface text-foreground border border-border/50 active:bg-primary/5'
+                        } disabled:opacity-50`}
+                      >
+                        {activity.my_status === 'confirmed' ? "You're In!" : 'IN'}
+                      </button>
+                      <button
+                        onClick={() => handleResponse('out')}
+                        disabled={responding}
+                        className={`flex-1 py-3 rounded-xl text-[14px] font-bold transition-colors ${
+                          activity.my_status === 'out'
+                            ? 'bg-red-500 text-white'
+                            : 'bg-surface text-foreground border border-border/50 active:bg-red-50'
+                        }`}
+                      >
+                        {activity.my_status === 'out' ? "You're Out" : 'OUT'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -450,7 +461,43 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
-function InfoRow({ icon, label, value, link }: { icon: string; label: string; value: string; link?: boolean }) {
+function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
+  function handleAddToCalendar() {
+    const title = encodeURIComponent(activity.activity_name)
+    const location = encodeURIComponent(activity.location ?? '')
+    let startDate = ''
+    let endDate = ''
+    if (activity.activity_date) {
+      const date = activity.activity_date.replace(/-/g, '')
+      const time = activity.activity_time ? activity.activity_time.replace(/:/g, '') + '00' : '120000'
+      startDate = `${date}T${time}`
+      // Default 2 hour event
+      const start = new Date(`${activity.activity_date}T${activity.activity_time ?? '12:00'}`)
+      const end = new Date(start.getTime() + 2 * 60 * 60 * 1000)
+      const endD = end.toISOString().split('T')[0].replace(/-/g, '')
+      const endT = String(end.getHours()).padStart(2, '0') + String(end.getMinutes()).padStart(2, '0') + '00'
+      endDate = `${endD}T${endT}`
+    }
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&location=${location}`
+    window.open(url, '_blank')
+  }
+
+  return (
+    <button
+      onClick={handleAddToCalendar}
+      className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center active:bg-primary/20 transition-colors"
+      title="Add to Calendar"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <path d="M3 10h18M8 2v4M16 2v4" />
+        <path d="M12 14v4M10 16h4" />
+      </svg>
+    </button>
+  )
+}
+
+function InfoRow({ icon, label, value, link, trailing }: { icon: string; label: string; value: string; link?: boolean; trailing?: React.ReactNode }) {
   return (
     <div className="bg-background border border-border/50 rounded-xl px-4 py-3 flex items-start gap-3">
       <div className="mt-0.5 flex-shrink-0">
@@ -489,6 +536,7 @@ function InfoRow({ icon, label, value, link }: { icon: string; label: string; va
         <p className="text-[11px] font-medium text-muted uppercase tracking-wider">{label}</p>
         <p className={`text-[14px] font-medium mt-0.5 ${link ? 'text-primary' : 'text-foreground'}`}>{value}</p>
       </div>
+      {trailing}
     </div>
   )
 }
