@@ -279,7 +279,7 @@ export default function GroupDetailPage() {
     })
 
   return (
-    <div className="min-h-dvh flex flex-col bg-surface">
+    <div className="h-dvh flex flex-col bg-surface overflow-hidden">
       <AppHeader showBack />
 
       {/* Tab bar */}
