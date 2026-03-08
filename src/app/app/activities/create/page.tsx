@@ -21,7 +21,7 @@ type CostType = 'free' | 'pay_me' | 'pay_at_location'
 type Tab = 'details' | 'group'
 
 const RESPONSE_TIMER_OPTIONS = [
-  { value: 0.083, label: '5 sec (test)', pro: false, admin: true },
+  { value: 0.167, label: '10 sec (test)', pro: false, admin: true },
   { value: 5, label: '5 min', pro: false },
   { value: 15, label: '15 min', pro: true },
   { value: 30, label: '30 min', pro: true },
