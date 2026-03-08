@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
+import { createClient } from '@/lib/supabase/client'
 
 interface MemberInfo {
   id: string
@@ -173,7 +174,7 @@ export default function ActivityDetailPage() {
   const tabs: { key: Tab; label: string; pro?: boolean }[] = [
     { key: 'details', label: 'Activity Details' },
     ...(activity.is_creator ? [{ key: 'group' as Tab, label: 'Group' }] : []),
-    ...(activity.chat_enabled ? [{ key: 'chat' as Tab, label: 'Chat', pro: true }] : []),
+    ...(activity.chat_enabled ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
   ]
 
   return (
@@ -346,9 +347,7 @@ export default function ActivityDetailPage() {
         )}
 
         {tab === 'chat' && (
-          <div className="flex-1 flex items-center justify-center py-16 text-muted text-[14px]">
-            Activity chat coming soon...
-          </div>
+          <ActivityChat activity={activity} />
         )}
       </div>
 
@@ -543,6 +542,255 @@ function StatusIcon({ status }: { status: string }) {
     default:
       return null
   }
+}
+
+interface ChatMessage {
+  id: string
+  body: string
+  created_at: string
+  sender_id: string
+  sender: { id: string; first_name: string; last_name: string; avatar_url: string | null }
+}
+
+function ActivityChat({ activity }: { activity: ActivityDetail }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const [loadingMessages, setLoadingMessages] = useState(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
+
+  const isConfirmed = activity.my_status === 'confirmed'
+
+  // Load messages
+  useEffect(() => {
+    if (!isConfirmed) { setLoadingMessages(false); return }
+
+    fetch(`/api/activities/${activity.id}/messages`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setMessages(data)
+      })
+      .finally(() => setLoadingMessages(false))
+  }, [activity.id, isConfirmed])
+
+  // Real-time broadcast
+  useEffect(() => {
+    if (!isConfirmed) return
+
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`activity-chat-${activity.id}`)
+      .on('broadcast', { event: 'new_message' }, ({ payload }) => {
+        const msg = payload as ChatMessage
+        if (msg.sender_id === activity.current_user_id) return
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev
+          return [...prev, msg]
+        })
+      })
+      .subscribe()
+
+    channelRef.current = channel
+    return () => { supabase.removeChannel(channel) }
+  }, [activity.id, activity.current_user_id, isConfirmed])
+
+  // Scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  async function handleSend() {
+    const text = input.trim()
+    if (!text || sending) return
+    setInput('')
+    setSending(true)
+
+    const optimistic: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      body: text,
+      created_at: new Date().toISOString(),
+      sender_id: activity.current_user_id,
+      sender: { id: activity.current_user_id, first_name: 'You', last_name: '', avatar_url: null },
+    }
+    setMessages((prev) => [...prev, optimistic])
+
+    try {
+      const res = await fetch(`/api/activities/${activity.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: text }),
+      })
+      if (res.ok) {
+        const saved = await res.json()
+        setMessages((prev) =>
+          prev.map((m) => (m.id === optimistic.id ? { ...optimistic, id: saved.id, created_at: saved.created_at } : m))
+        )
+        // Find current user in members for broadcast
+        const me = activity.members.find((m) => m.user_id === activity.current_user_id)
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'new_message',
+          payload: {
+            id: saved.id,
+            body: text,
+            created_at: saved.created_at,
+            sender_id: activity.current_user_id,
+            sender: me?.user
+              ? { id: me.user.id, first_name: me.user.first_name, last_name: me.user.last_name, avatar_url: me.user.avatar_url }
+              : { id: activity.current_user_id, first_name: '?', last_name: '', avatar_url: null },
+          },
+        })
+      } else {
+        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
+      }
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
+    }
+    setSending(false)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  function formatTime(iso: string) {
+    const d = new Date(iso)
+    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  }
+
+  function formatDateSeparator(iso: string) {
+    const d = new Date(iso)
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    if (d.toDateString() === today.toDateString()) return 'Today'
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  }
+
+  // Not confirmed — can't access chat
+  if (!isConfirmed) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.5}>
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+        </div>
+        <h3 className="text-[16px] font-bold text-foreground mb-1">Activity Chat</h3>
+        <p className="text-[13px] text-muted">
+          Only confirmed members can access the chat. Say you&apos;re &quot;In&quot; to join the conversation!
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {loadingMessages ? (
+          <div className="flex justify-center py-12">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.5}>
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+              </svg>
+            </div>
+            <p className="text-[13px] text-muted">No messages yet. Start the conversation!</p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {messages.map((msg, i) => {
+              const isMe = msg.sender_id === activity.current_user_id
+              const prevMsg = i > 0 ? messages[i - 1] : null
+              const sameSender = prevMsg?.sender_id === msg.sender_id
+              const showDateSep = !prevMsg || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString()
+
+              return (
+                <div key={msg.id}>
+                  {showDateSep && (
+                    <div className="flex justify-center my-3">
+                      <span className="text-[10px] font-semibold text-muted bg-surface px-3 py-1 rounded-full">
+                        {formatDateSeparator(msg.created_at)}
+                      </span>
+                    </div>
+                  )}
+                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep ? 'mt-0.5' : 'mt-3'}`}>
+                    {!isMe && !sameSender && (
+                      <div className="w-7 h-7 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                        {msg.sender?.avatar_url ? (
+                          <img src={msg.sender.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] font-bold text-muted">
+                            {msg.sender?.first_name?.[0] || '?'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {!isMe && sameSender && !showDateSep && <div className="w-7 mr-2 flex-shrink-0" />}
+
+                    <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
+                      {!isMe && !sameSender && (
+                        <p className="text-[10px] font-semibold text-muted mb-0.5 ml-1">
+                          {msg.sender?.first_name} {msg.sender?.last_name}
+                        </p>
+                      )}
+                      <div
+                        className={`px-3.5 py-2 rounded-2xl text-[14px] leading-relaxed ${
+                          isMe
+                            ? 'bg-primary text-white rounded-br-md'
+                            : 'bg-background border border-border/50 text-foreground rounded-bl-md'
+                        }`}
+                      >
+                        {msg.body}
+                      </div>
+                      <p className={`text-[9px] text-muted mt-0.5 ${isMe ? 'text-right mr-1' : 'ml-1'}`}>
+                        {formatTime(msg.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Input bar */}
+      <div className="border-t border-border/50 bg-background px-3 py-2.5 flex items-end gap-2">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Message..."
+          rows={1}
+          className="flex-1 resize-none bg-surface border border-border/50 rounded-2xl px-4 py-2.5 text-[14px]
+                     placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
+                     max-h-32 overflow-y-auto"
+          style={{ minHeight: '40px' }}
+        />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || sending}
+          className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0
+                     disabled:opacity-40 active:scale-95 transition-all"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
