@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
+import { PawAvatar } from '@/components/ui/paw-avatar'
 import { createClient } from '@/lib/supabase/client'
 
 interface MemberInfo {
@@ -174,7 +175,7 @@ export default function ActivityDetailPage() {
   const tabs: { key: Tab; label: string; pro?: boolean }[] = [
     { key: 'details', label: 'Activity Details' },
     ...(activity.is_creator ? [{ key: 'group' as Tab, label: 'Group' }] : []),
-    ...(activity.chat_enabled ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
+    ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
   ]
 
   return (
@@ -475,16 +476,7 @@ function StatusSection({
               key={m.id}
               className={`flex items-center gap-3 px-4 py-3 ${i < members.length - 1 ? 'border-b border-border/30' : ''}`}
             >
-              <div className="w-9 h-9 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0">
-                {m.user?.avatar_url ? (
-                  <img src={m.user.avatar_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b0b8cc" strokeWidth={1.5}>
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M4 21v-1a8 8 0 0116 0v1" />
-                  </svg>
-                )}
-              </div>
+              <PawAvatar src={m.user?.avatar_url} />
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-semibold text-foreground truncate">
                   {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
@@ -725,14 +717,8 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
                   )}
                   <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep ? 'mt-0.5' : 'mt-3'}`}>
                     {!isMe && !sameSender && (
-                      <div className="w-7 h-7 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
-                        {msg.sender?.avatar_url ? (
-                          <img src={msg.sender.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[10px] font-bold text-muted">
-                            {msg.sender?.first_name?.[0] || '?'}
-                          </span>
-                        )}
+                      <div className="mr-2 mt-0.5">
+                        <PawAvatar size="sm" src={msg.sender?.avatar_url} />
                       </div>
                     )}
                     {!isMe && sameSender && !showDateSep && <div className="w-7 mr-2 flex-shrink-0" />}

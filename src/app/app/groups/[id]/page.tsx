@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { createClient } from '@/lib/supabase/client'
+import { PawAvatar } from '@/components/ui/paw-avatar'
 
 interface Member {
   membership_id: string
@@ -348,16 +349,7 @@ export default function GroupDetailPage() {
                 const isCurrentUser = member.user_id === group.current_user_id
                 return (
                   <div key={member.membership_id} className="bg-background border border-border/50 rounded-xl p-3.5 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                    <div className="w-10 h-10 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0">
-                      {member.avatar_url ? (
-                        <img src={member.avatar_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8892a7" strokeWidth={1.5}>
-                          <circle cx="12" cy="8" r="4" />
-                          <path d="M4 21v-1a8 8 0 0116 0v1" />
-                        </svg>
-                      )}
-                    </div>
+                    <PawAvatar size="lg" src={member.avatar_url} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[14px] font-semibold text-foreground truncate">
                         {member.first_name} {member.last_name}
@@ -461,16 +453,7 @@ export default function GroupDetailPage() {
                     }`}
                   >
                     {/* Avatar */}
-                    <div className="w-10 h-10 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0">
-                      {member.avatar_url ? (
-                        <img src={member.avatar_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8892a7" strokeWidth={1.5}>
-                          <circle cx="12" cy="8" r="4" />
-                          <path d="M4 21v-1a8 8 0 0116 0v1" />
-                        </svg>
-                      )}
-                    </div>
+                    <PawAvatar size="lg" src={member.avatar_url} />
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
@@ -663,16 +646,7 @@ export default function GroupDetailPage() {
                   className="bg-background border border-border/50 rounded-xl p-3 flex items-center gap-3"
                 >
                   {/* Avatar */}
-                  <div className="w-9 h-9 rounded-full bg-primary/10 overflow-hidden flex items-center justify-center flex-shrink-0">
-                    {contact.avatar_url ? (
-                      <img src={contact.avatar_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.5}>
-                        <circle cx="12" cy="8" r="4" />
-                        <path d="M4 21v-1a8 8 0 0116 0v1" />
-                      </svg>
-                    )}
-                  </div>
+                  <PawAvatar src={contact.avatar_url} />
 
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-foreground truncate">
@@ -894,14 +868,8 @@ function GroupChat({ group }: { group: GroupDetail }) {
                   <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep ? 'mt-0.5' : 'mt-3'}`}>
                     {/* Avatar for others */}
                     {!isMe && !sameSender && (
-                      <div className="w-7 h-7 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
-                        {msg.sender?.avatar_url ? (
-                          <img src={msg.sender.avatar_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[10px] font-bold text-muted">
-                            {msg.sender?.first_name?.[0] || '?'}
-                          </span>
-                        )}
+                      <div className="mr-2 mt-0.5">
+                        <PawAvatar size="sm" src={msg.sender?.avatar_url} />
                       </div>
                     )}
                     {!isMe && sameSender && !showDateSep && <div className="w-7 mr-2 flex-shrink-0" />}
