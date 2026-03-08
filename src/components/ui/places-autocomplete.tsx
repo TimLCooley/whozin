@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // Load Google Maps script once
 let googleScriptPromise: Promise<void> | null = null
@@ -33,51 +33,105 @@ interface PlacesAutocompleteProps {
 }
 
 export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for a location...', className }: PlacesAutocompleteProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const elementRef = useRef<HTMLElement | null>(null)
   const [ready, setReady] = useState(false)
+  const [fallback, setFallback] = useState(false)
 
   useEffect(() => {
     loadGoogleMaps()
       .then(() => setReady(true))
-      .catch(() => {})
+      .catch(() => setFallback(true))
   }, [])
 
-  const initAutocomplete = useCallback(() => {
-    if (!ready || !inputRef.current || autocompleteRef.current) return
-    if (!window.google?.maps?.places) return
+  useEffect(() => {
+    if (!ready || !containerRef.current || elementRef.current) return
+    if (!window.google?.maps?.places?.PlaceAutocompleteElement) {
+      setFallback(true)
+      return
+    }
 
-    const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
-      types: ['establishment', 'geocode'],
-      fields: ['formatted_address', 'name', 'geometry'],
-    })
+    // @ts-expect-error - options parameter optional in runtime but typed as required
+    const el = new window.google.maps.places.PlaceAutocompleteElement()
+    el.setAttribute('style', 'width:100%;')
+    elementRef.current = el
 
-    ac.addListener('place_changed', () => {
-      const place = ac.getPlace()
+    el.addEventListener('gmp-placeselect', async (e: Event) => {
+      const event = e as CustomEvent
+      const place = event.detail?.place
       if (place) {
-        // Use name + address for establishments, or just address for geocode
-        const display = place.name && place.formatted_address && !place.formatted_address.startsWith(place.name)
-          ? `${place.name}, ${place.formatted_address}`
-          : place.formatted_address || place.name || ''
+        // Fetch display name and formatted address
+        await place.fetchFields({ fields: ['displayName', 'formattedAddress'] })
+        const name = place.displayName || ''
+        const address = place.formattedAddress || ''
+        const display = name && address && !address.startsWith(name)
+          ? `${name}, ${address}`
+          : address || name
         onChange(display)
       }
     })
 
-    autocompleteRef.current = ac
+    containerRef.current.appendChild(el)
+
+    return () => {
+      if (el.parentNode) el.parentNode.removeChild(el)
+      elementRef.current = null
+    }
   }, [ready, onChange])
 
-  useEffect(() => {
-    initAutocomplete()
-  }, [initAutocomplete])
+  // Fallback: plain input if Google Maps fails to load
+  if (fallback || !process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+    return (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={className || 'input-field'}
+      />
+    )
+  }
 
   return (
-    <input
-      ref={inputRef}
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className={className || 'input-field'}
-    />
+    <div>
+      {/* Show current value / allow manual editing */}
+      {value && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[13px] text-foreground flex-1 truncate">{value}</span>
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-[11px] text-primary font-semibold shrink-0"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      <div ref={containerRef} className="google-places-container" />
+      <style jsx global>{`
+        .google-places-container gmp-place-autocomplete {
+          width: 100%;
+        }
+        .google-places-container gmp-place-autocomplete input {
+          width: 100%;
+          height: 44px;
+          padding: 0 16px;
+          border-radius: 12px;
+          border: 1px solid var(--color-border, #e2e8f0);
+          background: var(--color-background, #fff);
+          font-size: 14px;
+          color: var(--color-foreground, #1a1a2e);
+          outline: none;
+          font-family: inherit;
+        }
+        .google-places-container gmp-place-autocomplete input:focus {
+          border-color: var(--color-primary, #4285F4);
+          box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.15);
+        }
+        .google-places-container gmp-place-autocomplete input::placeholder {
+          color: var(--color-muted, #94a3b8);
+        }
+      `}</style>
+    </div>
   )
 }
