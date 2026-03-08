@@ -73,6 +73,11 @@ export default function AuthForm({ onBack }: AuthFormProps) {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: 'https://www.googleapis.com/auth/contacts.readonly',
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       })
       if (oauthError) {

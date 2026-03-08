@@ -104,7 +104,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Google Cloud',
-    description: 'Maps, Places autocomplete, and AI image generation (Imagen).',
+    description: 'Maps, Places autocomplete, AI image generation, and OAuth.',
     icon: '🌐',
     envVars: [
       { key: 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY', label: 'Maps API Key' },
@@ -112,26 +112,65 @@ const INTEGRATIONS: Integration[] = [
     ],
     docsUrl: 'https://console.cloud.google.com/',
   },
+  {
+    name: 'Google OAuth',
+    description: 'Sign in with Google and Google Contacts search. Configured in Supabase Auth.',
+    icon: '🔑',
+    envVars: [],
+    docsUrl: 'https://supabase.com/dashboard/project/ooqdkonjcztjankkvejh/auth/providers',
+  },
+  {
+    name: 'Capacitor (Native Apps)',
+    description: 'iOS and Android app shell. Bundle ID: io.whozin.app',
+    icon: '📱',
+    envVars: [],
+    docsUrl: 'https://capacitorjs.com/docs',
+  },
 ]
 
 const API_ENDPOINTS = [
+  // Auth
   { method: 'POST', path: '/api/auth/send-otp', desc: 'Send OTP code via SMS' },
   { method: 'POST', path: '/api/auth/verify-otp', desc: 'Verify OTP and create/link account' },
   { method: 'POST', path: '/api/auth/sign-up', desc: 'Legacy password sign-up' },
+  { method: 'GET', path: '/auth/callback', desc: 'OAuth callback (Google/Apple)' },
+  // User
+  { method: 'GET', path: '/api/user/profile', desc: 'Current user profile' },
+  { method: 'POST', path: '/api/user/verify-email', desc: 'Send email verification code' },
+  { method: 'PUT', path: '/api/user/verify-email', desc: 'Verify and update email' },
+  // Groups
   { method: 'GET', path: '/api/groups', desc: 'List user groups' },
   { method: 'POST', path: '/api/groups', desc: 'Create group' },
   { method: 'GET', path: '/api/groups/[id]', desc: 'Group detail with members' },
   { method: 'POST', path: '/api/groups/[id]/members', desc: 'Add member to group' },
   { method: 'GET', path: '/api/groups/contacts', desc: 'Contacts from user groups' },
+  { method: 'GET', path: '/api/friends', desc: 'Friends list (from all groups)' },
+  // Activities
+  { method: 'GET', path: '/api/activities', desc: 'List activities' },
+  { method: 'POST', path: '/api/activities', desc: 'Create activity' },
+  { method: 'GET', path: '/api/activities/presets', desc: 'Activity presets' },
+  { method: 'POST', path: '/api/activities/upload-image', desc: 'Upload activity image' },
+  { method: 'POST', path: '/api/activities/generate-image', desc: 'AI-generate activity image' },
+  // Google
+  { method: 'GET', path: '/api/google/contacts', desc: 'Search Google Contacts' },
+  // Contact
+  { method: 'POST', path: '/api/contact', desc: 'Contact form submission' },
+  // Admin
   { method: 'GET', path: '/api/admin/settings', desc: 'Fetch all app settings' },
   { method: 'PUT', path: '/api/admin/settings', desc: 'Update app settings' },
   { method: 'POST', path: '/api/admin/upload', desc: 'Upload branding assets' },
   { method: 'GET', path: '/api/admin/env-status', desc: 'Check env var status' },
+  { method: 'GET', path: '/api/admin/stats', desc: 'Dashboard stats' },
+  { method: 'GET', path: '/api/admin/users', desc: 'All users (admin)' },
+  { method: 'GET', path: '/api/admin/groups', desc: 'All groups (admin)' },
+  { method: 'GET', path: '/api/admin/activities', desc: 'All activities (admin)' },
+  { method: 'GET', path: '/api/admin/organizations', desc: 'All organizations (admin)' },
+  // Misc
   { method: 'POST', path: '/api/messaging/test', desc: 'Send test SMS/email' },
   { method: 'GET', path: '/api/favicon', desc: 'Dynamic favicon' },
   { method: 'GET', path: '/api/locations', desc: 'Allowed country codes' },
-  { method: 'POST', path: '/api/activities/upload-image', desc: 'Upload activity image' },
-  { method: 'POST', path: '/api/activities/generate-image', desc: 'AI-generate activity image' },
+  { method: 'GET', path: '/api/alerts', desc: 'User alerts/notifications' },
+  { method: 'POST', path: '/api/cron/process-invites', desc: 'Process invite queue (cron)' },
 ]
 
 function getStatus(integration: Integration, envStatus: Record<string, boolean>): 'configured' | 'partial' | 'missing' {
