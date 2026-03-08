@@ -227,7 +227,7 @@ export default function ActivityDetailPage() {
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
                 <InfoRow icon="people" label="Spots" value={
                   activity.max_capacity
-                    ? `${confirmed.length} / ${activity.max_capacity} filled`
+                    ? `${confirmed.length} / ${activity.max_capacity} ${confirmed.length >= activity.max_capacity ? 'filled' : 'open'}`
                     : `${confirmed.length} in`
                 } />
                 {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
