@@ -238,13 +238,15 @@ export default function AppHome() {
                         </div>
 
                         <div className="flex items-center gap-4 mt-1">
-                          <div className="flex items-center gap-1.5">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
-                              <line x1="12" y1="1" x2="12" y2="23" />
-                              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                            </svg>
-                            <span className="text-[11px] text-white/80">{formatCost(activity.cost_type, activity.cost)}</span>
-                          </div>
+                          {activity.cost_type !== 'free' && (
+                            <div className="flex items-center gap-1.5">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                                <line x1="12" y1="1" x2="12" y2="23" />
+                                <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                              </svg>
+                              <span className="text-[11px] text-white/80">{formatCost(activity.cost_type, activity.cost)}</span>
+                            </div>
+                          )}
                           <div className="flex items-center gap-1.5">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
                               <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
@@ -345,14 +347,16 @@ export default function AppHome() {
                     </div>
                   )}
 
-                  {/* Cost */}
-                  <div className="flex items-center gap-1.5 mt-1.5 text-muted">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="1" x2="12" y2="23" />
-                      <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                    </svg>
-                    <span className="text-[12px]">{formatCost(activity.cost_type, activity.cost)}</span>
-                  </div>
+                  {/* Cost — only show if not free */}
+                  {activity.cost_type !== 'free' && (
+                    <div className="flex items-center gap-1.5 mt-1.5 text-muted">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                      </svg>
+                      <span className="text-[12px]">{formatCost(activity.cost_type, activity.cost)}</span>
+                    </div>
+                  )}
 
                   {/* Capacity */}
                   <div className="flex items-center gap-1.5 mt-1.5 text-muted">

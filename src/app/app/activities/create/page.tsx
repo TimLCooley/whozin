@@ -496,7 +496,7 @@ export default function CreateActivityPage() {
                 <div className="animate-enter">
                   <FieldLabel>Price</FieldLabel>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-[14px]">$</span>
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-[14px]">$</span>
                     <input
                       type="number"
                       value={costAmount}
@@ -504,7 +504,8 @@ export default function CreateActivityPage() {
                       placeholder="0.00"
                       step="0.01"
                       min="0"
-                      className="input-field pl-7"
+                      className="input-field"
+                      style={{ paddingLeft: '2rem' }}
                     />
                   </div>
                 </div>
@@ -597,71 +598,75 @@ export default function CreateActivityPage() {
               )}
             </FieldCard>
 
-            {/* Priority Order Toggle */}
-            <FieldCard>
-              <div className="flex items-center justify-between">
-                <span className="text-[14px] font-semibold text-foreground">Priority Order</span>
-                <Toggle checked={priorityInvite} onChange={setPriorityInvite} />
-              </div>
-              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
-                {priorityInvite
-                  ? 'Invites sent in priority order. If someone passes, the next person gets invited.'
-                  : 'All members are invited at once.'}
-              </p>
-            </FieldCard>
+            {/* Priority Order Toggle — hidden when "All" selected */}
+            {maxCapacity !== 'all' && (
+              <FieldCard>
+                <div className="flex items-center justify-between">
+                  <span className="text-[14px] font-semibold text-foreground">Priority Order</span>
+                  <Toggle checked={priorityInvite} onChange={setPriorityInvite} />
+                </div>
+                <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                  {priorityInvite
+                    ? 'Invites sent in priority order. If someone passes, the next person gets invited.'
+                    : 'All members are invited at once.'}
+                </p>
+              </FieldCard>
+            )}
 
-            {/* Response Timer */}
-            <FieldCard>
-              <FieldLabel>Response Time Per Invite</FieldLabel>
-              <div className="relative">
-                <button
-                  onClick={() => setShowTimerDropdown(!showTimerDropdown)}
-                  className="input-field w-full text-left flex items-center justify-between"
-                >
-                  <span>
-                    {RESPONSE_TIMER_OPTIONS.find((o) => o.value === responseTimer)?.label ?? '5 min'} response timer
-                  </span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
-                {showTimerDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/50 rounded-xl shadow-lg z-20 overflow-hidden animate-enter">
-                    {RESPONSE_TIMER_OPTIONS.filter((opt) => !opt.admin || isPro || isTestUser).map((opt) => {
-                      const locked = opt.pro && !isPro
-                      return (
-                        <button
-                          key={opt.value}
-                          onClick={() => {
-                            if (locked) return
-                            setResponseTimer(opt.value)
-                            setShowTimerDropdown(false)
-                          }}
-                          className={`w-full px-4 py-3 text-left text-[14px] flex items-center justify-between border-b border-border/20 last:border-0 transition-colors ${
-                            locked
-                              ? 'text-muted/50 bg-surface/30'
-                              : responseTimer === opt.value
-                                ? 'bg-primary/5 text-primary font-semibold'
-                                : 'text-foreground active:bg-surface'
-                          }`}
-                        >
-                          <span>{opt.label}</span>
-                          <div className="flex items-center gap-2">
-                            {opt.pro && <ProBadge small />}
-                            {opt.admin && <span className="text-[9px] px-1.5 py-0.5 bg-danger/10 text-danger rounded-full font-bold">TEST</span>}
-                            {responseTimer === opt.value && (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6L9 17l-5-5" />
-                              </svg>
-                            )}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </FieldCard>
+            {/* Response Timer — hidden when "All" selected */}
+            {maxCapacity !== 'all' && (
+              <FieldCard>
+                <FieldLabel>Response Time Per Invite</FieldLabel>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowTimerDropdown(!showTimerDropdown)}
+                    className="input-field w-full text-left flex items-center justify-between"
+                  >
+                    <span>
+                      {RESPONSE_TIMER_OPTIONS.find((o) => o.value === responseTimer)?.label ?? '5 min'} response timer
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {showTimerDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/50 rounded-xl shadow-lg z-20 overflow-hidden animate-enter">
+                      {RESPONSE_TIMER_OPTIONS.filter((opt) => !opt.admin || isPro || isTestUser).map((opt) => {
+                        const locked = opt.pro && !isPro
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => {
+                              if (locked) return
+                              setResponseTimer(opt.value)
+                              setShowTimerDropdown(false)
+                            }}
+                            className={`w-full px-4 py-3 text-left text-[14px] flex items-center justify-between border-b border-border/20 last:border-0 transition-colors ${
+                              locked
+                                ? 'text-muted/50 bg-surface/30'
+                                : responseTimer === opt.value
+                                  ? 'bg-primary/5 text-primary font-semibold'
+                                  : 'text-foreground active:bg-surface'
+                            }`}
+                          >
+                            <span>{opt.label}</span>
+                            <div className="flex items-center gap-2">
+                              {opt.pro && <ProBadge small />}
+                              {opt.admin && <span className="text-[9px] px-1.5 py-0.5 bg-danger/10 text-danger rounded-full font-bold">TEST</span>}
+                              {responseTimer === opt.value && (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M20 6L9 17l-5-5" />
+                                </svg>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </FieldCard>
+            )}
 
             {/* Allow Chat (Pro) */}
             <FieldCard>
@@ -686,18 +691,6 @@ export default function CreateActivityPage() {
               </p>
             </FieldCard>
 
-            {/* Auto Emergency Fill */}
-            <FieldCard>
-              <div className="flex items-center justify-between">
-                <span className="text-[14px] font-semibold text-foreground">Auto Emergency Fill</span>
-                <Toggle checked={autoEmergencyFill} onChange={setAutoEmergencyFill} />
-              </div>
-              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
-                {autoEmergencyFill
-                  ? 'If someone drops out of a full activity, everyone gets an emergency text automatically.'
-                  : 'If someone drops out, you\'ll get a text. Reply FILL to send the blast, or tap the button in the app.'}
-              </p>
-            </FieldCard>
           </div>
         )}
       </div>
