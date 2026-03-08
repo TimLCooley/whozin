@@ -23,11 +23,13 @@ export async function GET(req: NextRequest) {
 
   const tab = req.nextUrl.searchParams.get('tab') ?? 'upcoming'
 
-  // Get activities where user is a member OR creator
+  // Get activities where user is a member (already invited) OR creator
+  // Exclude 'tbd' — those members haven't been invited yet
   const { data: memberActivities } = await admin
     .from('whozin_activity_member')
     .select('activity_id')
     .eq('user_id', whozinUser.id)
+    .neq('status', 'tbd')
 
   const { data: createdActivities } = await admin
     .from('whozin_activity')
