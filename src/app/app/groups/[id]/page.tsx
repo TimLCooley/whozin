@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { createClient } from '@/lib/supabase/client'
 import { PawAvatar } from '@/components/ui/paw-avatar'
+import CountryCodeSelect from '@/components/auth/country-code-select'
 
 interface Member {
   membership_id: string
@@ -521,17 +522,7 @@ export default function GroupDetailPage() {
           <div className="mb-4">
             <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Phone</label>
             <div className="flex gap-2">
-              <select
-                value={countryCode}
-                onChange={(e) => setCountryCode(e.target.value)}
-                className="input-field !w-24 shrink-0 text-[13px]"
-              >
-                <option value="1">us +1</option>
-                <option value="44">uk +44</option>
-                <option value="61">au +61</option>
-                <option value="91">in +91</option>
-                <option value="383">xk +383</option>
-              </select>
+              <CountryCodeSelect value={countryCode} onChange={setCountryCode} />
               <input
                 type="text"
                 inputMode="tel"

@@ -1,17 +1,30 @@
 'use client'
 
-const COUNTRY_CODES = [
-  { code: '1', label: 'US +1', flag: '\u{1F1FA}\u{1F1F8}' },
-  { code: '1', label: 'CA +1', flag: '\u{1F1E8}\u{1F1E6}' },
-  { code: '44', label: 'UK +44', flag: '\u{1F1EC}\u{1F1E7}' },
-  { code: '61', label: 'AU +61', flag: '\u{1F1E6}\u{1F1FA}' },
-  { code: '91', label: 'IN +91', flag: '\u{1F1EE}\u{1F1F3}' },
-  { code: '52', label: 'MX +52', flag: '\u{1F1F2}\u{1F1FD}' },
-  { code: '49', label: 'DE +49', flag: '\u{1F1E9}\u{1F1EA}' },
-  { code: '33', label: 'FR +33', flag: '\u{1F1EB}\u{1F1F7}' },
-  { code: '81', label: 'JP +81', flag: '\u{1F1EF}\u{1F1F5}' },
-  { code: '55', label: 'BR +55', flag: '\u{1F1E7}\u{1F1F7}' },
-]
+import { useEffect, useState } from 'react'
+
+interface Location {
+  code: string
+  dial: string
+  name: string
+  flag: string
+}
+
+// Module-level cache
+let cachedLocations: Location[] | null = null
+let locationsFetch: Promise<Location[]> | null = null
+
+function getLocations(): Promise<Location[]> {
+  if (cachedLocations) return Promise.resolve(cachedLocations)
+  if (locationsFetch) return locationsFetch
+  locationsFetch = fetch('/api/locations')
+    .then((r) => r.json())
+    .then((data) => {
+      cachedLocations = Array.isArray(data) ? data : []
+      return cachedLocations
+    })
+    .catch(() => [{ code: 'US', dial: '1', name: 'United States', flag: '\u{1F1FA}\u{1F1F8}' }])
+  return locationsFetch
+}
 
 interface CountryCodeSelectProps {
   value: string
@@ -19,6 +32,21 @@ interface CountryCodeSelectProps {
 }
 
 export default function CountryCodeSelect({ value, onChange }: CountryCodeSelectProps) {
+  const [locations, setLocations] = useState<Location[]>(cachedLocations || [])
+
+  useEffect(() => {
+    if (!cachedLocations) {
+      getLocations().then(setLocations)
+    }
+  }, [])
+
+  // If locations loaded and current value isn't in the list, select first
+  useEffect(() => {
+    if (locations.length > 0 && !locations.some((l) => l.dial === value)) {
+      onChange(locations[0].dial)
+    }
+  }, [locations, value, onChange])
+
   return (
     <select
       value={value}
@@ -27,9 +55,9 @@ export default function CountryCodeSelect({ value, onChange }: CountryCodeSelect
                  focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
                  appearance-none min-w-[90px]"
     >
-      {COUNTRY_CODES.map((c, i) => (
-        <option key={`${c.code}-${i}`} value={c.code}>
-          {c.flag} +{c.code}
+      {locations.map((l) => (
+        <option key={l.code} value={l.dial}>
+          {l.flag} +{l.dial}
         </option>
       ))}
     </select>
