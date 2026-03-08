@@ -97,7 +97,7 @@ export default function ActivityDetailPage() {
 
   // Auto-refresh every 30s to see invite progress
   useEffect(() => {
-    const interval = setInterval(loadActivity, 30000)
+    const interval = setInterval(loadActivity, 6000)
     return () => clearInterval(interval)
   }, [loadActivity])
 

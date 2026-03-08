@@ -27,6 +27,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (!activity) return NextResponse.json({ error: 'Activity not found' }, { status: 404 })
 
+  // Process any expired invites on every load (replaces slow cron)
+  if (activity.priority_invite && activity.status === 'open') {
+    const { processActivityInvites } = await import('@/lib/invite-processor')
+    await processActivityInvites(id)
+  }
+
+  // Re-fetch activity after processing (status/members may have changed)
+  const { data: freshActivity } = await admin
+    .from('whozin_activity')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  const activityData = freshActivity ?? activity
+
   // Get members with user info
   const { data: members } = await admin
     .from('whozin_activity_member')
@@ -65,10 +80,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const myMember = (members ?? []).find((m) => m.user_id === whozinUser.id)
 
   return NextResponse.json({
-    ...activity,
+    ...activityData,
     group_name: group?.name ?? 'Unknown',
     creator_name: creator ? `${creator.first_name} ${creator.last_name}` : 'Unknown',
-    is_creator: activity.creator_id === whozinUser.id,
+    is_creator: activityData.creator_id === whozinUser.id,
     current_user_id: whozinUser.id,
     my_status: myMember?.status ?? null,
     members: membersWithInfo,
