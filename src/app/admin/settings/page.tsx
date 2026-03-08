@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import ImageUpload from '@/components/admin/image-upload'
 
 type Settings = Record<string, string>
 
@@ -60,7 +59,6 @@ export default function SettingsPage() {
   const sections = [
     { id: 'general', label: 'General' },
     { id: 'contact', label: 'Contact' },
-    { id: 'branding', label: 'Branding' },
     { id: 'legal', label: 'Legal' },
     { id: 'social', label: 'Social' },
     { id: 'app-stores', label: 'App Stores' },
@@ -170,52 +168,6 @@ export default function SettingsPage() {
               rows={3}
               hint="Required for CAN-SPAM compliance in emails"
             />
-          </div>
-        )}
-
-        {activeSection === 'branding' && (
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold mb-4">Branding & Logos</h3>
-            <ImageUpload
-              settingKey="logo_full"
-              currentUrl={settings.logo_full}
-              label="Full Logo"
-              hint="Main logo with wordmark (recommended: SVG or PNG, 400x100px)"
-              onUploaded={(url) => update('logo_full', url)}
-            />
-            <ImageUpload
-              settingKey="logo_icon"
-              currentUrl={settings.logo_icon}
-              label="Icon / App Icon"
-              hint="Square icon for app icon, social sharing (recommended: PNG, 512x512px)"
-              onUploaded={(url) => update('logo_icon', url)}
-            />
-            <ImageUpload
-              settingKey="logo_dark"
-              currentUrl={settings.logo_dark}
-              label="Dark Mode Logo"
-              hint="Logo variant for dark backgrounds (recommended: SVG or PNG)"
-              onUploaded={(url) => update('logo_dark', url)}
-            />
-            <ImageUpload
-              settingKey="logo_favicon"
-              currentUrl={settings.logo_favicon}
-              label="Favicon"
-              hint="Browser tab icon (recommended: ICO or 32x32 PNG)"
-              onUploaded={(url) => update('logo_favicon', url)}
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <SettingColor
-                label="Primary Brand Color"
-                value={settings.brand_color_primary}
-                onChange={(v) => update('brand_color_primary', v)}
-              />
-              <SettingColor
-                label="Secondary Brand Color"
-                value={settings.brand_color_secondary}
-                onChange={(v) => update('brand_color_secondary', v)}
-              />
-            </div>
           </div>
         )}
 
@@ -332,31 +284,3 @@ function SettingTextarea({
   )
 }
 
-function SettingColor({
-  label, value, onChange,
-}: {
-  label: string; value: string; onChange: (v: string) => void
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium mb-1.5">{label}</label>
-      <div className="flex items-center gap-3">
-        <input
-          type="color"
-          value={value || '#6366f1'}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-11 h-11 rounded-xl border border-border cursor-pointer p-1"
-        />
-        <input
-          type="text"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="#6366f1"
-          className="flex-1 h-11 px-4 rounded-xl border border-border bg-background text-sm
-                     font-mono placeholder:text-muted focus:outline-none focus:ring-2
-                     focus:ring-primary/30 focus:border-primary"
-        />
-      </div>
-    </div>
-  )
-}
