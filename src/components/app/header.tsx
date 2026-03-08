@@ -5,6 +5,20 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isSuperAdmin } from '@/lib/auth'
 
+// Module-level cache for nav logo
+let cachedNavLogo: string | null = null
+let navLogoFetch: Promise<string | null> | null = null
+
+function getNavLogo(): Promise<string | null> {
+  if (cachedNavLogo !== null) return Promise.resolve(cachedNavLogo)
+  if (navLogoFetch) return navLogoFetch
+  navLogoFetch = fetch('/api/admin/settings')
+    .then((r) => r.json())
+    .then((data) => { cachedNavLogo = data.logo_nav || null; return cachedNavLogo })
+    .catch(() => null)
+  return navLogoFetch
+}
+
 interface AppHeaderProps {
   showBack?: boolean
 }
@@ -13,6 +27,7 @@ export function AppHeader({ showBack }: AppHeaderProps) {
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [navLogo, setNavLogo] = useState<string | null>(cachedNavLogo)
 
   useEffect(() => {
     const supabase = createClient()
@@ -27,6 +42,11 @@ export function AppHeader({ showBack }: AppHeaderProps) {
       .then((r) => r.json())
       .then((data) => setUnreadCount(data.unread ?? 0))
       .catch(() => {})
+
+    // Fetch nav logo from branding
+    if (!cachedNavLogo) {
+      getNavLogo().then((url) => { if (url) setNavLogo(url) })
+    }
   }, [])
 
   return (
@@ -52,17 +72,22 @@ export function AppHeader({ showBack }: AppHeaderProps) {
           className="flex items-center gap-2.5 active:opacity-80 transition-opacity"
           aria-label="Home"
         >
-          {/* Paw logo */}
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <ellipse cx="7.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
-            <ellipse cx="16.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
-            <circle cx="4" cy="13" r="1.8" fill="white" opacity="0.95" />
-            <circle cx="20" cy="13" r="1.8" fill="white" opacity="0.95" />
-            <ellipse cx="12" cy="16.5" rx="5.5" ry="4.2" fill="white" />
-          </svg>
-          <h1 className="text-[22px] font-extrabold text-white tracking-tight leading-none">
-            Whoz<span className="italic font-extrabold">in</span>
-          </h1>
+          {navLogo ? (
+            <img src={navLogo} alt="Whozin" className="h-8 object-contain" />
+          ) : (
+            <>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="7.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
+                <ellipse cx="16.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
+                <circle cx="4" cy="13" r="1.8" fill="white" opacity="0.95" />
+                <circle cx="20" cy="13" r="1.8" fill="white" opacity="0.95" />
+                <ellipse cx="12" cy="16.5" rx="5.5" ry="4.2" fill="white" />
+              </svg>
+              <h1 className="text-[22px] font-extrabold text-white tracking-tight leading-none">
+                Whoz<span className="italic font-extrabold">in</span>
+              </h1>
+            </>
+          )}
         </button>
       </div>
 

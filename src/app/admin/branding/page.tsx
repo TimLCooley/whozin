@@ -10,6 +10,7 @@ interface BrandingSettings {
   brand_color: string
   logo_full: string
   logo_icon: string
+  logo_nav: string
   logo_dark: string
   favicon: string
 
@@ -58,7 +59,7 @@ const DEFAULTS: BrandingSettings = {
   app_name: 'Whozin',
   app_tagline: "Who's In?",
   brand_color: '#4285F4',
-  logo_full: '', logo_icon: '', logo_dark: '', favicon: '',
+  logo_full: '', logo_icon: '', logo_nav: '', logo_dark: '', favicon: '',
   pwa_name: 'Whozin', pwa_short_name: 'Whozin', pwa_theme_color: '#4285F4',
   pwa_background_color: '#ffffff', pwa_display: 'standalone',
   app_icon_192: '', app_icon_512: '', splash_screen: '',
@@ -154,6 +155,7 @@ export default function BrandingPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Full Logo"><ImageUpload settingKey="logo_full" currentUrl={settings.logo_full} label="Full Logo" onUploaded={(url) => update('logo_full', url)} /></Field>
               <Field label="Icon Logo"><ImageUpload settingKey="logo_icon" currentUrl={settings.logo_icon} label="Icon Logo" onUploaded={(url) => update('logo_icon', url)} /></Field>
+              <Field label="Nav Header Logo"><ImageUpload settingKey="logo_nav" currentUrl={settings.logo_nav} label="Nav Header Logo" onUploaded={(url) => update('logo_nav', url)} /></Field>
               <Field label="Dark Logo"><ImageUpload settingKey="logo_dark" currentUrl={settings.logo_dark} label="Dark Logo" onUploaded={(url) => update('logo_dark', url)} /></Field>
               <Field label="Favicon"><ImageUpload settingKey="favicon" currentUrl={settings.favicon} label="Favicon" onUploaded={(url) => update('favicon', url)} /></Field>
             </div>
