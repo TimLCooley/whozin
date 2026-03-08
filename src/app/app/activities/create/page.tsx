@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
+import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
 
 interface Preset {
   id: string
@@ -284,12 +285,10 @@ export default function CreateActivityPage() {
             {/* Location */}
             <FieldCard>
               <FieldLabel>Location</FieldLabel>
-              <input
-                type="text"
+              <PlacesAutocomplete
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="123 Park Lane"
-                className="input-field"
+                onChange={setLocation}
+                placeholder="Search for a location..."
               />
             </FieldCard>
 
