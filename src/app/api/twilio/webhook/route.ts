@@ -54,12 +54,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Find the most recent pending invite for this user
+  // Find the most recent pending or expired invite for this user
+  // (expired = timer ran out but user can still respond)
   const { data: invite } = await admin
     .from('whozin_invite')
-    .select('id, activity_id')
+    .select('id, activity_id, status')
     .eq('user_id', whozinUser.id)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'expired'])
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   const wasFull = activityBefore?.status === 'full'
 
-  // Update the activity member status
+  // Update the activity member status (works even if they were 'missed' from expired timer)
   const newStatus = isIn ? 'confirmed' : 'out'
   await admin
     .from('whozin_activity_member')
