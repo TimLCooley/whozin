@@ -236,18 +236,12 @@ export default function AppHome() {
                   {/* IN/OUT Response buttons */}
                   {activity.my_status === 'confirmed' ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/30">
-                      <button
-                        onClick={(e) => { e.stopPropagation() }}
-                        className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg"
-                      >
+                      <div className="flex-1 bg-[#00C853]/10 text-[#00C853] text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
                         You&apos;re In
-                      </button>
-                      <button
-                        onClick={(e) => handleOutClick(e, activity)}
-                        className="px-4 py-2.5 rounded-lg bg-surface text-muted text-[13px] font-bold border border-border/50 active:opacity-80 transition-opacity"
-                      >
-                        OUT
-                      </button>
+                      </div>
                     </div>
                   ) : activity.my_status === 'out' ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/30">
