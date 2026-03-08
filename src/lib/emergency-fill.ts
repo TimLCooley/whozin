@@ -83,7 +83,7 @@ export async function sendEmergencyFill(activityId: string) {
 
     const message = `${spotsText} for ${activity.activity_name}${dateTimeStr ? ` on ${dateTimeStr}` : ''}! Reply IN to claim it — first come, first served!${testNote}`
 
-    const result = await sendSms(actualTo, message)
+    const result = await sendSms(actualTo, message, activity.image_url || undefined)
 
     // Create invite record for tracking
     await admin.from('whozin_invite').insert({
