@@ -162,7 +162,9 @@ export default function ActivityDetailPage() {
       {/* Activity Title Bar */}
       <div className="bg-background border-b border-border/40 px-4 py-3">
         <h1 className="text-[17px] font-bold text-foreground">{activity.activity_name}</h1>
-        <p className="text-[12px] text-muted mt-0.5">{activity.group_name}</p>
+        {activity.is_creator && (
+          <p className="text-[12px] text-muted mt-0.5">{activity.group_name}</p>
+        )}
       </div>
 
       {/* Tabs */}
