@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     .from('branding')
     .getPublicUrl(fileName)
 
-  const publicUrl = urlData.publicUrl
+  // Add cache-busting param so browsers pick up replacements
+  const publicUrl = `${urlData.publicUrl}?v=${Date.now()}`
 
   // Save URL directly as a string value (not JSON-wrapped)
   const { error: settingsError } = await admin

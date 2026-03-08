@@ -54,7 +54,7 @@ export default function ImageUpload({ settingKey, currentUrl, label, hint, onUpl
 
       <div className="flex items-center gap-4">
         {/* Preview */}
-        <div className="w-20 h-20 rounded-xl border border-border bg-surface flex items-center justify-center overflow-hidden shrink-0">
+        <div className="w-20 h-20 rounded-xl border border-border flex items-center justify-center overflow-hidden shrink-0" style={{ background: currentUrl ? 'repeating-conic-gradient(#e5e7eb 0% 25%, #fff 0% 50%) 0 0 / 16px 16px' : undefined }}>
           {currentUrl ? (
             <img src={currentUrl} alt={label} className="w-full h-full object-contain p-1" />
           ) : (
