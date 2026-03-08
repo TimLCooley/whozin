@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 interface GroupRow {
   id: string
@@ -23,56 +22,13 @@ export default function GroupsPage() {
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-
-      const { data: groupData } = await supabase
-        .from('whozin_groups')
-        .select(`
-          id, name, chat_enabled, created_at, creator_id,
-          whozin_users!whozin_groups_creator_id_fkey (
-            first_name, last_name, phone
-          )
-        `)
-        .order('created_at', { ascending: false })
-
-      if (!groupData) {
+    fetch('/api/admin/groups')
+      .then((res) => res.json())
+      .then((data) => {
+        setGroups(Array.isArray(data) ? data : [])
         setLoading(false)
-        return
-      }
-
-      const groupsWithCounts: GroupRow[] = await Promise.all(
-        groupData.map(async (group) => {
-          const [members, activities] = await Promise.all([
-            supabase
-              .from('whozin_group_members')
-              .select('id', { count: 'exact', head: true })
-              .eq('group_id', group.id),
-            supabase
-              .from('whozin_activity')
-              .select('id', { count: 'exact', head: true })
-              .eq('group_id', group.id),
-          ])
-
-          const creator = Array.isArray(group.whozin_users) ? group.whozin_users[0] : group.whozin_users
-
-          return {
-            id: group.id,
-            name: group.name,
-            chat_enabled: group.chat_enabled,
-            created_at: group.created_at,
-            creator: creator ?? null,
-            member_count: members.count ?? 0,
-            activity_count: activities.count ?? 0,
-          }
-        })
-      )
-
-      setGroups(groupsWithCounts)
-      setLoading(false)
-    }
-
-    load()
+      })
+      .catch(() => setLoading(false))
   }, [])
 
   const filtered = groups.filter((g) =>

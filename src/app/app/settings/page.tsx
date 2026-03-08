@@ -25,6 +25,11 @@ export default function SettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEmailUpdate, setShowEmailUpdate] = useState(false)
   const [newEmail, setNewEmail] = useState('')
+  const [emailStep, setEmailStep] = useState<'enter' | 'verify'>('enter')
+  const [verifyCode, setVerifyCode] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailError, setEmailError] = useState('')
+  const [nameSaved, setNameSaved] = useState(false)
 
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     personal: true,
@@ -115,7 +120,7 @@ export default function SettingsPage() {
               <input
                 type="text"
                 value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                onChange={(e) => { setFirstName(e.target.value); setNameSaved(false) }}
                 className="input-field"
               />
             </Field>
@@ -124,30 +129,34 @@ export default function SettingsPage() {
               <input
                 type="text"
                 value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
+                onChange={(e) => { setLastName(e.target.value); setNameSaved(false) }}
                 className="input-field"
               />
             </Field>
 
+            <button
+              onClick={async () => {
+                await saveProfile({ first_name: firstName, last_name: lastName })
+                setNameSaved(true)
+                setTimeout(() => setNameSaved(false), 2000)
+              }}
+              className="btn-primary w-full py-2.5 text-[13px]"
+            >
+              {nameSaved ? 'Saved!' : 'Save Name'}
+            </button>
+
             <Field label="Email">
-              {email.endsWith('@whozin.io') ? (
-                <div className="flex items-center gap-2.5">
-                  <div className="flex-1 input-field text-muted select-none">****</div>
-                  <button
-                    onClick={() => { setNewEmail(''); setShowEmailUpdate(true) }}
-                    className="btn-primary text-[13px] px-4 py-2.5 whitespace-nowrap"
-                  >
-                    Update email
-                  </button>
+              <div className="flex items-center gap-2.5">
+                <div className="flex-1 input-field text-muted select-none">
+                  {!email || email.endsWith('@whozin.io') ? 'No email set' : email}
                 </div>
-              ) : (
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input-field"
-                />
-              )}
+                <button
+                  onClick={() => { setNewEmail(''); setEmailStep('enter'); setVerifyCode(''); setEmailError(''); setShowEmailUpdate(true) }}
+                  className="btn-primary text-[13px] px-4 py-2.5 whitespace-nowrap"
+                >
+                  {!email || email.endsWith('@whozin.io') ? 'Add email' : 'Change'}
+                </button>
+              </div>
             </Field>
 
             <Field label="Profile Picture">
@@ -309,41 +318,124 @@ export default function SettingsPage() {
             Delete Account
           </button>
         </div>
+
+        {/* Legal links */}
+        <div className="flex justify-center gap-4 mt-6 mb-4">
+          <a href="/privacy" target="_blank" className="text-[12px] text-muted hover:text-primary transition-colors">Privacy Policy</a>
+          <span className="text-[12px] text-muted/40">|</span>
+          <a href="/terms" target="_blank" className="text-[12px] text-muted hover:text-primary transition-colors">Terms of Service</a>
+        </div>
       </div>
 
       {/* Update Email Modal */}
       {showEmailUpdate && (
-        <Modal onClose={() => setShowEmailUpdate(false)}>
-          <h3 className="text-lg font-bold text-foreground mb-1">Update Email</h3>
-          <p className="text-[13px] text-muted mb-5 leading-relaxed">
-            Enter your new email address. We&apos;ll send a verification link before updating.
-          </p>
-          <input
-            type="email"
-            placeholder="New email address"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            className="input-field mb-5"
-            autoFocus
-          />
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowEmailUpdate(false)}
-              className="flex-1 border border-border text-foreground font-semibold text-[13px] py-2.5 rounded-xl active:bg-surface transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                // TODO: call Supabase to update email
-                if (newEmail) setEmail(newEmail)
-                setShowEmailUpdate(false)
-              }}
-              className="btn-primary flex-1 py-2.5"
-            >
-              Update
-            </button>
-          </div>
+        <Modal onClose={() => !emailSending && setShowEmailUpdate(false)}>
+          {emailStep === 'enter' ? (
+            <>
+              <h3 className="text-lg font-bold text-foreground mb-1">Update Email</h3>
+              <p className="text-[13px] text-muted mb-5 leading-relaxed">
+                Enter your new email address. We&apos;ll send a 6-digit verification code to confirm it.
+              </p>
+              <input
+                type="email"
+                placeholder="New email address"
+                value={newEmail}
+                onChange={(e) => { setNewEmail(e.target.value); setEmailError('') }}
+                className="input-field mb-2"
+                autoFocus
+              />
+              {emailError && <p className="text-[12px] text-danger mb-3">{emailError}</p>}
+              <div className="flex gap-3 mt-3">
+                <button
+                  onClick={() => setShowEmailUpdate(false)}
+                  disabled={emailSending}
+                  className="flex-1 border border-border text-foreground font-semibold text-[13px] py-2.5 rounded-xl active:bg-surface transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!newEmail || !newEmail.includes('@') || newEmail.endsWith('@whozin.io')) {
+                      setEmailError('Please enter a valid email address')
+                      return
+                    }
+                    setEmailSending(true)
+                    setEmailError('')
+                    const res = await fetch('/api/user/verify-email', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email: newEmail }),
+                    })
+                    const data = await res.json()
+                    setEmailSending(false)
+                    if (res.ok) {
+                      setEmailStep('verify')
+                    } else {
+                      setEmailError(data.error || 'Failed to send code')
+                    }
+                  }}
+                  disabled={emailSending}
+                  className="btn-primary flex-1 py-2.5 disabled:opacity-50"
+                >
+                  {emailSending ? 'Sending...' : 'Send Code'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-bold text-foreground mb-1">Enter Verification Code</h3>
+              <p className="text-[13px] text-muted mb-5 leading-relaxed">
+                We sent a 6-digit code to <span className="font-semibold text-foreground">{newEmail}</span>. Check your inbox and enter it below.
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="000000"
+                value={verifyCode}
+                onChange={(e) => { setVerifyCode(e.target.value.replace(/\D/g, '')); setEmailError('') }}
+                className="input-field mb-2 text-center text-xl tracking-[0.3em] font-bold"
+                autoFocus
+              />
+              {emailError && <p className="text-[12px] text-danger mb-3">{emailError}</p>}
+              <div className="flex gap-3 mt-3">
+                <button
+                  onClick={() => setEmailStep('enter')}
+                  disabled={emailSending}
+                  className="flex-1 border border-border text-foreground font-semibold text-[13px] py-2.5 rounded-xl active:bg-surface transition-colors disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={async () => {
+                    if (verifyCode.length !== 6) {
+                      setEmailError('Please enter the 6-digit code')
+                      return
+                    }
+                    setEmailSending(true)
+                    setEmailError('')
+                    const res = await fetch('/api/user/verify-email', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ code: verifyCode }),
+                    })
+                    const data = await res.json()
+                    setEmailSending(false)
+                    if (res.ok) {
+                      setEmail(data.email)
+                      setShowEmailUpdate(false)
+                    } else {
+                      setEmailError(data.error || 'Verification failed')
+                    }
+                  }}
+                  disabled={emailSending}
+                  className="btn-primary flex-1 py-2.5 disabled:opacity-50"
+                >
+                  {emailSending ? 'Verifying...' : 'Verify'}
+                </button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
 

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 interface ActivityRow {
   id: string
@@ -29,55 +28,13 @@ export default function ActivitiesPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
   useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-
-      const { data } = await supabase
-        .from('whozin_activity')
-        .select(`
-          id, activity_name, activity_type, activity_date, status,
-          max_capacity, capacity_current, created_at, creator_id, group_id,
-          whozin_users!whozin_activity_creator_id_fkey ( first_name, last_name ),
-          whozin_groups!whozin_activity_group_id_fkey ( name )
-        `)
-        .order('created_at', { ascending: false })
-
-      if (!data) {
+    fetch('/api/admin/activities')
+      .then((res) => res.json())
+      .then((data) => {
+        setActivities(Array.isArray(data) ? data : [])
         setLoading(false)
-        return
-      }
-
-      const activitiesWithCounts: ActivityRow[] = await Promise.all(
-        data.map(async (a) => {
-          const { count } = await supabase
-            .from('whozin_activity_member')
-            .select('id', { count: 'exact', head: true })
-            .eq('activity_id', a.id)
-
-          const creator = Array.isArray(a.whozin_users) ? a.whozin_users[0] : a.whozin_users
-          const group = Array.isArray(a.whozin_groups) ? a.whozin_groups[0] : a.whozin_groups
-
-          return {
-            id: a.id,
-            activity_name: a.activity_name,
-            activity_type: a.activity_type,
-            activity_date: a.activity_date,
-            status: a.status,
-            max_capacity: a.max_capacity,
-            capacity_current: a.capacity_current,
-            created_at: a.created_at,
-            creator: creator ?? null,
-            group: group ?? null,
-            member_count: count ?? 0,
-          }
-        })
-      )
-
-      setActivities(activitiesWithCounts)
-      setLoading(false)
-    }
-
-    load()
+      })
+      .catch(() => setLoading(false))
   }, [])
 
   const filtered = activities.filter((a) => {

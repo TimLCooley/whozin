@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import AuthForm from '@/components/auth/auth-form'
 import { DEFAULT_ACTIVITY_PRESETS } from '@/lib/activity-presets'
+import { BrandedFullLogo } from '@/components/ui/branded-logo'
+import { ContactModal } from '@/components/ui/contact-modal'
 
 /* ── Rotating activities for the hero mockup ── */
 const HERO_ACTIVITIES = [
@@ -94,6 +96,7 @@ export default function HomePage() {
   const [heroLoaded, setHeroLoaded] = useState(false)
   const [activityIdx, setActivityIdx] = useState(0)
   const [activityFade, setActivityFade] = useState(true)
+  const [showContact, setShowContact] = useState(false)
   const ctaSection = useInView()
   const socialSection = useInView()
 
@@ -140,21 +143,7 @@ export default function HomePage() {
         <div className="relative max-w-6xl mx-auto px-6 pt-8 pb-16 md:pb-24">
           {/* Nav */}
           <nav className="flex items-center justify-between mb-16 md:mb-24">
-            <div className="flex items-center gap-2">
-              {/* Paw logo */}
-              <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                  <ellipse cx="8" cy="6" rx="2.5" ry="3" />
-                  <ellipse cx="16" cy="6" rx="2.5" ry="3" />
-                  <ellipse cx="4.5" cy="12" rx="2" ry="2.5" />
-                  <ellipse cx="19.5" cy="12" rx="2" ry="2.5" />
-                  <ellipse cx="12" cy="16.5" rx="5" ry="4.5" />
-                </svg>
-              </div>
-              <span className="text-white text-xl font-bold tracking-tight">
-                Whoz<em className="not-italic font-extrabold text-primary">in</em>
-              </span>
-            </div>
+            <BrandedFullLogo className="h-9" />
             <button
               onClick={() => setShowAuth(true)}
               className="text-white/80 hover:text-white text-sm font-semibold px-5 py-2.5 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/5 transition-all"
@@ -526,31 +515,19 @@ export default function HomePage() {
       <footer className="bg-[#0a0f1e] text-white/50 py-10">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                  <ellipse cx="8" cy="6" rx="2.5" ry="3" />
-                  <ellipse cx="16" cy="6" rx="2.5" ry="3" />
-                  <ellipse cx="4.5" cy="12" rx="2" ry="2.5" />
-                  <ellipse cx="19.5" cy="12" rx="2" ry="2.5" />
-                  <ellipse cx="12" cy="16.5" rx="5" ry="4.5" />
-                </svg>
-              </div>
-              <span className="text-white/80 text-sm font-bold">
-                Whoz<em className="not-italic font-extrabold text-primary">in</em>
-              </span>
-            </div>
+            <BrandedFullLogo className="h-8" />
 
             <div className="flex gap-6 text-xs">
-              <a href="#" className="hover:text-white transition-colors">Privacy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms</a>
-              <a href="#" className="hover:text-white transition-colors">Contact</a>
+              <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
+              <a href="/terms" className="hover:text-white transition-colors">Terms</a>
+              <button onClick={() => setShowContact(true)} className="hover:text-white transition-colors">Contact</button>
             </div>
 
-            <p className="text-xs">&copy; {new Date().getFullYear()} Whozin. All rights reserved.</p>
+            <p className="text-xs">&copy; {new Date().getFullYear()} Chumem, LLC. All rights reserved.</p>
           </div>
         </div>
       </footer>
+      {showContact && <ContactModal onClose={() => setShowContact(false)} />}
     </main>
   )
 }

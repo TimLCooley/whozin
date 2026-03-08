@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { DEFAULT_ACTIVITY_PRESETS, ACTIVITY_CATEGORIES, type ActivityPreset } from '@/lib/activity-presets'
+import { DEFAULT_ACTIVITY_PRESETS, ACTIVITY_CATEGORIES, suggestEmoji, type ActivityPreset } from '@/lib/activity-presets'
 
 export default function PresetsPage() {
   const [presets, setPresets] = useState<ActivityPreset[]>(DEFAULT_ACTIVITY_PRESETS)
@@ -10,6 +10,7 @@ export default function PresetsPage() {
   const [saving, setSaving] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [newPreset, setNewPreset] = useState({ name: '', icon: '', category: 'Sports' })
+  const [emojiManual, setEmojiManual] = useState(false)
 
   // Load saved presets from admin settings
   const loadPresets = useCallback(async () => {
@@ -54,13 +55,14 @@ export default function PresetsPage() {
   }
 
   function handleAddPreset() {
-    if (!newPreset.name.trim() || !newPreset.icon.trim()) return
+    if (!newPreset.name.trim()) return
+    const icon = newPreset.icon.trim() || suggestEmoji(newPreset.name) || '📌'
     const id = newPreset.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     if (presets.some((p) => p.id === id)) {
       alert('A preset with this name already exists')
       return
     }
-    const updated = [...presets, { id, name: newPreset.name.trim(), icon: newPreset.icon.trim(), category: newPreset.category, enabled: true }]
+    const updated = [...presets, { id, name: newPreset.name.trim(), icon, category: newPreset.category, enabled: true }]
     savePresets(updated)
     setNewPreset({ name: '', icon: '', category: 'Sports' })
     setShowAdd(false)
@@ -91,7 +93,7 @@ export default function PresetsPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAdd(true)}
+            onClick={() => { setShowAdd(true); setEmojiManual(false); setNewPreset({ name: '', icon: '', category: 'Sports' }) }}
             className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark transition-colors"
           >
             + Add Preset
@@ -195,26 +197,53 @@ export default function PresetsPage() {
             <h3 className="text-lg font-bold mb-4">Add Custom Preset</h3>
 
             <div className="mb-3">
-              <label className="block text-sm font-medium text-muted mb-1">Emoji Icon</label>
-              <input
-                type="text"
-                value={newPreset.icon}
-                onChange={(e) => setNewPreset({ ...newPreset, icon: e.target.value })}
-                placeholder="🏀"
-                className="input-field text-center text-2xl"
-                maxLength={4}
-              />
-            </div>
-
-            <div className="mb-3">
               <label className="block text-sm font-medium text-muted mb-1">Activity Name</label>
               <input
                 type="text"
                 value={newPreset.name}
-                onChange={(e) => setNewPreset({ ...newPreset, name: e.target.value })}
+                onChange={(e) => {
+                  const name = e.target.value
+                  const updates: typeof newPreset = { ...newPreset, name }
+                  if (!emojiManual) {
+                    updates.icon = suggestEmoji(name) || newPreset.icon
+                  }
+                  setNewPreset(updates)
+                }}
                 placeholder="e.g. Disc Golf"
                 className="input-field"
               />
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-muted mb-1">Emoji Icon</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newPreset.icon}
+                  onChange={(e) => {
+                    setNewPreset({ ...newPreset, icon: e.target.value })
+                    setEmojiManual(true)
+                  }}
+                  placeholder="Auto ✨"
+                  className="input-field text-center text-2xl flex-1"
+                  maxLength={4}
+                />
+                {emojiManual && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmojiManual(false)
+                      setNewPreset({ ...newPreset, icon: suggestEmoji(newPreset.name) })
+                    }}
+                    className="text-xs text-primary font-medium whitespace-nowrap hover:underline"
+                  >
+                    Auto
+                  </button>
+                )}
+              </div>
+              {!emojiManual && newPreset.icon && (
+                <p className="text-[11px] text-muted mt-1">Auto-suggested from name</p>
+              )}
             </div>
 
             <div className="mb-5">
@@ -239,7 +268,7 @@ export default function PresetsPage() {
               </button>
               <button
                 onClick={handleAddPreset}
-                disabled={!newPreset.name.trim() || !newPreset.icon.trim()}
+                disabled={!newPreset.name.trim()}
                 className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50"
               >
                 Add Preset

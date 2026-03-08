@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 interface UserRow {
   id: string
@@ -12,25 +11,24 @@ interface UserRow {
   status: string
   membership_tier: string
   created_at: string
+  auth_user_id: string | null
 }
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<UserRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-      const { data } = await supabase
-        .from('whozin_users')
-        .select('id, first_name, last_name, phone, email, status, membership_tier, created_at')
-        .order('created_at', { ascending: false })
-
-      setUsers(data ?? [])
-      setLoading(false)
-    }
-    load()
+    fetch('/api/admin/users')
+      .then((res) => res.json())
+      .then((data) => {
+        setUsers(Array.isArray(data) ? data : [])
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
   }, [])
 
   const filtered = users.filter((u) =>
@@ -38,6 +36,36 @@ export default function UsersPage() {
     u.phone.includes(search) ||
     (u.email && u.email.toLowerCase().includes(search.toLowerCase()))
   )
+
+  async function toggleTier(user: UserRow) {
+    const newTier = user.membership_tier === 'pro' ? 'free' : 'pro'
+    // Optimistic update
+    setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, membership_tier: newTier } : u))
+    const res = await fetch('/api/admin/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: user.id, membership_tier: newTier }),
+    })
+    if (!res.ok) {
+      // Revert on failure
+      setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, membership_tier: user.membership_tier } : u))
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteConfirm) return
+    setDeleting(true)
+    const res = await fetch('/api/admin/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: deleteConfirm.id, auth_user_id: deleteConfirm.auth_user_id }),
+    })
+    if (res.ok) {
+      setUsers((prev) => prev.filter((u) => u.id !== deleteConfirm.id))
+    }
+    setDeleting(false)
+    setDeleteConfirm(null)
+  }
 
   return (
     <div>
@@ -79,15 +107,26 @@ export default function UsersPage() {
                       ${user.status === 'active' ? 'bg-success/10 text-success' : 'bg-muted/10 text-muted'}`}>
                       {user.status}
                     </span>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium
-                      ${user.membership_tier === 'pro' ? 'bg-primary/10 text-primary' : 'bg-surface text-muted'}`}>
+                    <button
+                      onClick={() => toggleTier(user)}
+                      className={`text-xs px-2 py-1 rounded-full font-medium cursor-pointer active:opacity-70 transition-opacity
+                        ${user.membership_tier === 'pro' ? 'bg-primary/10 text-primary' : 'bg-surface text-muted'}`}
+                    >
                       {user.membership_tier}
-                    </span>
+                    </button>
                   </div>
                 </div>
-                <p className="text-xs text-muted mt-2">
-                  Joined {new Date(user.created_at).toLocaleDateString()}
-                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-muted">
+                    Joined {new Date(user.created_at).toLocaleDateString()}
+                  </p>
+                  <button
+                    onClick={() => setDeleteConfirm(user)}
+                    className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -103,6 +142,7 @@ export default function UsersPage() {
                   <th className="px-4 py-3 font-medium text-muted text-center">Status</th>
                   <th className="px-4 py-3 font-medium text-muted text-center">Tier</th>
                   <th className="px-4 py-3 font-medium text-muted">Joined</th>
+                  <th className="px-4 py-3 font-medium text-muted text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,12 +158,23 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium
-                        ${user.membership_tier === 'pro' ? 'bg-primary/10 text-primary' : 'bg-surface text-muted'}`}>
+                      <button
+                        onClick={() => toggleTier(user)}
+                        className={`text-xs px-2 py-1 rounded-full font-medium cursor-pointer hover:opacity-80 active:opacity-70 transition-opacity
+                          ${user.membership_tier === 'pro' ? 'bg-primary/10 text-primary' : 'bg-surface text-muted'}`}
+                      >
                         {user.membership_tier}
-                      </span>
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-muted">{new Date(user.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => setDeleteConfirm(user)}
+                        className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -133,6 +184,49 @@ export default function UsersPage() {
       )}
 
       <p className="text-xs text-muted mt-4">{filtered.length} user{filtered.length !== 1 ? 's' : ''}</p>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !deleting && setDeleteConfirm(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-red-50 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">Delete User</h3>
+              <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
+                Are you sure you want to delete <span className="font-semibold">{deleteConfirm.first_name} {deleteConfirm.last_name}</span>?
+              </p>
+              <p className="text-[13px] text-muted mt-1.5">
+                This will remove them from all groups, activities, and messages. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleting}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 interface OrgRow {
   id: string
@@ -24,61 +23,13 @@ export default function OrganizationsPage() {
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-
-      const { data: orgData } = await supabase
-        .from('whozin_organizations')
-        .select(`
-          id, name, created_at, owner_id,
-          whozin_users!whozin_organizations_owner_id_fkey (
-            first_name, last_name, phone, email
-          )
-        `)
-        .order('created_at', { ascending: false })
-
-      if (!orgData) {
+    fetch('/api/admin/organizations')
+      .then((res) => res.json())
+      .then((data) => {
+        setOrgs(Array.isArray(data) ? data : [])
         setLoading(false)
-        return
-      }
-
-      // Fetch counts for each org
-      const orgsWithCounts: OrgRow[] = await Promise.all(
-        orgData.map(async (org) => {
-          const [members, groups, activities] = await Promise.all([
-            supabase
-              .from('whozin_organization_members')
-              .select('id', { count: 'exact', head: true })
-              .eq('organization_id', org.id),
-            supabase
-              .from('whozin_groups')
-              .select('id', { count: 'exact', head: true })
-              .eq('organization_id', org.id),
-            supabase
-              .from('whozin_activity')
-              .select('id', { count: 'exact', head: true })
-              .eq('group_id', org.id),
-          ])
-
-          const ownerData = Array.isArray(org.whozin_users) ? org.whozin_users[0] : org.whozin_users
-
-          return {
-            id: org.id,
-            name: org.name,
-            created_at: org.created_at,
-            owner: ownerData ?? null,
-            member_count: members.count ?? 0,
-            group_count: groups.count ?? 0,
-            activity_count: activities.count ?? 0,
-          }
-        })
-      )
-
-      setOrgs(orgsWithCounts)
-      setLoading(false)
-    }
-
-    load()
+      })
+      .catch(() => setLoading(false))
   }, [])
 
   const filtered = orgs.filter((org) =>

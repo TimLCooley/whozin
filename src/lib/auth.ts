@@ -1,7 +1,8 @@
 /** Admin emails/phones that can access the admin portal */
 export const SUPER_ADMIN_EMAILS = [
-  'timlcooley@gmail.com',
-  '+16193019180@whozin.io', // phone login
+  'timlcooley@gmail.com',       // Google sign-in
+  'timlcooley@icloud.com',      // Apple sign-in (update if different)
+  '+16193019180@whozin.io',     // phone login
 ]
 
 /** Check if a user email is a super admin */

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 interface Stats {
   users: number
@@ -17,25 +16,13 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const supabase = createClient()
-    Promise.all([
-      supabase.from('whozin_users').select('id', { count: 'exact', head: true }),
-      supabase.from('whozin_groups').select('id', { count: 'exact', head: true }),
-      supabase.from('whozin_activity').select('id', { count: 'exact', head: true }),
-      supabase.from('whozin_message').select('id', { count: 'exact', head: true }),
-      supabase.from('whozin_users').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('whozin_invite').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    ]).then(([users, groups, activities, messages, active, invites]) => {
-      setStats({
-        users: users.count ?? 0,
-        groups: groups.count ?? 0,
-        activities: activities.count ?? 0,
-        messages: messages.count ?? 0,
-        activeUsers: active.count ?? 0,
-        invitesPending: invites.count ?? 0,
+    fetch('/api/admin/stats')
+      .then((res) => res.json())
+      .then((data) => {
+        setStats(data)
+        setLoading(false)
       })
-      setLoading(false)
-    })
+      .catch(() => setLoading(false))
   }, [])
 
   const cards = [
