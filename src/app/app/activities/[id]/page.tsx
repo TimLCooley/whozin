@@ -219,6 +219,20 @@ export default function ActivityDetailPage() {
               <InfoRow icon="timer" label="Response Timer" value={`${activity.response_timer_minutes} min per batch`} />
             )}
 
+            {/* Clone button (creator only) */}
+            {activity.is_creator && (
+              <button
+                onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
+                className="w-full bg-background border border-border/50 rounded-xl px-4 py-3 flex items-center gap-3 active:bg-surface transition-colors"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+                <span className="text-[14px] font-semibold text-primary">Clone Activity</span>
+              </button>
+            )}
+
             {/* My response (non-creator) */}
             {!activity.is_creator && activity.my_status && activity.my_status !== 'tbd' && (
               <div className="bg-background border border-border/50 rounded-xl p-4">

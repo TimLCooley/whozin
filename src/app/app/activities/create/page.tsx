@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 
 interface Preset {
@@ -31,6 +31,8 @@ const RESPONSE_TIMER_OPTIONS = [
 
 export default function CreateActivityPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const cloneId = searchParams.get('clone')
   const [tab, setTab] = useState<Tab>('details')
   const [submitting, setSubmitting] = useState(false)
   const [isPro, setIsPro] = useState(false)
@@ -82,13 +84,49 @@ export default function CreateActivityPage() {
 
   // Set default date/time
   useEffect(() => {
+    if (cloneId) return // cloned activity will set its own date
     const now = new Date()
     const dateStr = now.toISOString().split('T')[0]
     const hours = String(now.getHours()).padStart(2, '0')
     const minutes = String(now.getMinutes()).padStart(2, '0')
     setActivityDate(dateStr)
     setActivityTime(`${hours}:${minutes}`)
-  }, [])
+  }, [cloneId])
+
+  // Load cloned activity data
+  useEffect(() => {
+    if (!cloneId) return
+    fetch(`/api/activities/${cloneId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.id) return
+        setSelectedPreset(data.activity_type ?? '')
+        setActivityName(data.activity_name ?? '')
+        setLocation(data.location ?? '')
+        setNote(data.note ?? '')
+        setCostType(data.cost_type ?? 'free')
+        setCostAmount(data.cost ? String(data.cost) : '')
+        setReminderEnabled(data.reminder_enabled ?? false)
+        setChatEnabled(data.chat_enabled ?? false)
+        setPriorityInvite(data.priority_invite ?? true)
+        setResponseTimer(data.response_timer_minutes ?? 5)
+        if (data.max_capacity) {
+          if ([2, 3, 4].includes(data.max_capacity)) {
+            setMaxCapacity(data.max_capacity)
+          } else {
+            setMaxCapacity('custom')
+            setCustomCapacity(String(data.max_capacity))
+          }
+        } else {
+          setMaxCapacity('all')
+        }
+        if (data.group_id) setSelectedGroup(data.group_id)
+        // Set date to today, keep same time
+        const now = new Date()
+        setActivityDate(now.toISOString().split('T')[0])
+        setActivityTime(data.activity_time ?? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+      })
+  }, [cloneId])
 
   function handlePresetChange(presetId: string) {
     setSelectedPreset(presetId)
