@@ -30,7 +30,6 @@ export async function processActivityInvites(activityId: string) {
   if (!maxCapacity) return { processed: false, reason: 'no_capacity_limit' }
 
   const timerMs = (activity.response_timer_minutes ?? 5) * 60 * 1000
-  console.log('[invite-processor] timer:', activity.response_timer_minutes, 'min =', timerMs, 'ms')
 
   // Step 1: Expire waiting members whose timer has run out
   const { data: waitingMembers } = await admin
@@ -51,9 +50,7 @@ export async function processActivityInvites(activityId: string) {
       .limit(1)
       .single()
 
-    console.log('[invite-processor] waiting member', wm.user_id, 'expires_at:', invite?.expires_at, 'now:', new Date().toISOString(), 'expired:', invite ? new Date(invite.expires_at) <= new Date() : 'no invite')
     if (invite && new Date(invite.expires_at) <= new Date()) {
-      console.log('[invite-processor] EXPIRING member', wm.user_id)
       await admin
         .from('whozin_activity_member')
         .update({ status: 'missed' })
@@ -95,7 +92,6 @@ export async function processActivityInvites(activityId: string) {
     .eq('status', 'waiting')
 
   // If people are still actively waiting, don't send the next batch yet
-  console.log('[invite-processor] confirmed:', confirmed, 'remaining spots:', remainingSpots, 'still waiting:', stillWaiting)
   if ((stillWaiting ?? 0) > 0) {
     await admin
       .from('whozin_activity')
