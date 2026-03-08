@@ -742,50 +742,50 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
             <p className="text-[13px] text-muted">No messages yet. Start the conversation!</p>
           </div>
         ) : (
-          <div className="space-y-1">
+          <div>
             {messages.map((msg, i) => {
               const isMe = msg.sender_id === activity.current_user_id
               const prevMsg = i > 0 ? messages[i - 1] : null
-              const sameSender = prevMsg?.sender_id === msg.sender_id
+              const sameSender = prevMsg?.sender_id === msg.sender_id && !isMe === !(prevMsg && prevMsg.sender_id === activity.current_user_id)
               const showDateSep = !prevMsg || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString()
               const isUnreadLine = i === unreadStartIndex
+              const continuation = sameSender && !showDateSep && !isUnreadLine
 
               return (
                 <div key={msg.id}>
                   {showDateSep && (
-                    <div className="flex justify-center my-3">
+                    <div className="flex justify-center my-2">
                       <span className="text-[10px] font-semibold text-muted bg-surface px-3 py-1 rounded-full">
                         {formatDateSeparator(msg.created_at)}
                       </span>
                     </div>
                   )}
-                  {/* Unread divider */}
                   {isUnreadLine && (
-                    <div ref={catchUpRef} className="flex items-center gap-3 my-4">
+                    <div ref={catchUpRef} className="flex items-center gap-3 my-3">
                       <div className="flex-1 h-px bg-primary/40" />
                       <span className="text-[11px] font-bold text-primary whitespace-nowrap">New messages</span>
                       <div className="flex-1 h-px bg-primary/40" />
                     </div>
                   )}
-                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep && !isUnreadLine ? 'mt-0.5' : 'mt-3'}`}>
-                    {!isMe && !sameSender && (
-                      <div className="mr-2 mt-0.5">
+                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${continuation ? 'mt-px' : 'mt-2.5'}`}>
+                    {!isMe && !continuation && (
+                      <div className="mr-1.5 mt-0.5 flex-shrink-0">
                         <PawAvatar size="sm" src={msg.sender?.avatar_url} />
                       </div>
                     )}
-                    {!isMe && sameSender && !showDateSep && <div className="w-7 mr-2 flex-shrink-0" />}
+                    {!isMe && continuation && <div className="w-[30px] flex-shrink-0" />}
 
-                    <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
-                      {!isMe && !sameSender && (
+                    <div className={`max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}>
+                      {!isMe && !continuation && (
                         <p className="text-[10px] font-semibold text-primary mb-0.5 ml-1">
                           {msg.sender?.first_name} {msg.sender?.last_name}
                         </p>
                       )}
                       <div
-                        className={`px-3 py-1.5 rounded-2xl text-[14px] leading-relaxed ${
+                        className={`px-3 py-1 rounded-2xl text-[14px] leading-snug ${
                           isMe
-                            ? 'bg-primary text-white rounded-br-md'
-                            : 'bg-background border border-border/50 text-foreground rounded-bl-md'
+                            ? `bg-primary text-white ${continuation ? 'rounded-tr-md' : 'rounded-br-md'}`
+                            : `bg-background border border-border/50 text-foreground ${continuation ? 'rounded-tl-md' : 'rounded-bl-md'}`
                         }`}
                       >
                         <span>{msg.body}</span>
