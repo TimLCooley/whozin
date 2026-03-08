@@ -83,6 +83,9 @@ export default function ActivityDetailPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('details')
   const [responding, setResponding] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showOutModal, setShowOutModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const loadActivity = useCallback(async () => {
     const res = await fetch(`/api/activities/${id}`)
@@ -95,25 +98,30 @@ export default function ActivityDetailPage() {
 
   useEffect(() => { loadActivity() }, [loadActivity])
 
-  // Auto-refresh every 30s to see invite progress
+  // Auto-refresh every 6s to see invite progress
   useEffect(() => {
     const interval = setInterval(loadActivity, 6000)
     return () => clearInterval(interval)
   }, [loadActivity])
 
   async function handleEmergencyFill() {
-    if (!confirm('Send an emergency text to everyone? First to reply IN gets the spot.')) return
     const res = await fetch(`/api/activities/${id}/emergency-fill`, { method: 'POST' })
     const data = await res.json()
     if (data.success) {
-      alert(`Emergency fill sent! ${data.notified} people notified.`)
       await loadActivity()
-    } else {
-      alert(data.reason || 'Could not send emergency fill')
     }
   }
 
   async function handleResponse(response: 'in' | 'out') {
+    if (!activity) return
+    if (response === 'out' && activity.my_status === 'confirmed') {
+      setShowOutModal(true)
+      return
+    }
+    await doResponse(response)
+  }
+
+  async function doResponse(response: 'in' | 'out') {
     if (!activity) return
     setResponding(true)
     const res = await fetch(`/api/activities/${id}`, {
@@ -128,9 +136,10 @@ export default function ActivityDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm('Delete this activity? This cannot be undone.')) return
+    setDeleting(true)
     const res = await fetch(`/api/activities/${id}`, { method: 'DELETE' })
     if (res.ok) router.push('/app')
+    setDeleting(false)
   }
 
   if (loading) {
@@ -247,7 +256,7 @@ export default function ActivityDetailPage() {
                   <span className="text-[14px] font-semibold text-primary">Clone Activity</span>
                 </button>
 
-                {/* Emergency Fill button — show when activity has open spots and people to notify */}
+                {/* Emergency Fill button */}
                 {activity.status === 'open' && activity.max_capacity && confirmed.length < activity.max_capacity && (missed.length > 0 || tbd.length > 0 || out.length > 0) && (
                   <button
                     onClick={handleEmergencyFill}
@@ -259,6 +268,14 @@ export default function ActivityDetailPage() {
                     <span className="text-[14px] font-semibold text-danger">Emergency Fill</span>
                   </button>
                 )}
+
+                {/* Delete button */}
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70 transition-opacity"
+                >
+                  Delete Activity
+                </button>
               </>
             )}
 
@@ -306,56 +323,19 @@ export default function ActivityDetailPage() {
 
         {tab === 'group' && (
           <div className="px-4 pt-4 space-y-5 animate-enter">
-            {/* In (Confirmed) */}
-            <StatusSection
-              title="In"
-              count={confirmed.length}
-              badge={isFull ? 'Full' : undefined}
-              badgeColor="bg-green-100 text-green-700"
-              members={confirmed}
-              statusKey="confirmed"
-            />
+            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" />
+            <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" />
+            <StatusSection title="TBD" count={tbd.length} members={tbd} statusKey="tbd" />
+            <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" />
+            <StatusSection title="Out" count={out.length} members={out} statusKey="out" />
 
-            {/* Waiting (Currently invited) */}
-            <StatusSection
-              title="Waiting"
-              count={waiting.length}
-              members={waiting}
-              statusKey="waiting"
-            />
-
-            {/* TBD (In queue, not yet invited) */}
-            <StatusSection
-              title="TBD"
-              count={tbd.length}
-              members={tbd}
-              statusKey="tbd"
-            />
-
-            {/* Missed (Timer expired) */}
-            <StatusSection
-              title="Missed"
-              count={missed.length}
-              members={missed}
-              statusKey="missed"
-            />
-
-            {/* Out */}
-            <StatusSection
-              title="Out"
-              count={out.length}
-              members={out}
-              statusKey="out"
-            />
-
-            {/* Host actions */}
             {activity.is_creator && (
               <div className="pt-4 space-y-3">
                 <button className="btn-primary w-full py-3.5 text-[14px]">
                   Save
                 </button>
                 <button
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteModal(true)}
                   className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
                 >
                   Delete Activity
@@ -371,6 +351,87 @@ export default function ActivityDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setShowDeleteModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-red-50 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">Delete Activity?</h3>
+              <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
+                This will permanently delete <span className="font-semibold">{activity.activity_name}</span> and notify all members. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OUT Confirmation Modal */}
+      {showOutModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setShowOutModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-orange-50 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">Are you sure?</h3>
+              <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
+                Someone waited for this spot in <span className="font-semibold">{activity.activity_name}</span>. Dropping out means they missed out for nothing.
+              </p>
+              <p className="text-[13px] text-muted mt-1.5 italic">
+                Don&apos;t be that person...
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowOutModal(false)}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-[#00C853] text-white active:opacity-80 transition-opacity"
+              >
+                Stay In
+              </button>
+              <button
+                onClick={() => { setShowOutModal(false); doResponse('out') }}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-muted border border-border/50 active:opacity-80 transition-opacity"
+              >
+                Drop Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -415,7 +476,6 @@ function StatusSection({
               key={m.id}
               className={`flex items-center gap-3 px-4 py-3 ${i < members.length - 1 ? 'border-b border-border/30' : ''}`}
             >
-              {/* Avatar */}
               <div className="w-9 h-9 rounded-full bg-border/40 overflow-hidden flex items-center justify-center flex-shrink-0">
                 {m.user?.avatar_url ? (
                   <img src={m.user.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -426,15 +486,12 @@ function StatusSection({
                   </svg>
                 )}
               </div>
-
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-semibold text-foreground truncate">
                   {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
                 </p>
                 <p className={`text-[11px] font-medium ${config.color}`}>{config.label}</p>
               </div>
-
-              {/* Status icon */}
               <StatusIcon status={statusKey} />
             </div>
           ))}
@@ -498,7 +555,6 @@ function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
       const date = activity.activity_date.replace(/-/g, '')
       const time = activity.activity_time ? activity.activity_time.replace(/:/g, '') + '00' : '120000'
       startDate = `${date}T${time}`
-      // Default 2 hour event
       const start = new Date(`${activity.activity_date}T${activity.activity_time ?? '12:00'}`)
       const end = new Date(start.getTime() + 2 * 60 * 60 * 1000)
       const endD = end.toISOString().split('T')[0].replace(/-/g, '')
