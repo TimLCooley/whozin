@@ -927,22 +927,22 @@ function GroupChat({ group }: { group: GroupDetail }) {
 
                     <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
                       {!isMe && !sameSender && (
-                        <p className="text-[10px] font-semibold text-muted mb-0.5 ml-1">
+                        <p className="text-[10px] font-semibold text-primary mb-0.5 ml-1">
                           {msg.sender?.first_name} {msg.sender?.last_name}
                         </p>
                       )}
                       <div
-                        className={`px-3.5 py-2 rounded-2xl text-[14px] leading-relaxed ${
+                        className={`px-3 py-1.5 rounded-2xl text-[14px] leading-relaxed ${
                           isMe
                             ? 'bg-primary text-white rounded-br-md'
                             : 'bg-background border border-border/50 text-foreground rounded-bl-md'
                         }`}
                       >
-                        {msg.body}
+                        <span>{msg.body}</span>
+                        <span className={`text-[9px] ml-2 inline-block align-bottom translate-y-[1px] ${isMe ? 'text-white/60' : 'text-muted'}`}>
+                          {formatTime(msg.created_at)}
+                        </span>
                       </div>
-                      <p className={`text-[9px] text-muted mt-0.5 ${isMe ? 'text-right mr-1' : 'ml-1'}`}>
-                        {formatTime(msg.created_at)}
-                      </p>
                     </div>
                   </div>
                 </div>
