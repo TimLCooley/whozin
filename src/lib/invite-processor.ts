@@ -173,7 +173,8 @@ export async function processActivityInvites(activityId: string) {
       phone,
       creator?.first_name ?? 'Someone',
       activity.activity_name,
-      dateTimeStr || 'TBD'
+      dateTimeStr || 'TBD',
+      activity.image_url || undefined
     )
 
     await admin.from('whozin_invite').insert({

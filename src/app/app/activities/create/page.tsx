@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
@@ -50,6 +50,12 @@ export default function CreateActivityPage() {
   const [reminderEnabled, setReminderEnabled] = useState(false)
   const [costType, setCostType] = useState<CostType>('free')
   const [costAmount, setCostAmount] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [generatingImage, setGeneratingImage] = useState(false)
+  const [imagePrompt, setImagePrompt] = useState('')
+  const [showImageGen, setShowImageGen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Group Details
   const [groups, setGroups] = useState<GroupOption[]>([])
@@ -139,6 +145,50 @@ export default function CreateActivityPage() {
     }
   }
 
+  async function handleImageUpload(file: File) {
+    setUploadingImage(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/activities/upload-image', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        setImageUrl(data.url)
+      } else {
+        alert(data.error || 'Upload failed')
+      }
+    } catch {
+      alert('Upload failed')
+    }
+    setUploadingImage(false)
+  }
+
+  async function handleGenerateImage() {
+    const prompt = imagePrompt.trim() || `A vibrant, inviting image for a group activity: ${activityName || 'fun event'}`
+    setGeneratingImage(true)
+    try {
+      const res = await fetch('/api/activities/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        setImageUrl(data.url)
+        setShowImageGen(false)
+        setImagePrompt('')
+      } else {
+        alert(data.error || 'Generation failed')
+      }
+    } catch {
+      alert('Generation failed')
+    }
+    setGeneratingImage(false)
+  }
+
   function getEffectiveMaxCapacity(): number | null {
     if (maxCapacity === 'all') return null
     if (maxCapacity === 'custom') return parseInt(customCapacity) || null
@@ -170,6 +220,7 @@ export default function CreateActivityPage() {
           chat_enabled: chatEnabled,
           reminder_enabled: reminderEnabled,
           auto_emergency_fill: autoEmergencyFill,
+          image_url: imageUrl || null,
         }),
       })
 
@@ -301,6 +352,100 @@ export default function CreateActivityPage() {
                 placeholder="Type a note here..."
                 rows={3}
                 className="input-field resize-none"
+              />
+            </FieldCard>
+
+            {/* Activity Image */}
+            <FieldCard>
+              <FieldLabel>Activity Image</FieldLabel>
+              <p className="text-[11px] text-muted mb-3">Add a photo to include in the invite text message.</p>
+              {imageUrl ? (
+                <div className="relative rounded-xl overflow-hidden">
+                  <img src={imageUrl} alt="Activity" className="w-full h-40 object-cover rounded-xl" />
+                  <button
+                    type="button"
+                    onClick={() => { setImageUrl(''); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center text-[14px]"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ) : showImageGen ? (
+                <div className="space-y-3 animate-enter">
+                  <textarea
+                    value={imagePrompt}
+                    onChange={(e) => setImagePrompt(e.target.value)}
+                    placeholder={`Describe the image you want, e.g. "A group of friends playing basketball at sunset"`}
+                    rows={3}
+                    className="input-field resize-none text-[13px]"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateImage}
+                      disabled={generatingImage}
+                      className="btn-primary flex-1 py-2.5 text-[13px] disabled:opacity-60"
+                    >
+                      {generatingImage ? 'Generating...' : 'Generate'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowImageGen(false); setImagePrompt('') }}
+                      className="px-4 py-2.5 rounded-xl border border-border/50 text-[13px] text-muted font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    className="flex-1 h-28 border-2 border-dashed border-border/60 rounded-xl flex flex-col items-center justify-center gap-1.5 text-muted transition-colors active:bg-surface"
+                  >
+                    {uploadingImage ? (
+                      <span className="text-[13px]">Uploading...</span>
+                    ) : (
+                      <>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <path d="M21 15l-5-5L5 21" />
+                        </svg>
+                        <span className="text-[12px] font-medium">Upload Photo</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { if (isPro) setShowImageGen(true) }}
+                    className={`flex-1 h-28 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors ${
+                      isPro
+                        ? 'border-primary/40 text-primary active:bg-primary/5'
+                        : 'border-border/40 text-muted/50'
+                    }`}
+                  >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[12px] font-medium">AI Generate</span>
+                      {!isPro && <ProBadge small />}
+                    </div>
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleImageUpload(file)
+                }}
               />
             </FieldCard>
 

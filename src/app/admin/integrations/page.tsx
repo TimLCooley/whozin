@@ -102,6 +102,16 @@ const INTEGRATIONS: Integration[] = [
     ],
     docsUrl: 'https://console.firebase.google.com/',
   },
+  {
+    name: 'Google Cloud',
+    description: 'Maps, Places autocomplete, and AI image generation (Imagen).',
+    icon: '🌐',
+    envVars: [
+      { key: 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY', label: 'Maps API Key' },
+      { key: 'GOOGLE_AI_API_KEY', label: 'Gemini / AI API Key', secret: true },
+    ],
+    docsUrl: 'https://console.cloud.google.com/',
+  },
 ]
 
 const API_ENDPOINTS = [
@@ -119,6 +129,9 @@ const API_ENDPOINTS = [
   { method: 'GET', path: '/api/admin/env-status', desc: 'Check env var status' },
   { method: 'POST', path: '/api/messaging/test', desc: 'Send test SMS/email' },
   { method: 'GET', path: '/api/favicon', desc: 'Dynamic favicon' },
+  { method: 'GET', path: '/api/locations', desc: 'Allowed country codes' },
+  { method: 'POST', path: '/api/activities/upload-image', desc: 'Upload activity image' },
+  { method: 'POST', path: '/api/activities/generate-image', desc: 'AI-generate activity image' },
 ]
 
 function getStatus(integration: Integration, envStatus: Record<string, boolean>): 'configured' | 'partial' | 'missing' {

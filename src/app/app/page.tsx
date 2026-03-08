@@ -18,6 +18,7 @@ interface ActivityCard {
   member_count: number
   status: string
   chat_enabled: boolean
+  image_url: string | null
   is_creator: boolean
   my_status: string | null
   creator_name: string
@@ -175,7 +176,7 @@ export default function AppHome() {
                 <div
                   key={activity.id}
                   onClick={() => router.push(`/app/activities/${activity.id}`)}
-                  className={`bg-background border rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter cursor-pointer active:bg-surface transition-colors ${
+                  className={`rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter cursor-pointer active:opacity-90 transition-all overflow-hidden ${
                     needsResponse
                       ? 'border-[1.5px] border-primary/50 ring-2 ring-primary/15'
                       : activity.is_creator
@@ -184,6 +185,126 @@ export default function AppHome() {
                   }`}
                   style={{ animationDelay: `${i * 0.03}s` }}
                 >
+                  {activity.image_url ? (
+                    /* ── Full-bleed image card ── */
+                    <div
+                      className="relative bg-cover bg-center min-h-[260px] flex flex-col"
+                      style={{ backgroundImage: `url(${activity.image_url})` }}
+                    >
+                      {/* Full overlay gradient */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/15 rounded-xl" />
+
+                      {/* Top badges */}
+                      <div className="relative flex items-start justify-between p-3.5">
+                        {needsResponse ? (
+                          <div className="flex items-center gap-1.5 bg-primary/90 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                            <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                            <span className="text-[10px] font-bold text-white uppercase tracking-wide">Response needed</span>
+                          </div>
+                        ) : (
+                          <div />
+                        )}
+                        {activity.chat_enabled && (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Spacer */}
+                      <div className="flex-1" />
+
+                      {/* Bottom content over image */}
+                      <div className="relative px-4 pb-4">
+                        <h3 className="text-[17px] font-bold text-white truncate drop-shadow-sm">{activity.activity_name}</h3>
+
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                              <rect x="3" y="4" width="18" height="18" rx="2" />
+                              <path d="M3 10h18M8 2v4M16 2v4" />
+                            </svg>
+                            <span className="text-[11px] text-white/90">{formatDate(activity.activity_date, activity.activity_time)}</span>
+                          </div>
+                          {activity.location && (
+                            <div className="flex items-center gap-1.5">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                                <circle cx="12" cy="10" r="3" />
+                              </svg>
+                              <span className="text-[11px] text-white/90 truncate max-w-[160px]">{activity.location}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-4 mt-1">
+                          <div className="flex items-center gap-1.5">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                              <line x1="12" y1="1" x2="12" y2="23" />
+                              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                            </svg>
+                            <span className="text-[11px] text-white/80">{formatCost(activity.cost_type, activity.cost)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                              <circle cx="9" cy="7" r="4" />
+                              <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                            </svg>
+                            <span className="text-[11px] text-white/80 font-medium">
+                              {activity.max_capacity
+                                ? `${activity.confirmed_count}/${activity.max_capacity}`
+                                : `${activity.confirmed_count} in`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Buttons over image */}
+                        {activity.my_status === 'confirmed' ? (
+                          <div className="flex gap-2 mt-3">
+                            <div className="flex-1 bg-[#00C853]/90 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20 6L9 17l-5-5" />
+                              </svg>
+                              You&apos;re In
+                            </div>
+                          </div>
+                        ) : activity.my_status === 'out' ? (
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
+                              className="px-4 py-2.5 rounded-lg bg-white/20 backdrop-blur-sm text-white text-[13px] font-bold active:opacity-80 transition-opacity"
+                            >
+                              IN
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation() }}
+                              className="flex-1 bg-red-500/80 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg"
+                            >
+                              You&apos;re Out
+                            </button>
+                          </div>
+                        ) : (activity.my_status === 'tbd' || activity.my_status === 'waiting') ? (
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
+                              className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)]"
+                            >
+                              I&apos;m In!
+                            </button>
+                            <button
+                              onClick={(e) => handleOutClick(e, activity)}
+                              className="flex-1 bg-white/20 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity"
+                            >
+                              I&apos;m Out
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Standard card (no image) ── */
+                    <div className="bg-background p-4">
                   {/* Needs response banner */}
                   {needsResponse && (
                     <div className="flex items-center gap-1.5 mb-2.5 pb-2.5 border-b border-primary/15">
@@ -312,6 +433,8 @@ export default function AppHome() {
                             : `${activity.confirmed_count} in`}
                         </span>
                       </div>
+                    </div>
+                  )}
                     </div>
                   )}
                 </div>

@@ -11,8 +11,8 @@ export function isTestNumber(phone: string): boolean {
   return false
 }
 
-/** Core SMS sender via Twilio */
-export async function sendSms(to: string, body: string) {
+/** Core SMS/MMS sender via Twilio */
+export async function sendSms(to: string, body: string, mediaUrl?: string) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim()
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim()
   const fromNumber = process.env.TWILIO_PHONE_NUMBER?.trim()
@@ -30,7 +30,12 @@ export async function sendSms(to: string, body: string) {
         'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({ To: to, From: fromNumber, Body: body }),
+      body: new URLSearchParams({
+        To: to,
+        From: fromNumber,
+        Body: body,
+        ...(mediaUrl ? { MediaUrl: mediaUrl } : {}),
+      }),
     })
 
     const data = await res.json()
@@ -63,17 +68,18 @@ export async function sendSmsInvite(toPhone: string, inviterName: string) {
   return sendSms(actualTo, message)
 }
 
-/** Send an activity invite SMS — branded "Are you in?" */
+/** Send an activity invite SMS/MMS — branded "Are you in?" */
 export async function sendActivityInvite(
   toPhone: string,
   inviterName: string,
   activityName: string,
-  dateTime: string
+  dateTime: string,
+  imageUrl?: string
 ) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
   const message =
     `${inviterName} is inviting you to ${activityName} on ${dateTime}. ` +
     `Are you in? Reply IN or OUT` +
     testNote
-  return sendSms(actualTo, message)
+  return sendSms(actualTo, message, imageUrl)
 }

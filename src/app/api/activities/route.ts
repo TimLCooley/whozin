@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
 
       for (const member of (memberUsers ?? [])) {
         const phone = member.phone.startsWith('+') ? member.phone : `+${member.country_code}${member.phone}`
-        const result = await sendActivityInvite(phone, whozinUser.first_name, activity_name.trim(), dateTimeStr || 'TBD')
+        const result = await sendActivityInvite(phone, whozinUser.first_name, activity_name.trim(), dateTimeStr || 'TBD', activity.image_url || undefined)
         await admin.from('whozin_invite').insert({
           activity_id: activity.id,
           user_id: member.id,
