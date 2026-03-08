@@ -18,6 +18,14 @@ function GoogleIcon() {
   )
 }
 
+function AppleIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+    </svg>
+  )
+}
+
 interface AuthFormProps {
   onBack: () => void
 }
@@ -63,6 +71,27 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000)
     return () => clearTimeout(t)
   }, [resendTimer])
+
+  async function handleAppleSignIn() {
+    setSocialLoading(true)
+    setError('')
+    try {
+      const supabase = createClient()
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+      if (oauthError) {
+        setError(oauthError.message)
+        setSocialLoading(false)
+      }
+    } catch {
+      setError('Failed to start Apple sign-in')
+      setSocialLoading(false)
+    }
+  }
 
   async function handleGoogleSignIn() {
     setSocialLoading(true)
@@ -318,6 +347,17 @@ export default function AuthForm({ onBack }: AuthFormProps) {
               >
                 <GoogleIcon />
                 {socialLoading ? 'Connecting...' : 'Continue with Google'}
+              </button>
+
+              <button
+                onClick={handleAppleSignIn}
+                disabled={socialLoading || loading}
+                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-border
+                           bg-black text-white font-semibold text-[14px]
+                           active:scale-[0.98] transition-all disabled:opacity-50 mb-4"
+              >
+                <AppleIcon />
+                {socialLoading ? 'Connecting...' : 'Continue with Apple'}
               </button>
 
               <div className="flex items-center gap-3 mb-4">
