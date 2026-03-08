@@ -101,6 +101,18 @@ export default function ActivityDetailPage() {
     return () => clearInterval(interval)
   }, [loadActivity])
 
+  async function handleEmergencyFill() {
+    if (!confirm('Send an emergency text to everyone? First to reply IN gets the spot.')) return
+    const res = await fetch(`/api/activities/${id}/emergency-fill`, { method: 'POST' })
+    const data = await res.json()
+    if (data.success) {
+      alert(`Emergency fill sent! ${data.notified} people notified.`)
+      await loadActivity()
+    } else {
+      alert(data.reason || 'Could not send emergency fill')
+    }
+  }
+
   async function handleResponse(response: 'in' | 'out') {
     if (!activity) return
     setResponding(true)
@@ -234,6 +246,19 @@ export default function ActivityDetailPage() {
                   </svg>
                   <span className="text-[14px] font-semibold text-primary">Clone Activity</span>
                 </button>
+
+                {/* Emergency Fill button — show when activity has open spots and people to notify */}
+                {activity.status === 'open' && activity.max_capacity && confirmed.length < activity.max_capacity && (missed.length > 0 || tbd.length > 0 || out.length > 0) && (
+                  <button
+                    onClick={handleEmergencyFill}
+                    className="w-full bg-danger/5 border border-danger/30 rounded-xl px-4 py-3 flex items-center gap-3 active:bg-danger/10 transition-colors"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </svg>
+                    <span className="text-[14px] font-semibold text-danger">Emergency Fill</span>
+                  </button>
+                )}
               </>
             )}
 

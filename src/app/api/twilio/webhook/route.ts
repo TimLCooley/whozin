@@ -32,18 +32,25 @@ export async function POST(req: NextRequest) {
   }
 
   if (!whozinUser) {
-    // Unknown number — respond politely
     return twimlResponse('Sorry, we could not find your account. Visit whozin.io to get started!')
   }
 
-  // Parse the reply — look for "in" or "out"
   const reply = body.trim().toLowerCase()
+
+  // Check for FILL command (host triggering emergency fill)
+  const isFill = /^(fill|fill it|send it|blast|emergency)$/i.test(reply)
+
+  if (isFill) {
+    return await handleFillCommand(whozinUser.id)
+  }
+
+  // Parse IN/OUT replies
   const isIn = /^(in|yes|y|i'm in|im in|i am in)$/i.test(reply)
   const isOut = /^(out|no|n|i'm out|im out|i am out|pass|nah)$/i.test(reply)
 
   if (!isIn && !isOut) {
     return twimlResponse(
-      'Reply IN to confirm or OUT to pass. Visit whozin.io for more options!'
+      'Reply IN to confirm, OUT to pass, or FILL to send an emergency invite. Visit whozin.io for more!'
     )
   }
 
@@ -66,50 +73,100 @@ export async function POST(req: NextRequest) {
   // Update the invite status
   await admin
     .from('whozin_invite')
-    .update({
-      status: 'responded',
-      response: isIn ? 'in' : 'out',
-    })
+    .update({ status: 'responded', response: isIn ? 'in' : 'out' })
     .eq('id', invite.id)
+
+  // Check if activity was full before this response
+  const { data: activityBefore } = await admin
+    .from('whozin_activity')
+    .select('status, max_capacity, auto_emergency_fill, creator_id, activity_name')
+    .eq('id', invite.activity_id)
+    .single()
+
+  const wasFull = activityBefore?.status === 'full'
 
   // Update the activity member status
   const newStatus = isIn ? 'confirmed' : 'out'
   await admin
     .from('whozin_activity_member')
-    .update({
-      status: newStatus,
-      responded_at: new Date().toISOString(),
-    })
+    .update({ status: newStatus, responded_at: new Date().toISOString() })
     .eq('activity_id', invite.activity_id)
     .eq('user_id', whozinUser.id)
 
-  // Update capacity_current if they're in
-  if (isIn) {
-    const { count } = await admin
-      .from('whozin_activity_member')
-      .select('id', { count: 'exact', head: true })
-      .eq('activity_id', invite.activity_id)
-      .eq('status', 'confirmed')
+  // Update capacity count
+  const { count: confirmedCount } = await admin
+    .from('whozin_activity_member')
+    .select('id', { count: 'exact', head: true })
+    .eq('activity_id', invite.activity_id)
+    .eq('status', 'confirmed')
 
-    await admin
-      .from('whozin_activity')
-      .update({ capacity_current: count ?? 0 })
-      .eq('id', invite.activity_id)
+  await admin
+    .from('whozin_activity')
+    .update({ capacity_current: confirmedCount ?? 0, status: 'open' })
+    .eq('id', invite.activity_id)
+
+  const activityName = activityBefore?.activity_name ?? 'the activity'
+
+  // Handle emergency fill if someone dropped from a full activity
+  if (isOut && wasFull && activityBefore) {
+    const { data: dropout } = await admin
+      .from('whozin_users')
+      .select('first_name, last_name')
+      .eq('id', whozinUser.id)
+      .single()
+
+    const dropoutName = dropout ? `${dropout.first_name} ${dropout.last_name}` : 'Someone'
+    const { sendEmergencyFill, notifyHostOfDropout } = await import('@/lib/emergency-fill')
+
+    if (activityBefore.auto_emergency_fill) {
+      await sendEmergencyFill(invite.activity_id)
+    } else {
+      await notifyHostOfDropout(invite.activity_id, dropoutName)
+    }
+
+    return twimlResponse(`Got it, you're out for ${activityName}. The host has been notified.`)
   }
 
-  // Get the activity name for the confirmation
-  const { data: activity } = await admin
-    .from('whozin_activity')
-    .select('activity_name')
-    .eq('id', invite.activity_id)
-    .single()
-
-  const activityName = activity?.activity_name ?? 'the activity'
+  // Normal queue processing
+  if (isOut || isIn) {
+    const { processActivityInvites } = await import('@/lib/invite-processor')
+    await processActivityInvites(invite.activity_id)
+  }
 
   if (isIn) {
     return twimlResponse(`You're in for ${activityName}! See you there. Check whozin.io for details.`)
   } else {
     return twimlResponse(`Got it, you're out for ${activityName}. Maybe next time!`)
+  }
+}
+
+/** Handle FILL command from host */
+async function handleFillCommand(userId: string) {
+  const admin = getAdminClient()
+
+  // Find the most recent open activity this user created that has open spots
+  const { data: activity } = await admin
+    .from('whozin_activity')
+    .select('id, activity_name')
+    .eq('creator_id', userId)
+    .eq('status', 'open')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (!activity) {
+    return twimlResponse("You don't have any activities that need filling right now.")
+  }
+
+  const { sendEmergencyFill } = await import('@/lib/emergency-fill')
+  const result = await sendEmergencyFill(activity.id)
+
+  if (result.success) {
+    return twimlResponse(
+      `Emergency fill sent for ${activity.activity_name}! ${result.notified} people notified. First to reply IN gets the spot.`
+    )
+  } else {
+    return twimlResponse(`Could not send emergency fill: ${result.reason}`)
   }
 }
 

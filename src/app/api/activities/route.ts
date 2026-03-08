@@ -159,6 +159,7 @@ export async function POST(req: NextRequest) {
     chat_enabled,
     reminder_enabled,
     image_url,
+    auto_emergency_fill,
   } = body
 
   if (!group_id) return NextResponse.json({ error: 'Group is required' }, { status: 400 })
@@ -194,6 +195,7 @@ export async function POST(req: NextRequest) {
       chat_enabled: finalChatEnabled,
       reminder_enabled: finalReminderEnabled,
       image_url: image_url || null,
+      auto_emergency_fill: auto_emergency_fill ?? false,
       status: 'open',
     })
     .select()

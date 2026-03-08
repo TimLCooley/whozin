@@ -102,6 +102,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const newStatus = response === 'in' ? 'confirmed' : 'out'
 
+  // Check if activity was full BEFORE this response (for emergency fill detection)
+  const { data: activityBefore } = await admin
+    .from('whozin_activity')
+    .select('status, max_capacity, auto_emergency_fill, creator_id')
+    .eq('id', id)
+    .single()
+
+  const wasFull = activityBefore?.status === 'full'
+
   const { error } = await admin
     .from('whozin_activity_member')
     .update({ status: newStatus, responded_at: new Date().toISOString() })
@@ -127,12 +136,34 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   await admin
     .from('whozin_activity')
-    .update({ capacity_current: confirmedCount ?? 0 })
+    .update({ capacity_current: confirmedCount ?? 0, status: 'open' })
     .eq('id', id)
 
-  // If someone responded, trigger invite processing (may advance the queue)
-  const { processActivityInvites } = await import('@/lib/invite-processor')
-  await processActivityInvites(id)
+  // Emergency fill: someone dropped out of a FULL activity
+  if (response === 'out' && wasFull && activityBefore) {
+    // Get the name of who dropped out
+    const { data: dropout } = await admin
+      .from('whozin_users')
+      .select('first_name, last_name')
+      .eq('id', whozinUser.id)
+      .single()
+
+    const dropoutName = dropout ? `${dropout.first_name} ${dropout.last_name}` : 'Someone'
+
+    const { sendEmergencyFill, notifyHostOfDropout } = await import('@/lib/emergency-fill')
+
+    if (activityBefore.auto_emergency_fill) {
+      // Auto mode: blast everyone immediately
+      await sendEmergencyFill(id)
+    } else {
+      // Manual mode: notify host, they decide
+      await notifyHostOfDropout(id, dropoutName)
+    }
+  } else {
+    // Normal flow: advance the invite queue
+    const { processActivityInvites } = await import('@/lib/invite-processor')
+    await processActivityInvites(id)
+  }
 
   return NextResponse.json({ status: newStatus })
 }

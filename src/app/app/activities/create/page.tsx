@@ -58,6 +58,7 @@ export default function CreateActivityPage() {
   const [priorityInvite, setPriorityInvite] = useState(true)
   const [responseTimer, setResponseTimer] = useState(5)
   const [chatEnabled, setChatEnabled] = useState(false)
+  const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
   const [showTimerDropdown, setShowTimerDropdown] = useState(false)
 
   // Load presets and groups
@@ -108,6 +109,7 @@ export default function CreateActivityPage() {
         setCostAmount(data.cost ? String(data.cost) : '')
         setReminderEnabled(data.reminder_enabled ?? false)
         setChatEnabled(data.chat_enabled ?? false)
+        setAutoEmergencyFill(data.auto_emergency_fill ?? false)
         setPriorityInvite(data.priority_invite ?? true)
         setResponseTimer(data.response_timer_minutes ?? 5)
         if (data.max_capacity) {
@@ -166,6 +168,7 @@ export default function CreateActivityPage() {
           priority_invite: priorityInvite,
           chat_enabled: chatEnabled,
           reminder_enabled: reminderEnabled,
+          auto_emergency_fill: autoEmergencyFill,
         }),
       })
 
@@ -536,6 +539,19 @@ export default function CreateActivityPage() {
                 {isPro
                   ? 'Enable group chat for this activity.'
                   : 'Upgrade to Pro to enable activity chat.'}
+              </p>
+            </FieldCard>
+
+            {/* Auto Emergency Fill */}
+            <FieldCard>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-semibold text-foreground">Auto Emergency Fill</span>
+                <Toggle checked={autoEmergencyFill} onChange={setAutoEmergencyFill} />
+              </div>
+              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                {autoEmergencyFill
+                  ? 'If someone drops out of a full activity, everyone gets an emergency text automatically.'
+                  : 'If someone drops out, you\'ll get a text. Reply FILL to send the blast, or tap the button in the app.'}
               </p>
             </FieldCard>
           </div>
