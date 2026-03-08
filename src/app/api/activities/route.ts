@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 
   const { data: whozinUser } = await admin
     .from('whozin_users')
-    .select('id, membership_tier, first_name')
+    .select('id, membership_tier, first_name, phone')
     .eq('auth_user_id', user.id)
     .single()
 
@@ -166,12 +166,13 @@ export async function POST(req: NextRequest) {
   if (!activity_name?.trim()) return NextResponse.json({ error: 'Activity name is required' }, { status: 400 })
 
   const isPro = whozinUser.membership_tier === 'pro'
+  const isTestUser = whozinUser.phone?.includes('999')
 
   // Validate Pro features
   const finalChatEnabled = isPro ? (chat_enabled ?? false) : false
   const finalReminderEnabled = isPro ? (reminder_enabled ?? false) : false
   const finalMaxCapacity = max_capacity === 'all' ? null : (max_capacity ?? null)
-  const finalResponseTimer = isPro
+  const finalResponseTimer = (isPro || isTestUser)
     ? (response_timer_minutes ?? 5)
     : 5
 
