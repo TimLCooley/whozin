@@ -233,6 +233,20 @@ export default function AppHome() {
                     <span className="text-[12px]">{formatCost(activity.cost_type, activity.cost)}</span>
                   </div>
 
+                  {/* Capacity */}
+                  <div className="flex items-center gap-1.5 mt-1.5 text-muted">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                    </svg>
+                    <span className="text-[12px] font-medium">
+                      {activity.max_capacity
+                        ? `${activity.confirmed_count} / ${activity.max_capacity} ${activity.confirmed_count >= activity.max_capacity ? 'filled' : 'open'}`
+                        : `${activity.confirmed_count} in`}
+                    </span>
+                  </div>
+
                   {/* IN/OUT Response buttons */}
                   {activity.my_status === 'confirmed' ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/30">
