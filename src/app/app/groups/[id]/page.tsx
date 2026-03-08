@@ -325,7 +325,7 @@ export default function GroupDetailPage() {
         )
       })()}
 
-      <div className="flex-1 overflow-y-auto pb-8">
+      <div className={`flex-1 ${tab === 'chat' ? 'flex flex-col min-h-0' : 'overflow-y-auto pb-8'}`}>
         {/* Non-host group name banner (since they don't see Group Details) */}
         {!group.is_owner && (
           <div className="bg-background border-b border-border/30 px-4 py-2.5">
@@ -678,7 +678,10 @@ function GroupChat({ group }: { group: GroupDetail }) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(true)
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null)
+  const [showCatchUp, setShowCatchUp] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const catchUpRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
 
   const chatAvailable = group.chat_enabled && group.creator_is_pro
@@ -690,10 +693,21 @@ function GroupChat({ group }: { group: GroupDetail }) {
     fetch(`/api/groups/${group.id}/messages`)
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setMessages(data)
+        if (data.messages && Array.isArray(data.messages)) {
+          setMessages(data.messages)
+          if (data.last_read_at) {
+            setLastReadAt(data.last_read_at)
+            const unread = data.messages.filter(
+              (m: ChatMessage) => m.sender_id !== group.current_user_id && new Date(m.created_at) > new Date(data.last_read_at)
+            )
+            if (unread.length > 0) setShowCatchUp(true)
+          }
+        } else if (Array.isArray(data)) {
+          setMessages(data)
+        }
       })
       .finally(() => setLoadingMessages(false))
-  }, [group.id, chatAvailable])
+  }, [group.id, chatAvailable, group.current_user_id])
 
   // Subscribe to real-time messages via Broadcast
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
@@ -706,7 +720,6 @@ function GroupChat({ group }: { group: GroupDetail }) {
       .channel(`group-chat-${group.id}`)
       .on('broadcast', { event: 'new_message' }, ({ payload }) => {
         const msg = payload as ChatMessage
-        // Skip our own messages (already shown via optimistic insert)
         if (msg.sender_id === group.current_user_id) return
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev
@@ -719,10 +732,21 @@ function GroupChat({ group }: { group: GroupDetail }) {
     return () => { supabase.removeChannel(channel) }
   }, [group.id, group.current_user_id, chatAvailable])
 
-  // Scroll to bottom on new messages
+  // Scroll to catch-up line or bottom on initial load
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (!loadingMessages && messages.length > 0) {
+      if (showCatchUp && catchUpRef.current) {
+        catchUpRef.current.scrollIntoView({ behavior: 'auto', block: 'center' })
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+      }
+    }
+  }, [loadingMessages, showCatchUp, messages.length])
+
+  function scrollToCatchUp() {
+    catchUpRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setShowCatchUp(false)
+  }
 
   async function handleSend() {
     const text = input.trim()
@@ -744,6 +768,7 @@ function GroupChat({ group }: { group: GroupDetail }) {
       },
     }
     setMessages((prev) => [...prev, optimistic])
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
 
     try {
       const res = await fetch(`/api/groups/${group.id}/messages`, {
@@ -807,6 +832,11 @@ function GroupChat({ group }: { group: GroupDetail }) {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
   }
 
+  // Find the index where unread messages start
+  const unreadStartIndex = lastReadAt
+    ? messages.findIndex((m) => m.sender_id !== group.current_user_id && new Date(m.created_at) > new Date(lastReadAt))
+    : -1
+
   // Not available state
   if (!chatAvailable) {
     return (
@@ -832,7 +862,20 @@ function GroupChat({ group }: { group: GroupDetail }) {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 relative">
+      {/* Catch up floating button */}
+      {showCatchUp && (
+        <button
+          onClick={scrollToCatchUp}
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-primary text-white text-[12px] font-bold px-4 py-2 rounded-full shadow-lg active:scale-95 transition-transform flex items-center gap-1.5"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+          </svg>
+          Catch up
+        </button>
+      )}
+
       {/* Messages area */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-3">
         {loadingMessages ? (
@@ -855,6 +898,7 @@ function GroupChat({ group }: { group: GroupDetail }) {
               const prevMsg = i > 0 ? messages[i - 1] : null
               const sameSender = prevMsg?.sender_id === msg.sender_id
               const showDateSep = !prevMsg || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString()
+              const isUnreadLine = i === unreadStartIndex
 
               return (
                 <div key={msg.id}>
@@ -865,8 +909,15 @@ function GroupChat({ group }: { group: GroupDetail }) {
                       </span>
                     </div>
                   )}
-                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep ? 'mt-0.5' : 'mt-3'}`}>
-                    {/* Avatar for others */}
+                  {/* Unread divider */}
+                  {isUnreadLine && (
+                    <div ref={catchUpRef} className="flex items-center gap-3 my-4">
+                      <div className="flex-1 h-px bg-primary/40" />
+                      <span className="text-[11px] font-bold text-primary whitespace-nowrap">New messages</span>
+                      <div className="flex-1 h-px bg-primary/40" />
+                    </div>
+                  )}
+                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep && !isUnreadLine ? 'mt-0.5' : 'mt-3'}`}>
                     {!isMe && !sameSender && (
                       <div className="mr-2 mt-0.5">
                         <PawAvatar size="sm" src={msg.sender?.avatar_url} />
@@ -875,7 +926,6 @@ function GroupChat({ group }: { group: GroupDetail }) {
                     {!isMe && sameSender && !showDateSep && <div className="w-7 mr-2 flex-shrink-0" />}
 
                     <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'}`}>
-                      {/* Sender name for others */}
                       {!isMe && !sameSender && (
                         <p className="text-[10px] font-semibold text-muted mb-0.5 ml-1">
                           {msg.sender?.first_name} {msg.sender?.last_name}
@@ -904,7 +954,7 @@ function GroupChat({ group }: { group: GroupDetail }) {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-border/50 bg-background px-3 py-2.5 flex items-end gap-2">
+      <div className="border-t border-border/50 bg-background px-3 py-2.5 flex items-end gap-2 flex-shrink-0">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}

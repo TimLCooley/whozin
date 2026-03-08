@@ -61,6 +61,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Get user's last read timestamp
+  const { data: readRecord } = await admin
+    .from('whozin_chat_read')
+    .select('last_read_at')
+    .eq('user_id', whozinUser.id)
+    .eq('context_type', 'activity')
+    .eq('context_id', activityId)
+    .single()
+
   const formatted = (messages ?? []).reverse().map((m) => ({
     id: m.id,
     body: m.body,
@@ -69,7 +78,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     sender: m.whozin_users,
   }))
 
-  return NextResponse.json(formatted)
+  // Mark as read now
+  await admin
+    .from('whozin_chat_read')
+    .upsert({
+      user_id: whozinUser.id,
+      context_type: 'activity',
+      context_id: activityId,
+      last_read_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,context_type,context_id' })
+
+  return NextResponse.json({
+    messages: formatted,
+    last_read_at: readRecord?.last_read_at ?? null,
+  })
 }
 
 // POST send a message to activity chat

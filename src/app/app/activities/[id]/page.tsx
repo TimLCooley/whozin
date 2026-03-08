@@ -216,7 +216,7 @@ export default function ActivityDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto pb-28">
+      <div className={`flex-1 ${tab === 'chat' ? 'flex flex-col min-h-0' : 'overflow-y-auto pb-28'}`}>
         {tab === 'details' && (
           <div className="px-4 pt-4 space-y-4 animate-enter">
             {/* Host view */}
@@ -549,7 +549,11 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(true)
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null)
+  const [showCatchUp, setShowCatchUp] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const catchUpRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
 
   const isConfirmed = activity.my_status === 'confirmed'
@@ -561,10 +565,22 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
     fetch(`/api/activities/${activity.id}/messages`)
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setMessages(data)
+        if (data.messages && Array.isArray(data.messages)) {
+          setMessages(data.messages)
+          if (data.last_read_at) {
+            setLastReadAt(data.last_read_at)
+            // Check if there are unread messages
+            const unread = data.messages.filter(
+              (m: ChatMessage) => m.sender_id !== activity.current_user_id && new Date(m.created_at) > new Date(data.last_read_at)
+            )
+            if (unread.length > 0) setShowCatchUp(true)
+          }
+        } else if (Array.isArray(data)) {
+          setMessages(data)
+        }
       })
       .finally(() => setLoadingMessages(false))
-  }, [activity.id, isConfirmed])
+  }, [activity.id, isConfirmed, activity.current_user_id])
 
   // Real-time broadcast
   useEffect(() => {
@@ -587,10 +603,21 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
     return () => { supabase.removeChannel(channel) }
   }, [activity.id, activity.current_user_id, isConfirmed])
 
-  // Scroll to bottom
+  // Scroll to catch-up line or bottom on initial load
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (!loadingMessages && messages.length > 0) {
+      if (showCatchUp && catchUpRef.current) {
+        catchUpRef.current.scrollIntoView({ behavior: 'auto', block: 'center' })
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+      }
+    }
+  }, [loadingMessages, showCatchUp, messages.length])
+
+  function scrollToCatchUp() {
+    catchUpRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setShowCatchUp(false)
+  }
 
   async function handleSend() {
     const text = input.trim()
@@ -606,6 +633,7 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
       sender: { id: activity.current_user_id, first_name: 'You', last_name: '', avatar_url: null },
     }
     setMessages((prev) => [...prev, optimistic])
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
 
     try {
       const res = await fetch(`/api/activities/${activity.id}/messages`, {
@@ -618,7 +646,6 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
         setMessages((prev) =>
           prev.map((m) => (m.id === optimistic.id ? { ...optimistic, id: saved.id, created_at: saved.created_at } : m))
         )
-        // Find current user in members for broadcast
         const me = activity.members.find((m) => m.user_id === activity.current_user_id)
         channelRef.current?.send({
           type: 'broadcast',
@@ -650,8 +677,7 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
   }
 
   function formatTime(iso: string) {
-    const d = new Date(iso)
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   }
 
   function formatDateSeparator(iso: string) {
@@ -664,7 +690,11 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
   }
 
-  // Not confirmed — can't access chat
+  // Find the index where unread messages start
+  const unreadStartIndex = lastReadAt
+    ? messages.findIndex((m) => m.sender_id !== activity.current_user_id && new Date(m.created_at) > new Date(lastReadAt))
+    : -1
+
   if (!isConfirmed) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-16 text-center">
@@ -682,9 +712,22 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 relative">
+      {/* Catch up floating button */}
+      {showCatchUp && (
+        <button
+          onClick={scrollToCatchUp}
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-primary text-white text-[12px] font-bold px-4 py-2 rounded-full shadow-lg active:scale-95 transition-transform flex items-center gap-1.5"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+          </svg>
+          Catch up
+        </button>
+      )}
+
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-3">
         {loadingMessages ? (
           <div className="flex justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -705,6 +748,7 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
               const prevMsg = i > 0 ? messages[i - 1] : null
               const sameSender = prevMsg?.sender_id === msg.sender_id
               const showDateSep = !prevMsg || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString()
+              const isUnreadLine = i === unreadStartIndex
 
               return (
                 <div key={msg.id}>
@@ -715,7 +759,15 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
                       </span>
                     </div>
                   )}
-                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep ? 'mt-0.5' : 'mt-3'}`}>
+                  {/* Unread divider */}
+                  {isUnreadLine && (
+                    <div ref={catchUpRef} className="flex items-center gap-3 my-4">
+                      <div className="flex-1 h-px bg-primary/40" />
+                      <span className="text-[11px] font-bold text-primary whitespace-nowrap">New messages</span>
+                      <div className="flex-1 h-px bg-primary/40" />
+                    </div>
+                  )}
+                  <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${sameSender && !showDateSep && !isUnreadLine ? 'mt-0.5' : 'mt-3'}`}>
                     {!isMe && !sameSender && (
                       <div className="mr-2 mt-0.5">
                         <PawAvatar size="sm" src={msg.sender?.avatar_url} />
@@ -752,7 +804,7 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-border/50 bg-background px-3 py-2.5 flex items-end gap-2">
+      <div className="border-t border-border/50 bg-background px-3 py-2.5 flex items-end gap-2 flex-shrink-0">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
