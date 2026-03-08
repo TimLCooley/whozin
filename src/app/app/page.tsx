@@ -150,7 +150,7 @@ export default function AppHome() {
                 key={activity.id}
                 onClick={() => router.push(`/app/activities/${activity.id}`)}
                 className={`bg-background border rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter cursor-pointer active:bg-surface transition-colors ${
-                  activity.is_creator ? 'border-primary/30' : 'border-border/50'
+                  activity.is_creator ? 'border-[1.5px] border-primary/40 ring-1 ring-primary/10' : 'border border-border/50'
                 }`}
                 style={{ animationDelay: `${i * 0.03}s` }}
               >
