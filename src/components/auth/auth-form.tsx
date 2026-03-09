@@ -139,10 +139,16 @@ export default function AuthForm({ onBack }: AuthFormProps) {
         return
       }
 
-      // Dev mode: auto-fill code
+      // Dev mode: auto-fill and auto-submit code
       if (data.dev_code) {
         const digits = data.dev_code.split('')
         setOtpDigits(digits)
+        setStep('otp')
+        setResendTimer(30)
+        setLoading(false)
+        // Auto-submit after a tick so state is updated
+        setTimeout(() => handleVerifyOtp(data.dev_code), 100)
+        return
       }
 
       setStep('otp')

@@ -5,6 +5,14 @@ import { normalizePhone } from '@/lib/auth'
 const ADMIN_PHONE = '+16193019180'
 const TEST_AREA_CODES = ['999']
 
+// Dev access account — no SMS, fixed code
+const DEV_PHONE = '+11111111111'
+const DEV_CODE = '111111'
+
+function isDevPhone(phone: string): boolean {
+  return phone === DEV_PHONE
+}
+
 function isTestNumber(phone: string): boolean {
   const digits = phone.replace(/\D/g, '')
   if (digits.startsWith('1') && digits.length >= 4) {
@@ -23,9 +31,10 @@ export async function POST(req: NextRequest) {
   const normalizedPhone = normalizePhone(phone, country_code || '1')
   const admin = getAdminClient()
 
-  // Generate 6-digit code
-  const code = String(Math.floor(100000 + Math.random() * 900000))
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
+  // Dev account: fixed code, no SMS
+  const isDev = isDevPhone(normalizedPhone)
+  const code = isDev ? DEV_CODE : String(Math.floor(100000 + Math.random() * 900000))
+  const expiresAt = new Date(Date.now() + (isDev ? 365 * 24 * 60 : 5) * 60 * 1000) // dev: 1 year, normal: 5 min
 
   // Invalidate previous unused codes for this phone
   await admin
@@ -41,6 +50,12 @@ export async function POST(req: NextRequest) {
 
   if (insertError) {
     return NextResponse.json({ error: 'Failed to generate code' }, { status: 500 })
+  }
+
+  // Dev account: skip SMS entirely, return code for auto-fill
+  if (isDev) {
+    console.log(`[OTP] Dev account ${normalizedPhone}: ${code}`)
+    return NextResponse.json({ success: true, dev_code: code })
   }
 
   // Send via Twilio

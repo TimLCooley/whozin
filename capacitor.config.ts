@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
-  appId: 'io.whozin.app',
+  appId: 'com.chumem.whozin',
   appName: 'Whozin',
   webDir: 'out',
   server: {

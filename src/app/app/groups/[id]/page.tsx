@@ -56,8 +56,16 @@ interface GoogleContact {
   photo: string
 }
 
+interface DeviceContact {
+  name: string
+  first_name: string
+  last_name: string
+  phone: string
+  email: string
+}
+
 type Tab = 'details' | 'chat' | 'members'
-type Modal = null | 'add-phone' | 'add-friends' | 'add-google'
+type Modal = null | 'add-phone' | 'add-friends' | 'add-google' | 'add-device'
 
 export default function GroupDetailPage() {
   const router = useRouter()
@@ -93,6 +101,13 @@ export default function GroupDetailPage() {
   const [loadingGoogle, setLoadingGoogle] = useState(false)
   const [googleError, setGoogleError] = useState('')
   const googleSearchTimeout = useRef<ReturnType<typeof setTimeout>>(null)
+
+  // Device (Apple/Android) contacts state
+  const [deviceContacts, setDeviceContacts] = useState<DeviceContact[]>([])
+  const [allDeviceContacts, setAllDeviceContacts] = useState<DeviceContact[]>([])
+  const [deviceSearch, setDeviceSearch] = useState('')
+  const [loadingDevice, setLoadingDevice] = useState(false)
+  const [deviceError, setDeviceError] = useState('')
 
   // Drag reorder state
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -273,6 +288,89 @@ export default function GroupDetailPage() {
       } catch { /* keep existing */ }
       setLoadingGoogle(false)
     }, 400)
+  }
+
+  async function openDeviceContacts() {
+    setModal('add-device')
+    setDeviceSearch('')
+    setDeviceError('')
+    setLoadingDevice(true)
+    try {
+      const { Contacts } = await import('@capacitor-community/contacts')
+      const permission = await Contacts.requestPermissions()
+      if (permission.contacts !== 'granted') {
+        setDeviceError('Contacts permission denied. Please allow access in your device settings.')
+        setLoadingDevice(false)
+        return
+      }
+      const result = await Contacts.getContacts({
+        projection: { name: true, phones: true, emails: true },
+      })
+      const mapped: DeviceContact[] = (result.contacts || [])
+        .map((c) => ({
+          name: c.name?.display || '',
+          first_name: c.name?.given || '',
+          last_name: c.name?.family || '',
+          phone: c.phones?.[0]?.number?.replace(/[\s\-().]/g, '') || '',
+          email: c.emails?.[0]?.address || '',
+        }))
+        .filter((c) => c.name && c.phone)
+        .sort((a, b) => a.name.localeCompare(b.name))
+      setAllDeviceContacts(mapped)
+      setDeviceContacts(mapped)
+    } catch {
+      setDeviceError('Contacts not available. This feature works in the Whozin app on iOS or Android.')
+    }
+    setLoadingDevice(false)
+  }
+
+  function searchDeviceContacts(query: string) {
+    setDeviceSearch(query)
+    if (!query.trim()) {
+      setDeviceContacts(allDeviceContacts)
+      return
+    }
+    const q = query.toLowerCase()
+    setDeviceContacts(
+      allDeviceContacts.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.phone.includes(q) ||
+          c.email.toLowerCase().includes(q)
+      )
+    )
+  }
+
+  async function handleAddDeviceContact(contact: DeviceContact) {
+    if (!contact.phone) {
+      alert('This contact has no phone number.')
+      return
+    }
+    let phone = contact.phone.replace(/\D/g, '')
+    let countryCodeVal = '1'
+    if (phone.startsWith('1') && phone.length === 11) {
+      phone = phone.slice(1)
+    } else if (phone.length > 10) {
+      countryCodeVal = phone.slice(0, phone.length - 10)
+      phone = phone.slice(-10)
+    }
+
+    const res = await fetch(`/api/groups/${groupId}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone,
+        country_code: countryCodeVal,
+        first_name: contact.first_name || contact.name.split(' ')[0] || '',
+        last_name: contact.last_name || contact.name.split(' ').slice(1).join(' ') || '',
+      }),
+    })
+    if (res.ok) {
+      loadGroup()
+    } else {
+      const data = await res.json()
+      alert(data.error || 'Failed to add member')
+    }
   }
 
   async function handleAddGoogleContact(contact: GoogleContact) {
@@ -544,6 +642,18 @@ export default function GroupDetailPage() {
               </svg>
               Search Google Contacts
             </button>
+            <button
+              onClick={openDeviceContacts}
+              className="w-full py-3 mb-4 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center justify-center gap-2"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v-2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 00-3-3.87" />
+                <path d="M16 3.13a4 4 0 010 7.75" />
+              </svg>
+              Search Phone Contacts
+            </button>
 
             {/* Member list */}
             <p className="text-[12px] text-muted mb-2">
@@ -787,6 +897,75 @@ export default function GroupDetailPage() {
                       ) : (
                         <span className="text-[10px] text-muted/50 flex-shrink-0">No phone</span>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </BottomSheet>
+      )}
+
+      {/* Device Contacts Modal */}
+      {modal === 'add-device' && (
+        <BottomSheet onClose={() => setModal(null)}>
+          <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Search Phone Contacts</h3>
+
+          {deviceError ? (
+            <div className="text-center py-8">
+              <p className="text-[13px] text-muted">{deviceError}</p>
+            </div>
+          ) : (
+            <>
+              <div className="relative mb-4">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="M21 21l-4.35-4.35" />
+                </svg>
+                <input
+                  type="text"
+                  value={deviceSearch}
+                  onChange={(e) => searchDeviceContacts(e.target.value)}
+                  placeholder="Search by name..."
+                  className="input-field pl-10"
+                  autoFocus
+                />
+              </div>
+
+              {loadingDevice ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : deviceContacts.length === 0 ? (
+                <p className="text-[13px] text-muted text-center py-8">
+                  {deviceSearch ? 'No contacts found.' : 'No contacts available.'}
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[50dvh] overflow-y-auto">
+                  {deviceContacts.map((contact, i) => (
+                    <div
+                      key={`${contact.phone}-${i}`}
+                      className="bg-background border border-border/50 rounded-xl p-3 flex items-center gap-3"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <span className="text-[14px] font-bold text-primary">
+                          {(contact.first_name || contact.name || '?')[0]?.toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-foreground truncate">{contact.name}</p>
+                        <p className="text-[11px] text-muted truncate">{contact.phone || contact.email || 'No phone'}</p>
+                      </div>
+
+                      <button
+                        onClick={() => handleAddDeviceContact(contact)}
+                        className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 active:bg-primary-dark transition-colors"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round">
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                      </button>
                     </div>
                   ))}
                 </div>
