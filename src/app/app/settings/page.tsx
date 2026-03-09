@@ -23,6 +23,8 @@ export default function SettingsPage() {
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [blockPhoneNumber, setBlockPhoneNumber] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const [showEmailUpdate, setShowEmailUpdate] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [emailStep, setEmailStep] = useState<'enter' | 'verify'>('enter')
@@ -74,10 +76,22 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteAccount() {
-    // TODO: call API route to delete user account
-    setShowDeleteConfirm(false)
-    await supabase.auth.signOut()
-    router.replace('/')
+    if (deleteInput !== 'DELETE') return
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/user/delete-account', { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete account')
+        setDeleting(false)
+        return
+      }
+      await supabase.auth.signOut()
+      router.replace('/')
+    } catch {
+      alert('Something went wrong. Please try again.')
+      setDeleting(false)
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -441,7 +455,7 @@ export default function SettingsPage() {
 
       {/* Delete Account Modal */}
       {showDeleteConfirm && (
-        <Modal onClose={() => setShowDeleteConfirm(false)}>
+        <Modal onClose={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}>
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center flex-shrink-0">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -451,21 +465,33 @@ export default function SettingsPage() {
             </div>
             <h3 className="text-lg font-bold text-foreground">Delete Account?</h3>
           </div>
-          <p className="text-[13px] text-muted mb-6 leading-relaxed">
-            This action is permanent and cannot be undone. All your data, groups, and activities will be deleted.
+          <p className="text-[13px] text-muted mb-4 leading-relaxed">
+            This action is <span className="font-bold text-danger">permanent</span> and cannot be undone. All your data, groups, activities, and messages will be permanently deleted.
           </p>
+          <p className="text-[13px] text-foreground font-semibold mb-2">
+            Type <span className="font-mono bg-danger/10 text-danger px-1.5 py-0.5 rounded">DELETE</span> to confirm
+          </p>
+          <input
+            type="text"
+            value={deleteInput}
+            onChange={(e) => setDeleteInput(e.target.value.toUpperCase())}
+            placeholder="Type DELETE"
+            className="input-field mb-4 font-mono text-center tracking-widest"
+            autoFocus
+          />
           <div className="flex gap-3">
             <button
-              onClick={() => setShowDeleteConfirm(false)}
+              onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}
               className="flex-1 border border-border text-foreground font-semibold text-[13px] py-2.5 rounded-xl active:bg-surface transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleDeleteAccount}
-              className="flex-1 bg-danger text-white font-semibold text-[13px] py-2.5 rounded-xl active:opacity-90 transition-opacity"
+              disabled={deleteInput !== 'DELETE' || deleting}
+              className="flex-1 bg-danger text-white font-semibold text-[13px] py-2.5 rounded-xl active:opacity-90 transition-opacity disabled:opacity-40"
             >
-              Delete
+              {deleting ? 'Deleting...' : 'Delete Forever'}
             </button>
           </div>
         </Modal>
