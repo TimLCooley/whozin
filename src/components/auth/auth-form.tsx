@@ -3,6 +3,17 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+
+declare global {
+  interface Window {
+    AppleID: {
+      auth: {
+        init: (config: Record<string, unknown>) => void
+        signIn: () => Promise<{ authorization?: { id_token?: string } }>
+      }
+    }
+  }
+}
 import CountryCodeSelect from './country-code-select'
 
 type Step = 'phone' | 'otp' | 'name'
@@ -76,21 +87,56 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     setSocialLoading(true)
     setError('')
     try {
-      const supabase = createClient()
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
+      // Use Apple JS SDK to get id_token directly, then sign in via Supabase signInWithIdToken
+      // This bypasses Supabase GoTrue's server-side code exchange which has issues
+      await loadAppleScript()
+      window.AppleID.auth.init({
+        clientId: 'io.whozin.app.signin',
+        scope: 'email name',
+        redirectURI: window.location.origin + '/auth/callback',
+        usePopup: true,
       })
-      if (oauthError) {
-        setError(oauthError.message)
+      const response = await window.AppleID.auth.signIn()
+      const idToken = response.authorization?.id_token
+      if (!idToken) {
+        setError('No ID token received from Apple')
         setSocialLoading(false)
+        return
       }
-    } catch {
-      setError('Failed to start Apple sign-in')
+      const supabase = createClient()
+      const { error: signInError } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: idToken,
+      })
+      if (signInError) {
+        setError(signInError.message)
+        setSocialLoading(false)
+        return
+      }
+      // Ensure whozin_users record exists
+      await fetch('/api/auth/ensure-profile', { method: 'POST' })
+      window.location.href = '/app'
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to start Apple sign-in'
+      // User cancelled the popup
+      if (msg.includes('popup_closed') || msg.includes('cancelled')) {
+        setSocialLoading(false)
+        return
+      }
+      setError(msg)
       setSocialLoading(false)
     }
+  }
+
+  function loadAppleScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (window.AppleID) return resolve()
+      const script = document.createElement('script')
+      script.src = 'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js'
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error('Failed to load Apple JS SDK'))
+      document.head.appendChild(script)
+    })
   }
 
   async function handleGoogleSignIn() {

@@ -73,11 +73,11 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Apple Developer',
-    description: 'iOS app distribution, push notifications (APNs).',
+    description: 'iOS app, Sign in with Apple, push notifications. Team: 3QM6SDB8NG',
     icon: '🍎',
     envVars: [
       { key: 'APPLE_TEAM_ID', label: 'Team ID' },
-      { key: 'APPLE_KEY_ID', label: 'Key ID' },
+      { key: 'APPLE_KEY_ID', label: 'Key ID (Push: 96S7QHD6MQ, SIWA: CBRF43DM33)' },
       { key: 'APPLE_PRIVATE_KEY', label: 'Private Key (.p8)', secret: true },
     ],
     docsUrl: 'https://developer.apple.com/account/',
@@ -114,14 +114,23 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Google OAuth',
-    description: 'Sign in with Google and Google Contacts search. Configured in Supabase Auth.',
+    description: 'Sign in with Google + Contacts search. Client: 85647149825-ppb...lbq',
     icon: '🔑',
     envVars: [],
     docsUrl: 'https://supabase.com/dashboard/project/ooqdkonjcztjankkvejh/auth/providers',
   },
   {
+    name: 'RevenueCat',
+    description: 'iOS/Android in-app purchases and subscription management.',
+    icon: '🧾',
+    envVars: [
+      { key: 'REVENUECAT_WEBHOOK_SECRET', label: 'Webhook Secret', secret: true },
+    ],
+    docsUrl: 'https://app.revenuecat.com',
+  },
+  {
     name: 'Capacitor (Native Apps)',
-    description: 'iOS and Android app shell. Bundle ID: io.whozin.app',
+    description: 'iOS: io.whozin.app / Android: com.chumem.whozin',
     icon: '📱',
     envVars: [],
     docsUrl: 'https://capacitorjs.com/docs',
@@ -165,6 +174,11 @@ const API_ENDPOINTS = [
   { method: 'GET', path: '/api/admin/groups', desc: 'All groups (admin)' },
   { method: 'GET', path: '/api/admin/activities', desc: 'All activities (admin)' },
   { method: 'GET', path: '/api/admin/organizations', desc: 'All organizations (admin)' },
+  // Webhooks
+  { method: 'POST', path: '/api/webhooks/revenuecat', desc: 'RevenueCat subscription events' },
+  { method: 'POST', path: '/api/webhooks/stripe', desc: 'Stripe subscription events' },
+  // Twilio
+  { method: 'POST', path: '/api/twilio/webhook', desc: 'Twilio SMS status callback' },
   // Misc
   { method: 'POST', path: '/api/messaging/test', desc: 'Send test SMS/email' },
   { method: 'GET', path: '/api/favicon', desc: 'Dynamic favicon' },

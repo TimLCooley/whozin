@@ -15,7 +15,20 @@
       "Bash(do echo:*)",
       "Bash(do:*)",
       "Bash(grep:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(export:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(mkdir:*)",
+      "Bash(npm ls:*)",
+      "Bash(gh repo:*)",
+      "Bash(git:*)",
+      "Bash(__NEW_LINE_246a74c7f20a44fe__ source:*)",
+      "Bash(__NEW_LINE_dfd6e3cbfc832fff__ curl:*)",
+      "Bash(__NEW_LINE_1347411e6f91ad0c__ curl:*)",
+      "Bash(vercel inspect:*)"
     ]
   }
 }
