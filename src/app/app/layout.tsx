@@ -10,12 +10,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) {
         router.replace('/')
-      } else {
-        setReady(true)
+        return
       }
+      // Check if user has a phone number (required for app access)
+      const res = await fetch('/api/user/profile')
+      if (res.ok) {
+        const profile = await res.json()
+        if (!profile.phone) {
+          router.replace('/auth/complete-profile')
+          return
+        }
+      }
+      setReady(true)
     })
   }, [router])
 
