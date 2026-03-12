@@ -12,12 +12,14 @@ export default function CompleteProfilePage() {
   const phoneDigits = phoneRaw.replace(/\D/g, '')
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', ''])
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
-  const [step, setStep] = useState<'phone' | 'otp'>('phone')
+  const [step, setStep] = useState<'name' | 'phone' | 'otp'>('name')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [checkingProfile, setCheckingProfile] = useState(true)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
 
-  // Check if user already has phone — redirect if so
+  // Check if user already has phone & name — skip steps as needed
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -32,6 +34,12 @@ export default function CompleteProfilePage() {
           router.replace('/app')
           return
         }
+        // If they already have a name, skip to phone step
+        if (profile.first_name) {
+          setFirstName(profile.first_name)
+          setLastName(profile.last_name || '')
+          setStep('phone')
+        }
       }
       setCheckingProfile(false)
     })
@@ -41,6 +49,31 @@ export default function CompleteProfilePage() {
     if (digits.length <= 3) return digits.length > 0 ? `(${digits}` : ''
     if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)} - ${digits.slice(6, 10)}`
+  }
+
+  async function handleNameSubmit() {
+    if (!firstName.trim()) {
+      setError('First name is required')
+      return
+    }
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ first_name: firstName.trim(), last_name: lastName.trim() }),
+      })
+      if (!res.ok) {
+        setError('Failed to save name')
+        setLoading(false)
+        return
+      }
+      setStep('phone')
+    } catch {
+      setError('Something went wrong')
+    }
+    setLoading(false)
   }
 
   async function handleSendOtp() {
@@ -73,7 +106,21 @@ export default function CompleteProfilePage() {
   }
 
   function handleOtpInput(index: number, value: string) {
-    const digit = value.replace(/\D/g, '').slice(-1)
+    const cleaned = value.replace(/\D/g, '')
+
+    // Multi-digit input (paste or auto-fill)
+    if (cleaned.length > 1) {
+      const digits = cleaned.slice(0, 6).split('')
+      const newDigits = [...otpDigits]
+      digits.forEach((d, i) => { if (index + i < 6) newDigits[index + i] = d })
+      setOtpDigits(newDigits)
+      const lastIndex = Math.min(index + digits.length, 5)
+      otpRefs.current[lastIndex]?.focus()
+      if (newDigits.every((d) => d)) handleVerifyOtp(newDigits.join(''))
+      return
+    }
+
+    const digit = cleaned.slice(-1)
     const newDigits = [...otpDigits]
     newDigits[index] = digit
     setOtpDigits(newDigits)
@@ -89,6 +136,16 @@ export default function CompleteProfilePage() {
   function handleOtpKeyDown(index: number, e: React.KeyboardEvent) {
     if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
       otpRefs.current[index - 1]?.focus()
+    }
+  }
+
+  function handleOtpPaste(e: React.ClipboardEvent) {
+    e.preventDefault()
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
+    if (pasted.length === 6) {
+      setOtpDigits(pasted.split(''))
+      otpRefs.current[5]?.focus()
+      handleVerifyOtp(pasted)
     }
   }
 
@@ -135,19 +192,57 @@ export default function CompleteProfilePage() {
   return (
     <div className="min-h-dvh flex items-center justify-center p-6 bg-surface">
       <div className="w-full max-w-sm">
-        <h1 className="text-[22px] font-bold text-foreground text-center mb-2">Add Your Phone Number</h1>
-        <p className="text-[13px] text-muted text-center mb-6">
-          Whozin uses SMS to send activity invites and notifications. A phone number is required.
-        </p>
+        {step === 'name' && (
+          <>
+            <h1 className="text-[22px] font-bold text-foreground text-center mb-2">What&apos;s Your Name?</h1>
+            <p className="text-[13px] text-muted text-center mb-6">
+              So your friends know who you are on Whozin.
+            </p>
 
-        {error && (
-          <div className="bg-danger/10 text-danger text-[13px] font-medium px-4 py-2.5 rounded-xl mb-4 text-center">
-            {error}
-          </div>
+            {error && (
+              <div className="bg-danger/10 text-danger text-[13px] font-medium px-4 py-2.5 rounded-xl mb-4 text-center">
+                {error}
+              </div>
+            )}
+
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First name"
+              className="input-field w-full mb-3"
+              autoFocus
+            />
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last name"
+              className="input-field w-full mb-5"
+            />
+            <button
+              onClick={handleNameSubmit}
+              disabled={loading || !firstName.trim()}
+              className="btn-primary w-full py-3 text-[14px]"
+            >
+              {loading ? 'Saving...' : 'Continue'}
+            </button>
+          </>
         )}
 
         {step === 'phone' && (
           <>
+            <h1 className="text-[22px] font-bold text-foreground text-center mb-2">Add Your Phone Number</h1>
+            <p className="text-[13px] text-muted text-center mb-6">
+              Whozin uses SMS to send activity invites and notifications. A phone number is required.
+            </p>
+
+            {error && (
+              <div className="bg-danger/10 text-danger text-[13px] font-medium px-4 py-2.5 rounded-xl mb-4 text-center">
+                {error}
+              </div>
+            )}
+
             <div className="flex gap-2 mb-4">
               <CountryCodeSelect value={countryCode} onChange={setCountryCode} />
               <input
@@ -172,9 +267,17 @@ export default function CompleteProfilePage() {
 
         {step === 'otp' && (
           <>
+            <h1 className="text-[22px] font-bold text-foreground text-center mb-2">Verify Your Number</h1>
             <p className="text-[13px] text-muted text-center mb-4">
               Enter the 6-digit code sent to +{countryCode} {formatPhone(phoneDigits)}
             </p>
+
+            {error && (
+              <div className="bg-danger/10 text-danger text-[13px] font-medium px-4 py-2.5 rounded-xl mb-4 text-center">
+                {error}
+              </div>
+            )}
+
             <div className="flex gap-2 justify-center mb-6">
               {otpDigits.map((digit, i) => (
                 <input
@@ -182,10 +285,12 @@ export default function CompleteProfilePage() {
                   ref={(el) => { otpRefs.current[i] = el }}
                   type="text"
                   inputMode="numeric"
-                  maxLength={1}
+                  maxLength={6}
                   value={digit}
                   onChange={(e) => handleOtpInput(i, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                  onPaste={handleOtpPaste}
+                  autoComplete={i === 0 ? 'one-time-code' : undefined}
                   className="w-11 h-13 text-center text-[20px] font-bold rounded-xl border border-border bg-background text-foreground focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   autoFocus={i === 0}
                 />

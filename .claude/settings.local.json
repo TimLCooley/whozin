@@ -28,7 +28,19 @@
       "Bash(__NEW_LINE_246a74c7f20a44fe__ source:*)",
       "Bash(__NEW_LINE_dfd6e3cbfc832fff__ curl:*)",
       "Bash(__NEW_LINE_1347411e6f91ad0c__ curl:*)",
-      "Bash(vercel inspect:*)"
+      "Bash(vercel inspect:*)",
+      "Bash(python3:*)",
+      "WebSearch",
+      "WebFetch(domain:unsplash.com)",
+      "WebFetch(domain:source.unsplash.com)",
+      "WebFetch(domain:api.unsplash.com)",
+      "Bash(echo \"ANDROID_HOME: $ANDROID_HOME\" && echo \"ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT\" && which sdkmanager 2>/dev/null || echo \"sdkmanager not found\" && which gradle 2>/dev/null || echo \"gradle not found\")",
+      "Read(//c/Program Files/Android/Android Studio/jbr/bin/**)",
+      "Read(//c/Program Files/**)",
+      "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -export -rfc -keystore \"C:/Users/tim/whozin-keystore.jks\" -alias whozin -file \"C:/Users/tim/whozin-upload.pem\" 2>&1)",
+      "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -list -keystore \"C:/Users/tim/whozin-keystore.jks\" 2>&1)",
+      "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -genkeypair -v -keystore \"C:/Users/tim/whozin-keystore2.jks\" -keyalg RSA -keysize 2048 -validity 9125 -alias upload -dname \"CN=Tim Cooley\" 2>&1 <<EOF\npassword123\npassword123\npassword123\npassword123\nEOF)",
+      "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -export -rfc -keystore \"C:/Users/tim/whozin-keystore3.jks\" -alias whozin -file \"C:/Users/tim/whozin-upload.pem\" 2>&1 <<EOF\n26Swetipa!!\nEOF)"
     ]
   }
 }

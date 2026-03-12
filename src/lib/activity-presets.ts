@@ -4,6 +4,7 @@ export interface ActivityPreset {
   icon: string
   category: string
   enabled: boolean
+  image_url?: string
 }
 
 export const ACTIVITY_CATEGORIES = [

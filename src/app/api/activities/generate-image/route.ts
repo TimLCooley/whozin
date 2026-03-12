@@ -17,6 +17,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
   }
 
+  // Append aspect ratio guidance so generated images fit card layouts (16:9 landscape)
+  const fullPrompt = `${prompt.trim()}. Generate the image in 16:9 landscape orientation, 1024x576 pixels.`
+
   try {
     // Use Gemini image generation via generateContent
     const res = await fetch(
@@ -25,7 +28,7 @@ export async function POST(req: NextRequest) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt.trim() }] }],
+          contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
             responseModalities: ['IMAGE'],
           },

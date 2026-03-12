@@ -206,8 +206,22 @@ export default function AuthForm({ onBack }: AuthFormProps) {
   }
 
   function handleOtpInput(index: number, value: string) {
-    // Only allow digits
-    const digit = value.replace(/\D/g, '').slice(-1)
+    const cleaned = value.replace(/\D/g, '')
+
+    // Multi-digit input (paste or auto-fill)
+    if (cleaned.length > 1) {
+      const digits = cleaned.slice(0, 6).split('')
+      const newDigits = [...otpDigits]
+      digits.forEach((d, i) => { if (index + i < 6) newDigits[index + i] = d })
+      setOtpDigits(newDigits)
+      const lastIndex = Math.min(index + digits.length, 5)
+      otpRefs.current[lastIndex]?.focus()
+      if (newDigits.every((d) => d)) handleVerifyOtp(newDigits.join(''))
+      return
+    }
+
+    // Single digit
+    const digit = cleaned.slice(-1)
     const newDigits = [...otpDigits]
     newDigits[index] = digit
     setOtpDigits(newDigits)
@@ -480,8 +494,9 @@ export default function AuthForm({ onBack }: AuthFormProps) {
                     value={digit}
                     onChange={(e) => handleOtpInput(i, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                    onPaste={i === 0 ? handleOtpPaste : undefined}
-                    maxLength={1}
+                    onPaste={handleOtpPaste}
+                    maxLength={6}
+                    autoComplete={i === 0 ? 'one-time-code' : undefined}
                     className="w-12 h-14 text-center text-xl font-bold rounded-xl border border-border bg-background
                                focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                     autoFocus={i === 0}

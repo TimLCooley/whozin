@@ -10,6 +10,7 @@ interface Preset {
   name: string
   icon: string
   category: string
+  image_url?: string
 }
 
 interface GroupOption {
@@ -20,24 +21,34 @@ interface GroupOption {
 
 type CostType = 'free' | 'pay_me' | 'pay_at_location'
 type Tab = 'details' | 'group'
+type Mode = 'select' | 'fill' | 'build'
 
-const RESPONSE_TIMER_OPTIONS = [
-  { value: 0.167, label: '10 sec (test)', pro: false, admin: true },
-  { value: 5, label: '5 min', pro: false },
-  { value: 15, label: '15 min', pro: true },
-  { value: 30, label: '30 min', pro: true },
-  { value: 60, label: '1 hour', pro: true },
-  { value: 120, label: '2 hours', pro: true },
+interface TimerOption {
+  id: string
+  value: number
+  label: string
+  pro_fill: boolean
+  pro_group: boolean
+  test_only: boolean
+  modes: ('fill' | 'group')[]
+}
+
+const FALLBACK_TIMERS: TimerOption[] = [
+  { id: 'free-5m', value: 5, label: '5 min', pro_fill: false, pro_group: false, test_only: false, modes: ['fill', 'group'] },
 ]
 
 export default function CreateActivityPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const cloneId = searchParams.get('clone')
+  const [mode, setMode] = useState<Mode>(cloneId ? 'build' : 'select')
   const [tab, setTab] = useState<Tab>('details')
   const [submitting, setSubmitting] = useState(false)
   const [isPro, setIsPro] = useState(false)
   const [isTestUser, setIsTestUser] = useState(false)
+  const [allTimers, setAllTimers] = useState<TimerOption[]>(FALLBACK_TIMERS)
+  const [defaultTimerFill, setDefaultTimerFill] = useState(5)
+  const [defaultTimerGroup, setDefaultTimerGroup] = useState(5)
 
   // Activity Details
   const [presets, setPresets] = useState<Preset[]>([])
@@ -89,6 +100,16 @@ export default function CreateActivityPage() {
       .then((data) => {
         if (data.membership_tier === 'pro') setIsPro(true)
         if (data.phone?.replace(/\D/g, '').includes('999')) setIsTestUser(true)
+      })
+
+    fetch('/api/activities/timers')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.timers && Array.isArray(data.timers) && data.timers.length > 0) {
+          setAllTimers(data.timers)
+        }
+        if (data.default_fill) { setDefaultTimerFill(data.default_fill); setResponseTimer(data.default_fill) }
+        if (data.default_group) { setDefaultTimerGroup(data.default_group) }
       })
   }, [])
 
@@ -144,6 +165,9 @@ export default function CreateActivityPage() {
     const preset = presets.find((p) => p.id === presetId)
     if (preset) {
       setActivityName(preset.name)
+      if (preset.image_url) {
+        setImageUrl(preset.image_url)
+      }
     }
   }
 
@@ -238,14 +262,447 @@ export default function CreateActivityPage() {
     setSubmitting(false)
   }
 
+  // Fill a Spot specific state
+  const [fillSpots, setFillSpots] = useState<number>(1)
+
+  async function handleFillSubmit() {
+    if (!activityName.trim()) return alert('Select an activity type')
+    if (!selectedGroup) return alert('Please select a group')
+
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          group_id: selectedGroup,
+          activity_type: selectedPreset || 'other',
+          activity_name: activityName.trim(),
+          activity_date: activityDate || null,
+          activity_time: activityTime || null,
+          location: null,
+          note: null,
+          cost_type: 'free',
+          cost: null,
+          max_capacity: fillSpots,
+          response_timer_minutes: responseTimer,
+          priority_invite: priorityInvite,
+          chat_enabled: chatEnabled,
+          reminder_enabled: false,
+          auto_emergency_fill: true,
+          image_url: imageUrl || null,
+        }),
+      })
+
+      const data = await res.json()
+      if (res.ok && data.id) {
+        router.push('/app')
+      } else {
+        alert(data.error || 'Failed to create activity')
+      }
+    } catch {
+      alert('Failed to create activity')
+    }
+    setSubmitting(false)
+  }
+
   const tabs: { key: Tab; label: string }[] = [
     { key: 'details', label: 'Activity Details' },
     { key: 'group', label: 'Group' },
   ]
 
+  // ── MODE SELECTOR ──
+  if (mode === 'select') {
+    return (
+      <div className="min-h-dvh flex flex-col bg-surface">
+        <AppHeader showBack />
+        <div className="bg-background border-b border-border/40 px-4 py-3 text-center">
+          <h1 className="text-[17px] font-bold text-foreground">Create Activity</h1>
+          <p className="text-[12px] text-muted mt-0.5">What do you need?</p>
+        </div>
+        <div className="flex-1 px-4 pt-6 space-y-4 animate-enter">
+          {/* Fill a Spot card */}
+          <button
+            onClick={() => { setMode('fill'); setResponseTimer(defaultTimerFill) }}
+            className="w-full bg-background border-2 border-[#34c759]/30 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(52,199,89,0.12)] hover:border-[#34c759]/50"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-[#34c759]/10 flex items-center justify-center flex-shrink-0">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34c759" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-[17px] font-bold text-foreground mb-0.5">Fill a Spot</h3>
+                <p className="text-[13px] text-muted leading-snug">Someone dropped out? Auto-invite the next person on your list.</p>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Build Group Activity card */}
+          <button
+            onClick={() => { setMode('build'); setResponseTimer(defaultTimerGroup) }}
+            className="w-full bg-background border-2 border-primary/20 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(66,133,244,0.12)] hover:border-primary/40"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="7" r="3" />
+                  <circle cx="17" cy="9" r="2.5" />
+                  <path d="M2 21v-1a5 5 0 0110 0v1M14 21v-1a4 4 0 018 0v1" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-[17px] font-bold text-foreground mb-0.5">Build Group Activity</h3>
+                <p className="text-[13px] text-muted leading-snug">Plan a full activity with all the details — date, location, cost, and more.</p>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </div>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── FILL A SPOT MODE ──
+  if (mode === 'fill') {
+    const selectedPresetObj = presets.find((p) => p.id === selectedPreset)
+    return (
+      <div className="min-h-dvh flex flex-col bg-surface">
+        <AppHeader showBack onBack={() => setMode('select')} />
+
+        <div className="bg-background border-b border-border/40 px-4 py-3 text-center">
+          <h1 className="text-[17px] font-bold text-foreground flex items-center justify-center gap-2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34c759" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+            Fill a Spot
+          </h1>
+          <p className="text-[12px] text-muted mt-0.5">Quick fill — pick your activity, group, and go!</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto pb-28">
+          <div className="px-4 pt-4 space-y-5 animate-enter">
+            {/* Activity Type */}
+            <FieldCard>
+              <FieldLabel>What activity?</FieldLabel>
+              <button
+                type="button"
+                onClick={() => { setShowPresetPicker(true); setPresetSearch('') }}
+                className="input-field w-full text-left flex items-center justify-between"
+              >
+                <span className={selectedPreset ? 'text-foreground' : 'text-muted'}>
+                  {selectedPresetObj
+                    ? `${selectedPresetObj.icon} ${selectedPresetObj.name}`
+                    : 'Select an activity...'}
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+            </FieldCard>
+
+            {/* Preset Picker Modal (shared) */}
+            {showPresetPicker && (
+              <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16" onClick={() => setShowPresetPicker(false)}>
+                <div className="absolute inset-0 bg-black/40" />
+                <div
+                  className="relative w-full max-w-md max-h-[75dvh] bg-background rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-enter"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-4 pt-4 pb-3 border-b border-border/40">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-[16px] font-bold text-foreground">Choose Activity</h3>
+                      <button onClick={() => setShowPresetPicker(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:bg-surface">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+                      </svg>
+                      <input type="text" value={presetSearch} onChange={(e) => setPresetSearch(e.target.value)} placeholder="Search activities..." autoFocus
+                        className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-2 py-2">
+                    {(() => {
+                      const q = presetSearch.toLowerCase().trim()
+                      const filtered = presets.filter((p) => !q || p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
+                      if (filtered.length === 0) return <p className="text-center text-muted text-[13px] py-8">No activities match &ldquo;{presetSearch}&rdquo;</p>
+                      const grouped: Record<string, Preset[]> = {}
+                      for (const p of filtered) { if (!grouped[p.category]) grouped[p.category] = []; grouped[p.category].push(p) }
+                      return Object.entries(grouped).map(([cat, items]) => (
+                        <div key={cat} className="mb-2">
+                          <p className="text-[10px] font-bold text-muted uppercase tracking-wider px-3 py-1.5">{cat}</p>
+                          {items.map((p) => (
+                            <button key={p.id} onClick={() => { handlePresetChange(p.id); setShowPresetPicker(false) }}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${selectedPreset === p.id ? 'bg-primary/10 text-primary' : 'text-foreground active:bg-surface hover:bg-surface/60'}`}>
+                              <span className="text-xl w-8 text-center flex-shrink-0">{p.icon}</span>
+                              <span className="text-[14px] font-medium">{p.name}</span>
+                              {selectedPreset === p.id && (
+                                <svg className="ml-auto flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Activity Image */}
+            <FieldCard>
+              <FieldLabel>Activity Image</FieldLabel>
+              {imageUrl && (
+                <div className="relative rounded-xl overflow-hidden mt-1 mb-2">
+                  <img src={imageUrl} alt="Activity" className="w-full aspect-video object-cover rounded-xl" />
+                  <button
+                    type="button"
+                    onClick={() => { setImageUrl(''); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center text-[14px]"
+                  >
+                    &times;
+                  </button>
+                </div>
+              )}
+              {showImageGen ? (
+                <div className="space-y-3 mt-1 animate-enter">
+                  <textarea
+                    value={imagePrompt}
+                    onChange={(e) => setImagePrompt(e.target.value)}
+                    placeholder={`Describe the image, e.g. "Friends playing ${activityName || 'sports'} at sunset"`}
+                    rows={2}
+                    className="input-field resize-none text-[13px]"
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={handleGenerateImage} disabled={generatingImage}
+                      className="btn-primary flex-1 py-2.5 text-[13px] disabled:opacity-60">
+                      {generatingImage ? 'Generating...' : 'Generate'}
+                    </button>
+                    <button type="button" onClick={() => { setShowImageGen(false); setImagePrompt('') }}
+                      className="px-4 py-2.5 rounded-xl border border-border/50 text-[13px] text-muted font-medium">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2 mt-1">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}
+                    className="flex-1 py-2.5 rounded-xl border border-border/50 text-[13px] font-semibold text-muted flex items-center justify-center gap-1.5 active:bg-surface">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+                    </svg>
+                    {uploadingImage ? 'Uploading...' : 'Upload'}
+                  </button>
+                  <button type="button" onClick={() => { if (isPro) setShowImageGen(true) }}
+                    className={`flex-1 py-2.5 rounded-xl border text-[13px] font-semibold flex items-center justify-center gap-1.5 ${
+                      isPro ? 'border-primary/40 text-primary active:bg-primary/5' : 'border-border/40 text-muted/50'
+                    }`}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                    Generate
+                    {!isPro && <ProBadge small />}
+                  </button>
+                </div>
+              )}
+              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
+                onChange={(e) => { const file = e.target.files?.[0]; if (file) handleImageUpload(file) }} />
+            </FieldCard>
+
+            {/* Group */}
+            <FieldCard>
+              <FieldLabel>Which group?</FieldLabel>
+              <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="input-field w-full">
+                <option value="">Select Group</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name} ({g.member_count} {g.member_count === 1 ? 'person' : 'people'})</option>
+                ))}
+              </select>
+            </FieldCard>
+
+            {/* How many spots */}
+            <FieldCard>
+              <FieldLabel>How many spots to fill?</FieldLabel>
+              <div className="flex gap-2 mt-1">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setFillSpots(n)}
+                    className={`w-12 h-10 rounded-full text-[14px] font-bold transition-colors ${
+                      fillSpots === n
+                        ? 'bg-[#34c759] text-white'
+                        : 'bg-surface text-muted border border-border/50'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    const custom = prompt('How many spots?')
+                    if (custom && parseInt(custom) > 0) setFillSpots(parseInt(custom))
+                  }}
+                  className={`px-4 h-10 rounded-full text-[13px] font-semibold transition-colors bg-surface text-muted border border-border/50`}
+                >
+                  More
+                </button>
+              </div>
+            </FieldCard>
+
+            {/* Invite Style: Priority vs All */}
+            <FieldCard>
+              <FieldLabel>Invite style</FieldLabel>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => setPriorityInvite(true)}
+                  className={`flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors ${
+                    priorityInvite
+                      ? 'bg-[#34c759] text-white'
+                      : 'bg-surface text-muted border border-border/50'
+                  }`}
+                >
+                  Priority Order
+                </button>
+                <button
+                  onClick={() => setPriorityInvite(false)}
+                  className={`flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors ${
+                    !priorityInvite
+                      ? 'bg-[#34c759] text-white'
+                      : 'bg-surface text-muted border border-border/50'
+                  }`}
+                >
+                  Invite All
+                </button>
+              </div>
+              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                {priorityInvite
+                  ? 'Invites one at a time, top to bottom. If they pass or time runs out, the next person gets invited.'
+                  : 'Texts everyone at once — first to reply gets the spot.'}
+              </p>
+            </FieldCard>
+
+            {/* Response Timer — only for priority */}
+            {priorityInvite && (
+              <FieldCard>
+                <FieldLabel>Response timer</FieldLabel>
+                <div className="relative mt-1">
+                  <button
+                    onClick={() => setShowTimerDropdown(!showTimerDropdown)}
+                    className="w-full flex items-center justify-between input-field"
+                  >
+                    <span className="text-[14px]">
+                      {allTimers.find((o) => o.value === responseTimer)?.label ?? '5 min'}
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {showTimerDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/50 rounded-xl shadow-lg z-20 overflow-hidden animate-enter">
+                      {allTimers
+                        .filter((o) => o.modes.includes('fill'))
+                        .filter((o) => !o.test_only || isTestUser)
+                        .map((o) => {
+                          const locked = o.pro_fill && !isPro
+                          return (
+                            <button
+                              key={o.value}
+                              onClick={() => { if (!locked) { setResponseTimer(o.value); setShowTimerDropdown(false) } }}
+                              className={`w-full px-4 py-3 text-left text-[14px] flex items-center justify-between border-b border-border/20 last:border-0 transition-colors ${
+                                locked
+                                  ? 'text-muted/50 bg-surface/30'
+                                  : responseTimer === o.value
+                                    ? 'bg-primary/5 text-primary font-semibold'
+                                    : 'text-foreground active:bg-surface'
+                              }`}
+                            >
+                              <span>{o.label}</span>
+                              <div className="flex items-center gap-2">
+                                {o.pro_fill && <ProBadge small />}
+                                {o.test_only && <span className="text-[9px] px-1.5 py-0.5 bg-danger/10 text-danger rounded-full font-bold">TEST</span>}
+                                {responseTimer === o.value && (
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M20 6L9 17l-5-5" />
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                          )
+                        })}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                  How long each person has to respond before moving to the next.
+                </p>
+              </FieldCard>
+            )}
+
+            {/* When */}
+            <FieldCard>
+              <FieldLabel>When?</FieldLabel>
+              <div className="flex gap-3">
+                <input type="date" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} className="input-field flex-1" />
+                <input type="time" value={activityTime} onChange={(e) => setActivityTime(e.target.value)} className="input-field flex-1" />
+              </div>
+            </FieldCard>
+
+            {/* Chat Toggle */}
+            <FieldCard>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-foreground">Allow Chat</span>
+                  <ProBadge />
+                </div>
+                <Toggle
+                  checked={chatEnabled}
+                  onChange={(v) => { if (!isPro) return; setChatEnabled(v) }}
+                  disabled={!isPro}
+                />
+              </div>
+              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                {isPro ? 'Let subs coordinate in a group chat.' : 'Upgrade to Pro for activity chat.'}
+              </p>
+            </FieldCard>
+
+            {/* Auto-fill note */}
+            <div className="flex items-center gap-2 px-1">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34c759" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              <span className="text-[12px] text-[#15803d] font-medium">Auto-fill enabled — if someone drops, the next sub is auto-invited</span>
+            </div>
+          </div>
+        </div>
+
+        {/* GO Button */}
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/60 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] z-40">
+          <button
+            onClick={handleFillSubmit}
+            disabled={submitting || !activityName.trim() || !selectedGroup}
+            className="w-full py-3.5 rounded-2xl text-[14px] font-bold text-white bg-[#34c759] hover:bg-[#2db84e] active:scale-[0.97] transition-all shadow-[0_4px_20px_rgba(52,199,89,0.35)] disabled:opacity-60"
+          >
+            {submitting ? 'Sending Invites...' : `GO — Fill ${fillSpots} ${fillSpots === 1 ? 'Spot' : 'Spots'}`}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── BUILD GROUP ACTIVITY MODE (existing full flow) ──
+
   return (
     <div className="min-h-dvh flex flex-col bg-surface">
-      <AppHeader showBack />
+      <AppHeader showBack onBack={() => setMode('select')} />
 
       {/* Title */}
       <div className="bg-background border-b border-border/40 px-4 py-3 text-center">
@@ -302,10 +759,10 @@ export default function CreateActivityPage() {
 
             {/* Preset Picker Modal */}
             {showPresetPicker && (
-              <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowPresetPicker(false)}>
+              <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16" onClick={() => setShowPresetPicker(false)}>
                 <div className="absolute inset-0 bg-black/40" />
                 <div
-                  className="relative w-full max-w-md max-h-[75dvh] bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-enter"
+                  className="relative w-full max-w-md max-h-[75dvh] bg-background rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-enter"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Search header */}
@@ -454,9 +911,9 @@ export default function CreateActivityPage() {
             <FieldCard>
               <FieldLabel>Activity Image</FieldLabel>
               <p className="text-[11px] text-muted mb-3">Add a photo to include in the invite text message.</p>
-              {imageUrl ? (
-                <div className="relative rounded-xl overflow-hidden">
-                  <img src={imageUrl} alt="Activity" className="w-full h-40 object-cover rounded-xl" />
+              {imageUrl && (
+                <div className="relative rounded-xl overflow-hidden mb-2">
+                  <img src={imageUrl} alt="Activity" className="w-full aspect-video object-cover rounded-xl" />
                   <button
                     type="button"
                     onClick={() => { setImageUrl(''); if (fileInputRef.current) fileInputRef.current.value = '' }}
@@ -465,7 +922,8 @@ export default function CreateActivityPage() {
                     &times;
                   </button>
                 </div>
-              ) : showImageGen ? (
+              )}
+              {showImageGen ? (
                 <div className="space-y-3 animate-enter">
                   <textarea
                     value={imagePrompt}
@@ -493,42 +951,23 @@ export default function CreateActivityPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingImage}
-                    className="flex-1 h-28 border-2 border-dashed border-border/60 rounded-xl flex flex-col items-center justify-center gap-1.5 text-muted transition-colors active:bg-surface"
-                  >
-                    {uploadingImage ? (
-                      <span className="text-[13px]">Uploading...</span>
-                    ) : (
-                      <>
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="3" width="18" height="18" rx="2" />
-                          <circle cx="8.5" cy="8.5" r="1.5" />
-                          <path d="M21 15l-5-5L5 21" />
-                        </svg>
-                        <span className="text-[12px] font-medium">Upload Photo</span>
-                      </>
-                    )}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}
+                    className="flex-1 py-2.5 rounded-xl border border-border/50 text-[13px] font-semibold text-muted flex items-center justify-center gap-1.5 active:bg-surface">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+                    </svg>
+                    {uploadingImage ? 'Uploading...' : 'Upload'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => { if (isPro) setShowImageGen(true) }}
-                    className={`flex-1 h-28 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-1.5 transition-colors ${
-                      isPro
-                        ? 'border-primary/40 text-primary active:bg-primary/5'
-                        : 'border-border/40 text-muted/50'
-                    }`}
-                  >
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <button type="button" onClick={() => { if (isPro) setShowImageGen(true) }}
+                    className={`flex-1 py-2.5 rounded-xl border text-[13px] font-semibold flex items-center justify-center gap-1.5 ${
+                      isPro ? 'border-primary/40 text-primary active:bg-primary/5' : 'border-border/40 text-muted/50'
+                    }`}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
                     </svg>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[12px] font-medium">AI Generate</span>
-                      {!isPro && <ProBadge small />}
-                    </div>
+                    Generate
+                    {!isPro && <ProBadge small />}
                   </button>
                 </div>
               )}
@@ -718,7 +1157,7 @@ export default function CreateActivityPage() {
                     className="input-field w-full text-left flex items-center justify-between"
                   >
                     <span>
-                      {RESPONSE_TIMER_OPTIONS.find((o) => o.value === responseTimer)?.label ?? '5 min'} response timer
+                      {allTimers.find((o) => o.value === responseTimer)?.label ?? '5 min'} response timer
                     </span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M6 9l6 6 6-6" />
@@ -726,8 +1165,8 @@ export default function CreateActivityPage() {
                   </button>
                   {showTimerDropdown && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/50 rounded-xl shadow-lg z-20 overflow-hidden animate-enter">
-                      {RESPONSE_TIMER_OPTIONS.filter((opt) => !opt.admin || isPro || isTestUser).map((opt) => {
-                        const locked = opt.pro && !isPro
+                      {allTimers.filter((opt) => opt.modes.includes('group') && (!opt.test_only || isTestUser)).map((opt) => {
+                        const locked = opt.pro_group && !isPro
                         return (
                           <button
                             key={opt.value}
@@ -746,8 +1185,8 @@ export default function CreateActivityPage() {
                           >
                             <span>{opt.label}</span>
                             <div className="flex items-center gap-2">
-                              {opt.pro && <ProBadge small />}
-                              {opt.admin && <span className="text-[9px] px-1.5 py-0.5 bg-danger/10 text-danger rounded-full font-bold">TEST</span>}
+                              {opt.pro_group && <ProBadge small />}
+                              {opt.test_only && <span className="text-[9px] px-1.5 py-0.5 bg-danger/10 text-danger rounded-full font-bold">TEST</span>}
                               {responseTimer === opt.value && (
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M20 6L9 17l-5-5" />
@@ -785,6 +1224,21 @@ export default function CreateActivityPage() {
                   : 'Upgrade to Pro to enable activity chat.'}
               </p>
             </FieldCard>
+
+            {/* Auto Emergency Fill */}
+            {maxCapacity !== 'all' && (
+              <FieldCard>
+                <div className="flex items-center justify-between">
+                  <span className="text-[14px] font-semibold text-foreground">Auto-Fill Dropouts</span>
+                  <Toggle checked={autoEmergencyFill} onChange={setAutoEmergencyFill} />
+                </div>
+                <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                  {autoEmergencyFill
+                    ? 'When someone drops out, the next person on the list is automatically invited.'
+                    : 'When someone drops out, you\'ll get a text to decide whether to fill the spot.'}
+                </p>
+              </FieldCard>
+            )}
 
           </div>
         )}

@@ -9,8 +9,12 @@ export default function PresetsPage() {
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [newPreset, setNewPreset] = useState({ name: '', icon: '', category: 'Sports' })
+  const [newPreset, setNewPreset] = useState({ name: '', icon: '', category: 'Sports', image_url: '' })
   const [emojiManual, setEmojiManual] = useState(false)
+  const [editingImage, setEditingImage] = useState<string | null>(null)
+  const [editImageUrl, setEditImageUrl] = useState('')
+  const [generatingImage, setGeneratingImage] = useState(false)
+  const [imagePrompt, setImagePrompt] = useState('')
 
   // Load saved presets from admin settings
   const loadPresets = useCallback(async () => {
@@ -18,9 +22,9 @@ export default function PresetsPage() {
       const res = await fetch('/api/admin/settings')
       if (res.ok) {
         const data = await res.json()
-        const saved = data.find((s: { key: string }) => s.key === 'activity_presets')
-        if (saved?.value) {
-          const parsed = typeof saved.value === 'string' ? JSON.parse(saved.value) : saved.value
+        const raw = data.activity_presets
+        if (raw) {
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
           if (Array.isArray(parsed) && parsed.length > 0) {
             setPresets(parsed)
           }
@@ -37,7 +41,7 @@ export default function PresetsPage() {
     await fetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'activity_presets', value: JSON.stringify(updated) }),
+      body: JSON.stringify({ activity_presets: JSON.stringify(updated) }),
     })
     setSaving(false)
   }
@@ -62,10 +66,27 @@ export default function PresetsPage() {
       alert('A preset with this name already exists')
       return
     }
-    const updated = [...presets, { id, name: newPreset.name.trim(), icon, category: newPreset.category, enabled: true }]
+    const preset: ActivityPreset = { id, name: newPreset.name.trim(), icon, category: newPreset.category, enabled: true }
+    if (newPreset.image_url.trim()) preset.image_url = newPreset.image_url.trim()
+    const updated = [...presets, preset]
     savePresets(updated)
-    setNewPreset({ name: '', icon: '', category: 'Sports' })
+    setNewPreset({ name: '', icon: '', category: 'Sports', image_url: '' })
     setShowAdd(false)
+  }
+
+  function startEditImage(preset: ActivityPreset) {
+    setEditingImage(preset.id)
+    setEditImageUrl(preset.image_url || '')
+    setImagePrompt('')
+  }
+
+  function saveImageUrl(id: string) {
+    const updated = presets.map((p) =>
+      p.id === id ? { ...p, image_url: editImageUrl.trim() || undefined } : p
+    )
+    savePresets(updated)
+    setEditingImage(null)
+    setEditImageUrl('')
   }
 
   function resetToDefaults() {
@@ -93,7 +114,7 @@ export default function PresetsPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => { setShowAdd(true); setEmojiManual(false); setNewPreset({ name: '', icon: '', category: 'Sports' }) }}
+            onClick={() => { setShowAdd(true); setEmojiManual(false); setNewPreset({ name: '', icon: '', category: 'Sports', image_url: '' }) }}
             className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark transition-colors"
           >
             + Add Preset
@@ -148,17 +169,37 @@ export default function PresetsPage() {
         {filtered.map((preset) => (
           <div
             key={preset.id}
-            className={`relative group rounded-2xl border p-4 text-center transition-all ${
+            className={`relative group rounded-2xl border overflow-hidden transition-all ${
               preset.enabled
                 ? 'bg-background border-primary/20 shadow-[0_1px_4px_rgba(66,133,244,0.08)]'
                 : 'bg-surface/50 border-border/40 opacity-60'
             }`}
           >
+            {/* Image area */}
+            <div
+              className="relative aspect-video bg-surface cursor-pointer"
+              onClick={() => startEditImage(preset)}
+              title="Click to edit image"
+            >
+              {preset.image_url ? (
+                <img src={preset.image_url} alt={preset.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl opacity-40">
+                  {preset.icon}
+                </div>
+              )}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                <span className="text-white text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 px-2 py-1 rounded-lg">
+                  {preset.image_url ? 'Change Image' : 'Add Image'}
+                </span>
+              </div>
+            </div>
+
             {/* Toggle + Remove buttons */}
-            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <button
                 onClick={() => removePreset(preset.id)}
-                className="w-6 h-6 rounded-full bg-danger/10 text-danger flex items-center justify-center hover:bg-danger/20"
+                className="w-6 h-6 rounded-full bg-danger/80 text-white flex items-center justify-center hover:bg-danger"
                 title="Remove"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
@@ -167,25 +208,115 @@ export default function PresetsPage() {
               </button>
             </div>
 
-            <div className="text-3xl mb-2">{preset.icon}</div>
-            <p className="text-[13px] font-semibold text-foreground mb-1 truncate">{preset.name}</p>
-            <p className="text-[10px] text-muted uppercase tracking-wider mb-3">{preset.category}</p>
+            {/* Info */}
+            <div className="p-3 text-center">
+              <div className="text-2xl mb-1">{preset.icon}</div>
+              <p className="text-[12px] font-semibold text-foreground mb-0.5 truncate">{preset.name}</p>
+              <p className="text-[10px] text-muted uppercase tracking-wider mb-2">{preset.category}</p>
 
-            <button
-              onClick={() => togglePreset(preset.id)}
-              className={`w-full py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
-                preset.enabled
-                  ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                  : 'bg-surface text-muted hover:bg-border/50'
-              }`}
-            >
-              {preset.enabled ? 'Active' : 'Disabled'}
-            </button>
+              <button
+                onClick={() => togglePreset(preset.id)}
+                className={`w-full py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
+                  preset.enabled
+                    ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                    : 'bg-surface text-muted hover:bg-border/50'
+                }`}
+              >
+                {preset.enabled ? 'Active' : 'Disabled'}
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
       <p className="text-xs text-muted mt-4">{filtered.length} preset{filtered.length !== 1 ? 's' : ''} shown</p>
+
+      {/* Edit Image Modal */}
+      {editingImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingImage(null)}>
+          <div className="bg-background rounded-2xl p-6 w-full max-w-sm shadow-2xl mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-1">Edit Image</h3>
+            <p className="text-sm text-muted mb-4">{presets.find(p => p.id === editingImage)?.name}</p>
+
+            {editImageUrl && (
+              <div className="mb-3 rounded-xl overflow-hidden border border-border">
+                <img src={editImageUrl} alt="Preview" className="w-full aspect-video object-cover" />
+              </div>
+            )}
+
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-muted mb-1">Image URL</label>
+              <input
+                type="url"
+                value={editImageUrl}
+                onChange={(e) => setEditImageUrl(e.target.value)}
+                placeholder="https://images.unsplash.com/..."
+                className="input-field text-sm"
+                autoFocus
+              />
+              <p className="text-[11px] text-muted mt-1">Paste a URL or generate with AI. Leave empty to remove.</p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-muted mb-1">AI Prompt</label>
+              <textarea
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                placeholder={`e.g. "Friends playing ${presets.find(p => p.id === editingImage)?.name || 'sports'} outdoors, vibrant colors"`}
+                rows={2}
+                className="input-field text-sm resize-none mb-2"
+              />
+              <button
+                onClick={async () => {
+                  const name = presets.find(p => p.id === editingImage)?.name || 'activity'
+                  const prompt = imagePrompt.trim() || `A vibrant, inviting photo for a group activity: ${name}. No text overlays.`
+                  setGeneratingImage(true)
+                  try {
+                    const res = await fetch('/api/activities/generate-image', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ prompt }),
+                    })
+                    const data = await res.json()
+                    if (res.ok && data.url) {
+                      setEditImageUrl(data.url)
+                      // Auto-save immediately so the image persists
+                      const updated = presets.map((p) =>
+                        p.id === editingImage ? { ...p, image_url: data.url } : p
+                      )
+                      await savePresets(updated)
+                    }
+                    else alert(data.error || 'Generation failed')
+                  } catch { alert('Generation failed') }
+                  setGeneratingImage(false)
+                }}
+                disabled={generatingImage}
+                className="w-full py-2.5 rounded-xl border border-primary/40 text-primary text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 disabled:opacity-60"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+                {generatingImage ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setEditingImage(null)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => saveImageUrl(editingImage)}
+                className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Preset Modal */}
       {showAdd && (
@@ -224,7 +355,7 @@ export default function PresetsPage() {
                     setNewPreset({ ...newPreset, icon: e.target.value })
                     setEmojiManual(true)
                   }}
-                  placeholder="Auto ✨"
+                  placeholder="Auto"
                   className="input-field text-center text-2xl flex-1"
                   maxLength={4}
                 />
@@ -246,7 +377,7 @@ export default function PresetsPage() {
               )}
             </div>
 
-            <div className="mb-5">
+            <div className="mb-3">
               <label className="block text-sm font-medium text-muted mb-1">Category</label>
               <select
                 value={newPreset.category}
@@ -257,6 +388,17 @@ export default function PresetsPage() {
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-muted mb-1">Image URL (optional)</label>
+              <input
+                type="url"
+                value={newPreset.image_url}
+                onChange={(e) => setNewPreset({ ...newPreset, image_url: e.target.value })}
+                placeholder="https://images.unsplash.com/..."
+                className="input-field text-sm"
+              />
             </div>
 
             <div className="flex gap-3">

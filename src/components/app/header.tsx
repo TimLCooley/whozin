@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isSuperAdmin } from '@/lib/auth'
+import { QRModal } from './qr-modal'
 
 // Module-level cache for nav logo
 let cachedNavLogo: string | null = null
@@ -21,13 +22,17 @@ function getNavLogo(): Promise<string | null> {
 
 interface AppHeaderProps {
   showBack?: boolean
+  onBack?: () => void
 }
 
-export function AppHeader({ showBack }: AppHeaderProps) {
+export function AppHeader({ showBack, onBack }: AppHeaderProps) {
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [navLogo, setNavLogo] = useState<string | null>(cachedNavLogo)
+  const [showQR, setShowQR] = useState(false)
+  const [userId, setUserId] = useState('')
+  const [userName, setUserName] = useState('')
 
   useEffect(() => {
     const supabase = createClient()
@@ -43,6 +48,17 @@ export function AppHeader({ showBack }: AppHeaderProps) {
       .then((data) => setUnreadCount(data.unread ?? 0))
       .catch(() => {})
 
+    // Fetch user profile for QR
+    fetch('/api/user/profile')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.id) {
+          setUserId(data.id)
+          setUserName(`${data.first_name ?? ''} ${data.last_name ?? ''}`.trim())
+        }
+      })
+      .catch(() => {})
+
     // Fetch nav logo from branding
     if (!cachedNavLogo) {
       getNavLogo().then((url) => { if (url) setNavLogo(url) })
@@ -50,6 +66,7 @@ export function AppHeader({ showBack }: AppHeaderProps) {
   }, [])
 
   return (
+    <>
     <header className="relative bg-gradient-to-b from-primary to-primary-dark px-4 py-3.5 flex items-center justify-between">
       {/* Subtle texture overlay */}
       <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_20%_50%,white_1px,transparent_1px),radial-gradient(circle_at_80%_20%,white_1px,transparent_1px)] bg-[length:32px_32px]" />
@@ -57,7 +74,7 @@ export function AppHeader({ showBack }: AppHeaderProps) {
       <div className="relative flex items-center gap-1">
         {showBack && (
           <button
-            onClick={() => router.back()}
+            onClick={() => onBack ? onBack() : router.back()}
             className="p-1.5 -ml-1.5 text-white/90 active:text-white transition-colors"
             aria-label="Go back"
           >
@@ -106,6 +123,27 @@ export function AppHeader({ showBack }: AppHeaderProps) {
           </button>
         )}
 
+        {/* QR Code */}
+        {userId && (
+          <button
+            className="p-1.5 -m-1.5 text-white/90 active:text-white transition-colors"
+            aria-label="QR Code"
+            onClick={() => setShowQR(true)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="2" width="8" height="8" rx="1" />
+              <rect x="14" y="2" width="8" height="8" rx="1" />
+              <rect x="2" y="14" width="8" height="8" rx="1" />
+              <rect x="14" y="14" width="4" height="4" />
+              <path d="M22 14h-4v4" />
+              <path d="M22 22h-4v-4" />
+              <rect x="5" y="5" width="2" height="2" />
+              <rect x="17" y="5" width="2" height="2" />
+              <rect x="5" y="17" width="2" height="2" />
+            </svg>
+          </button>
+        )}
+
         {/* Notification bell */}
         <button
           className="relative p-1.5 -m-1.5 text-white/90 active:text-white transition-colors"
@@ -134,5 +172,15 @@ export function AppHeader({ showBack }: AppHeaderProps) {
         </button>
       </div>
     </header>
+
+    {userId && (
+      <QRModal
+        open={showQR}
+        onClose={() => setShowQR(false)}
+        userId={userId}
+        userName={userName}
+      />
+    )}
+    </>
   )
 }

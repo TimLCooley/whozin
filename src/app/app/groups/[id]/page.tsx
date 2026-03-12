@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { createClient } from '@/lib/supabase/client'
-import { PawAvatar } from '@/components/ui/paw-avatar'
+import { AvatarImg } from '@/components/ui/avatar-img'
 import CountryCodeSelect from '@/components/auth/country-code-select'
+import { QRModal } from '@/components/app/qr-modal'
 
 interface Member {
   membership_id: string
@@ -65,7 +66,7 @@ interface DeviceContact {
 }
 
 type Tab = 'details' | 'chat' | 'members'
-type Modal = null | 'add-phone' | 'add-friends' | 'add-google' | 'add-device'
+type Modal = null | 'add-phone' | 'add-friends' | 'add-google' | 'add-device' | 'qr-scan'
 
 export default function GroupDetailPage() {
   const router = useRouter()
@@ -543,7 +544,7 @@ export default function GroupDetailPage() {
                 const isCurrentUser = member.user_id === group.current_user_id
                 return (
                   <div key={member.membership_id} className="bg-background border border-border/50 rounded-xl p-3.5 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                    <PawAvatar size="lg" src={member.avatar_url} />
+                    <AvatarImg size="lg" src={member.avatar_url} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[14px] font-semibold text-foreground truncate">
                         {member.first_name} {member.last_name}
@@ -654,6 +655,20 @@ export default function GroupDetailPage() {
               </svg>
               Search Phone Contacts
             </button>
+            <button
+              onClick={() => setModal('qr-scan')}
+              className="w-full py-3 mb-4 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center justify-center gap-2"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="8" height="8" rx="1" />
+                <rect x="14" y="2" width="8" height="8" rx="1" />
+                <rect x="2" y="14" width="8" height="8" rx="1" />
+                <rect x="14" y="14" width="4" height="4" />
+                <path d="M22 14h-4v4" />
+                <path d="M22 22h-4v-4" />
+              </svg>
+              Scan QR to Add
+            </button>
 
             {/* Member list */}
             <p className="text-[12px] text-muted mb-2">
@@ -671,7 +686,7 @@ export default function GroupDetailPage() {
                     }`}
                   >
                     {/* Avatar */}
-                    <PawAvatar size="lg" src={member.avatar_url} />
+                    <AvatarImg size="lg" src={member.avatar_url} />
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
@@ -1005,7 +1020,7 @@ export default function GroupDetailPage() {
                   className="bg-background border border-border/50 rounded-xl p-3 flex items-center gap-3"
                 >
                   {/* Avatar */}
-                  <PawAvatar src={contact.avatar_url} />
+                  <AvatarImg src={contact.avatar_url} />
 
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-foreground truncate">
@@ -1027,6 +1042,21 @@ export default function GroupDetailPage() {
             </div>
           )}
         </BottomSheet>
+      )}
+
+      {/* QR Scan Modal */}
+      {modal === 'qr-scan' && group && (
+        <QRModal
+          open={true}
+          onClose={() => { setModal(null); loadGroup() }}
+          userId={group.current_user_id}
+          userName={(() => {
+            const me = group.members.find((m) => m.id === group.current_user_id)
+            return me ? `${me.first_name} ${me.last_name}`.trim() : ''
+          })()}
+          groupId={group.id}
+          groupName={group.name}
+        />
       )}
     </div>
   )
@@ -1279,7 +1309,7 @@ function GroupChat({ group }: { group: GroupDetail }) {
                   <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} ${continuation ? 'mt-px' : 'mt-2.5'}`}>
                     {!isMe && !continuation && (
                       <div className="mr-1.5 mt-0.5 flex-shrink-0">
-                        <PawAvatar size="sm" src={msg.sender?.avatar_url} />
+                        <AvatarImg size="sm" src={msg.sender?.avatar_url} />
                       </div>
                     )}
                     {!isMe && continuation && <div className="w-[30px] flex-shrink-0" />}

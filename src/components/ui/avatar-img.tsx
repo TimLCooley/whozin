@@ -21,9 +21,9 @@ function getLogoUrl(): Promise<string | null> {
   return fetchPromise
 }
 
-const DIMS = { sm: 'w-7 h-7', md: 'w-9 h-9', lg: 'w-10 h-10' } as const
-const PAW_SIZE = { sm: 14, md: 16, lg: 20 } as const
-const IMG_SIZE = { sm: 16, md: 20, lg: 24 } as const
+const DIMS = { sm: 'w-7 h-7', md: 'w-9 h-9', lg: 'w-10 h-10', xl: 'w-16 h-16' } as const
+const PAW_SIZE = { sm: 14, md: 16, lg: 20, xl: 32 } as const
+const IMG_SIZE = { sm: 16, md: 20, lg: 24, xl: 36 } as const
 
 function PawSvg({ size }: { size: number }) {
   return (
@@ -37,7 +37,7 @@ function PawSvg({ size }: { size: number }) {
   )
 }
 
-export function PawAvatar({ size = 'md', src }: { size?: 'sm' | 'md' | 'lg'; src?: string | null }) {
+export function AvatarImg({ size = 'md', src }: { size?: 'sm' | 'md' | 'lg' | 'xl'; src?: string | null }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(cachedLogoUrl)
 
   useEffect(() => {

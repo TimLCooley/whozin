@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import AuthForm from '@/components/auth/auth-form'
 import { BrandedFullLogo } from '@/components/ui/branded-logo'
 import { ContactModal } from '@/components/ui/contact-modal'
+import { DEFAULT_ACTIVITY_PRESETS } from '@/lib/activity-presets'
+
+const SPORTS = DEFAULT_ACTIVITY_PRESETS.filter((p) => p.category === 'Sports' && p.enabled)
 
 /* ── Scroll-triggered visibility hook ── */
 function useInView(threshold = 0.15) {
@@ -477,17 +480,11 @@ export default function SubsLandingPage() {
       <section className="py-16 bg-surface border-y border-border/40">
         <div className="max-w-4xl mx-auto px-6">
           <p className="text-center text-primary text-sm font-bold uppercase tracking-widest mb-8">Built For</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { icon: '🏐', sport: 'Volleyball', pain: 'Need 6? Now you have 6.' },
-              { icon: '🏀', sport: 'Basketball', pain: 'Never cancel over a missing 10th.' },
-              { icon: '⚽', sport: 'Soccer', pain: 'Full squad, every week.' },
-              { icon: '🎾', sport: 'Tennis/Pickleball', pain: 'Doubles partner in seconds.' },
-            ].map((s) => (
-              <div key={s.sport} className="bg-white border border-border/50 rounded-2xl p-5 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(66,133,244,0.12)] hover:border-primary/30 transition-all duration-300">
-                <span className="text-4xl block mb-3">{s.icon}</span>
-                <p className="text-[15px] font-bold text-foreground mb-1">{s.sport}</p>
-                <p className="text-[12px] text-muted leading-snug">{s.pain}</p>
+          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {SPORTS.map((s) => (
+              <div key={s.id} className="bg-white border border-border/50 rounded-2xl p-4 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgba(66,133,244,0.12)] hover:border-primary/30 transition-all duration-300">
+                <span className="text-3xl block mb-2">{s.icon}</span>
+                <p className="text-[13px] font-bold text-foreground leading-tight">{s.name}</p>
               </div>
             ))}
           </div>
