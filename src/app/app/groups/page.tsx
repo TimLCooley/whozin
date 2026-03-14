@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
-import { BottomNav } from '@/components/app/bottom-nav'
 
 type Filter = 'all' | 'my' | 'other'
 
@@ -182,7 +181,6 @@ export default function GroupsListPage() {
         )}
       </div>
 
-      <BottomNav />
     </div>
   )
 }
