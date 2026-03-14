@@ -48,10 +48,19 @@ export async function GET(req: NextRequest) {
     .select('*, whozin_activity_member(count)')
     .in('id', Array.from(activityIds))
 
+  const today = new Date().toISOString().split('T')[0]
+
   if (tab === 'upcoming') {
-    query = query.in('status', ['open', 'full']).order('activity_date', { ascending: true, nullsFirst: false })
+    // Upcoming: open/full status AND date is today or future (or no date set)
+    query = query
+      .in('status', ['open', 'full'])
+      .or(`activity_date.gte.${today},activity_date.is.null`)
+      .order('activity_date', { ascending: true, nullsFirst: false })
   } else {
-    query = query.in('status', ['past', 'cancelled']).order('activity_date', { ascending: false })
+    // Past: explicitly past/cancelled OR open/full with a date that has passed
+    query = query
+      .or(`status.in.(past,cancelled),and(status.in.(open,full),activity_date.lt.${today})`)
+      .order('activity_date', { ascending: false })
   }
 
   const { data: activities } = await query
