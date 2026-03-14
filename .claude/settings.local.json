@@ -40,7 +40,16 @@
       "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -export -rfc -keystore \"C:/Users/tim/whozin-keystore.jks\" -alias whozin -file \"C:/Users/tim/whozin-upload.pem\" 2>&1)",
       "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -list -keystore \"C:/Users/tim/whozin-keystore.jks\" 2>&1)",
       "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -genkeypair -v -keystore \"C:/Users/tim/whozin-keystore2.jks\" -keyalg RSA -keysize 2048 -validity 9125 -alias upload -dname \"CN=Tim Cooley\" 2>&1 <<EOF\npassword123\npassword123\npassword123\npassword123\nEOF)",
-      "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -export -rfc -keystore \"C:/Users/tim/whozin-keystore3.jks\" -alias whozin -file \"C:/Users/tim/whozin-upload.pem\" 2>&1 <<EOF\n26Swetipa!!\nEOF)"
+      "Bash(\"C:/Program Files/Android/Android Studio/jbr/bin/keytool.exe\" -export -rfc -keystore \"C:/Users/tim/whozin-keystore3.jks\" -alias whozin -file \"C:/Users/tim/whozin-upload.pem\" 2>&1 <<EOF\n26Swetipa!!\nEOF)",
+      "Bash(openssl rand:*)",
+      "Bash(keytool -list -keystore \"C:/Users/tim/Downloads/whozin-keystore3.jks\" -storepass \"26Swetipa!!\" 2>&1 | head -20)",
+      "Bash(where keytool:*)",
+      "Bash(\"/c/Program Files/Android/Android Studio/jbr/bin/keytool\" -list -keystore \"C:/Users/tim/Downloads/whozin-keystore3.jks\" -storepass \"26Swetipa!!\" 2>&1)",
+      "Bash(cd C:/Users/tim/projects/whozin/android && ./gradlew bundleRelease 2>&1)",
+      "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew bundleRelease 2>&1)",
+      "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew clean bundleRelease 2>&1 | tail -20)",
+      "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew clean bundleRelease 2>&1 | tail -10)",
+      "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew clean bundleRelease 2>&1 | tail -15)"
     ]
   }
 }
