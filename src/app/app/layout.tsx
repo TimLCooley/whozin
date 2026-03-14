@@ -47,5 +47,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     )
   }
 
-  return <>{children}</>
+  return (
+    <div className="min-h-dvh md:flex md:items-center md:justify-center md:bg-gray-100 md:py-8">
+      <div className="w-full md:max-w-[430px] md:min-h-[calc(100dvh-4rem)] md:rounded-3xl md:shadow-2xl md:border md:border-gray-200 md:overflow-hidden bg-background">
+        {children}
+      </div>
+    </div>
+  )
 }
