@@ -38,7 +38,7 @@ function AppleIcon() {
 }
 
 interface AuthFormProps {
-  onBack: () => void
+  onBack?: () => void
 }
 
 export default function AuthForm({ onBack }: AuthFormProps) {
@@ -378,19 +378,21 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     <div className="min-h-dvh flex flex-col bg-background">
       {/* Header */}
       <div className="flex items-center px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-border">
-        <button
-          onClick={step === 'phone' ? onBack : () => {
-            if (step === 'otp') { setStep('phone'); setOtpDigits(['', '', '', '', '', '']); setError('') }
-            if (step === 'name') { setStep('otp'); setError('') }
-          }}
-          className="p-2 -ml-2 text-foreground/60 hover:text-foreground"
-          aria-label="Back"
-        >
-          <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h1 className="flex-1 text-center text-lg font-semibold pr-8">
+        {(step !== 'phone' || onBack) && (
+          <button
+            onClick={step === 'phone' ? onBack : () => {
+              if (step === 'otp') { setStep('phone'); setOtpDigits(['', '', '', '', '', '']); setError('') }
+              if (step === 'name') { setStep('otp'); setError('') }
+            }}
+            className="p-2 -ml-2 text-foreground/60 hover:text-foreground"
+            aria-label="Back"
+          >
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        )}
+        <h1 className="flex-1 text-center text-lg font-semibold">
           {step === 'phone' && 'Enter Phone Number'}
           {step === 'otp' && 'Verify Code'}
           {step === 'name' && 'Your Name'}

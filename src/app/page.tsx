@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { isNative } from '@/lib/capacitor'
 import AuthForm from '@/components/auth/auth-form'
 import { DEFAULT_ACTIVITY_PRESETS } from '@/lib/activity-presets'
 import { BrandedFullLogo } from '@/components/ui/branded-logo'
@@ -104,13 +105,17 @@ export default function HomePage() {
   const socialSection = useInView()
   const router = useRouter()
 
-  // If user is already logged in, skip to app
+  // If user is already logged in or on native app, skip to app
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         router.replace('/app')
       } else {
+        // On native app, go straight to auth (no landing page)
+        if (isNative()) {
+          setShowAuth(true)
+        }
         setCheckingAuth(false)
       }
     })
@@ -144,7 +149,7 @@ export default function HomePage() {
   }
 
   if (showAuth) {
-    return <AuthForm onBack={() => setShowAuth(false)} />
+    return <AuthForm onBack={isNative() ? undefined : () => setShowAuth(false)} />
   }
 
   return (
