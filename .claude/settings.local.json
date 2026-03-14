@@ -49,7 +49,8 @@
       "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew bundleRelease 2>&1)",
       "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew clean bundleRelease 2>&1 | tail -20)",
       "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew clean bundleRelease 2>&1 | tail -10)",
-      "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew clean bundleRelease 2>&1 | tail -15)"
+      "Bash(cd C:/Users/tim/projects/whozin/android && JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew clean bundleRelease 2>&1 | tail -15)",
+      "Bash(find /c/Users/tim/projects/whozin/src/app/auth -type f -name \"*.tsx\" -o -name \"*.ts\" 2>/dev/null | head -20)"
     ]
   }
 }

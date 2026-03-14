@@ -10,6 +10,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient()
+
+    // Check initial auth state
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) {
         router.replace('/')
@@ -26,6 +28,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }
       setReady(true)
     })
+
+    // Listen for auth state changes (sign out, token refresh, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        router.replace('/')
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [router])
 
   if (!ready) {

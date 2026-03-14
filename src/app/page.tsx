@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import AuthForm from '@/components/auth/auth-form'
 import { DEFAULT_ACTIVITY_PRESETS } from '@/lib/activity-presets'
 import { BrandedFullLogo } from '@/components/ui/branded-logo'
@@ -97,8 +99,22 @@ export default function HomePage() {
   const [activityIdx, setActivityIdx] = useState(0)
   const [activityFade, setActivityFade] = useState(true)
   const [showContact, setShowContact] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const ctaSection = useInView()
   const socialSection = useInView()
+  const router = useRouter()
+
+  // If user is already logged in, skip to app
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        router.replace('/app')
+      } else {
+        setCheckingAuth(false)
+      }
+    })
+  }, [router])
 
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 100)
@@ -118,6 +134,14 @@ export default function HomePage() {
   }, [])
 
   const heroActivity = HERO_ACTIVITIES[activityIdx]
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   if (showAuth) {
     return <AuthForm onBack={() => setShowAuth(false)} />
