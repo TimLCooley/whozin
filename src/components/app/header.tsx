@@ -67,7 +67,7 @@ export function AppHeader({ showBack, onBack }: AppHeaderProps) {
 
   return (
     <>
-    <header className="relative bg-gradient-to-b from-primary to-primary-dark px-4 py-3.5 flex items-center justify-between">
+    <header className="relative bg-gradient-to-b from-primary to-primary-dark px-4 py-3.5 pt-[calc(0.875rem+env(safe-area-inset-top))] flex items-center justify-between">
       {/* Subtle texture overlay */}
       <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_20%_50%,white_1px,transparent_1px),radial-gradient(circle_at_80%_20%,white_1px,transparent_1px)] bg-[length:32px_32px]" />
 

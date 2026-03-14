@@ -377,7 +377,7 @@ export default function AuthForm({ onBack }: AuthFormProps) {
   return (
     <div className="min-h-dvh flex flex-col bg-background">
       {/* Header */}
-      <div className="flex items-center px-4 py-3 border-b border-border">
+      <div className="flex items-center px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-border">
         <button
           onClick={step === 'phone' ? onBack : () => {
             if (step === 'otp') { setStep('phone'); setOtpDigits(['', '', '', '', '', '']); setError('') }
@@ -397,8 +397,8 @@ export default function AuthForm({ onBack }: AuthFormProps) {
         </h1>
       </div>
 
-      <div className="flex-1 px-6 py-8">
-        <div className="max-w-sm mx-auto">
+      <div className="flex-1 flex items-center px-6 py-8">
+        <div className="max-w-sm mx-auto w-full">
 
           {/* STEP 1: Phone number */}
           {step === 'phone' && (
