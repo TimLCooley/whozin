@@ -85,7 +85,7 @@ jobs:
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: whozin-release-${{ env.VERSION_CODE }}
+          name: whozin-release
           path: android/app/build/outputs/bundle/release/app-release.aab
 
       - name: Notify Whozin API — build started
@@ -114,28 +114,15 @@ jobs:
       - name: Download AAB artifact
         uses: actions/download-artifact@v4
         with:
-          name: whozin-release-${{ needs.build.outputs.version_code || '' }}
+          name: whozin-release
           path: artifacts/
-        continue-on-error: true
-
-      - name: Download latest artifact
-        if: failure()
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
-
-      - name: Find AAB file
-        run: |
-          AAB_FILE=$(find artifacts/ -name "*.aab" | head -1)
-          echo "AAB_FILE=$AAB_FILE" >> $GITHUB_ENV
-          echo "Found AAB: $AAB_FILE"
 
       - name: Upload to Google Play
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: io.whozin.app
-          releaseFiles: ${{ env.AAB_FILE }}
+          releaseFiles: artifacts/app-release.aab
           track: ${{ inputs.track || 'internal' }}
           status: completed
 
