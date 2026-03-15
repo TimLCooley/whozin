@@ -207,27 +207,155 @@ function getStatus(integration: Integration, envStatus: Record<string, boolean>)
   return 'missing'
 }
 
+interface PlatformStatus {
+  platform: 'android' | 'ios'
+  latestBuild: {
+    version_code: number | null
+    version_name: string | null
+    status: string
+    track: string | null
+    commit_sha: string | null
+    created_at: string
+    run_url: string | null
+  } | null
+  productionBuild: {
+    version_code: number | null
+    version_name: string | null
+    status: string
+    created_at: string
+  } | null
+  totalBuilds: number
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
+function BuildStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    deployed: { bg: 'bg-green-100', text: 'text-green-700', label: 'Live' },
+    built: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Built' },
+    building: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Building' },
+    pending: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
+    failed: { bg: 'bg-red-100', text: 'text-red-600', label: 'Failed' },
+  }
+  const c = config[status] || config.pending
+  return (
+    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${c.bg} ${c.text}`}>
+      {c.label}
+    </span>
+  )
+}
+
+function StoreStatusCard({ platform }: { platform: PlatformStatus }) {
+  const isAndroid = platform.platform === 'android'
+  const icon = isAndroid ? '🤖' : '🍎'
+  const name = isAndroid ? 'Google Play' : 'App Store'
+  const latest = platform.latestBuild
+  const prod = platform.productionBuild
+
+  return (
+    <div className="bg-background border border-border/50 rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className="text-lg">{icon}</span>
+        <span className="text-[13px] font-bold text-foreground">{name}</span>
+        {platform.totalBuilds > 0 && (
+          <span className="text-[10px] text-muted ml-auto">{platform.totalBuilds} builds</span>
+        )}
+      </div>
+
+      {!latest ? (
+        <div className="text-[12px] text-muted">No builds yet. {isAndroid ? 'CI/CD pipeline is ready.' : 'CI/CD not set up yet.'}</div>
+      ) : (
+        <div className="space-y-2.5">
+          {/* Latest build */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] text-muted uppercase font-semibold tracking-wide">Latest Build</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[13px] font-semibold text-foreground">
+                  v{latest.version_name || '1.0.0'}{latest.version_code ? ` (${latest.version_code})` : ''}
+                </span>
+                <BuildStatusBadge status={latest.status} />
+              </div>
+              <p className="text-[10px] text-muted mt-0.5">
+                {latest.track && <span className="capitalize">{latest.track} track</span>}
+                {latest.track && ' · '}{timeAgo(latest.created_at)}
+                {latest.commit_sha && ` · ${latest.commit_sha.slice(0, 7)}`}
+              </p>
+            </div>
+            {latest.run_url && (
+              <a href={latest.run_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary font-semibold hover:underline">
+                View
+              </a>
+            )}
+          </div>
+
+          {/* Production status */}
+          <div className="border-t border-border/30 pt-2">
+            <p className="text-[11px] text-muted uppercase font-semibold tracking-wide">Production</p>
+            {prod ? (
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[13px] font-semibold text-foreground">
+                  v{prod.version_name || '1.0.0'}{prod.version_code ? ` (${prod.version_code})` : ''}
+                </span>
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                  Live
+                </span>
+                <span className="text-[10px] text-muted">{timeAgo(prod.created_at)}</span>
+              </div>
+            ) : (
+              <p className="text-[12px] text-muted mt-0.5">Not yet deployed to production</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function IntegrationsPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [envStatus, setEnvStatus] = useState<Record<string, boolean>>({})
+  const [storeStatus, setStoreStatus] = useState<PlatformStatus[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/admin/env-status')
-      .then((r) => r.json())
-      .then(setEnvStatus)
-      .finally(() => setLoading(false))
+    Promise.all([
+      fetch('/api/admin/env-status').then((r) => r.json()),
+      fetch('/api/admin/store-status').then((r) => r.json()).catch(() => []),
+    ]).then(([env, stores]) => {
+      setEnvStatus(env)
+      if (Array.isArray(stores)) setStoreStatus(stores)
+    }).finally(() => setLoading(false))
   }, [])
 
   const configured = INTEGRATIONS.filter((i) => getStatus(i, envStatus) === 'configured').length
 
+  const android = storeStatus.find((s) => s.platform === 'android')
+  const ios = storeStatus.find((s) => s.platform === 'ios')
+
   return (
     <div>
       <h2 className="text-xl font-bold text-foreground mb-1">API & Integrations</h2>
-      <p className="text-[13px] text-muted mb-6">
+      <p className="text-[13px] text-muted mb-4">
         {loading ? '...' : `${configured}/${INTEGRATIONS.length}`} integrations fully configured.
         Environment variables are managed in Vercel project settings.
       </p>
+
+      {/* Store Status Banner */}
+      {!loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          {android && <StoreStatusCard platform={android} />}
+          {ios && <StoreStatusCard platform={ios} />}
+        </div>
+      )}
 
       <div className="space-y-3">
         {INTEGRATIONS.map((integration) => {
