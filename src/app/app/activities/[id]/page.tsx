@@ -86,6 +86,7 @@ export default function ActivityDetailPage() {
   const [tab, setTab] = useState<Tab>('details')
   const [responding, setResponding] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -195,7 +196,7 @@ export default function ActivityDetailPage() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); contentRef.current?.scrollTo(0, 0) }}
             className={`flex-1 py-3 text-[13px] font-semibold text-center transition-colors relative z-10 flex items-center justify-center gap-1.5 ${
               tab === t.key ? 'text-primary' : 'text-muted'
             }`}
@@ -216,7 +217,7 @@ export default function ActivityDetailPage() {
       </div>
 
       {/* Content */}
-      <div className={`flex-1 ${tab === 'chat' ? 'flex flex-col min-h-0' : 'overflow-y-auto pb-28'}`}>
+      <div ref={contentRef} className={`flex-1 ${tab === 'chat' ? 'flex flex-col min-h-0' : 'overflow-y-auto pb-4'}`}>
         {tab === 'details' && (
           <div className="px-4 pt-4 space-y-4 animate-enter">
             {/* Host view */}

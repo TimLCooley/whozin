@@ -1,0 +1,149 @@
+name: Android Build & Deploy
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'android/**'
+      - 'capacitor.config.ts'
+      - '.github/workflows/android-build.yml'
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Google Play track to deploy to'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - beta
+          - production
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create minimal web assets for Capacitor sync
+        run: |
+          mkdir -p out
+          echo '<html><head><meta http-equiv="refresh" content="0;url=https://whozin.io"></head></html>' > out/index.html
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > android/app/whozin-keystore.jks
+
+      - name: Auto-increment version code
+        run: |
+          # Read current versionCode from build.gradle
+          CURRENT=$(grep -oP 'versionCode \K\d+' android/app/build.gradle)
+          # Use GitHub run number to ensure unique, always-increasing codes
+          NEW_CODE=$((CURRENT + GITHUB_RUN_NUMBER))
+          sed -i "s/versionCode $CURRENT/versionCode $NEW_CODE/" android/app/build.gradle
+          echo "VERSION_CODE=$NEW_CODE" >> $GITHUB_ENV
+          echo "Version code: $NEW_CODE"
+
+      - name: Build release AAB
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: app/whozin-keystore.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whozin-release-${{ env.VERSION_CODE }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+
+      - name: Notify Whozin API — build started
+        if: always()
+        run: |
+          curl -s -X POST "${{ secrets.WHOZIN_API_URL }}/api/admin/builds" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.WHOZIN_BUILD_SECRET }}" \
+            -d "{
+              \"platform\": \"android\",
+              \"version_code\": ${{ env.VERSION_CODE }},
+              \"version_name\": \"1.0.0\",
+              \"status\": \"built\",
+              \"commit_sha\": \"${{ github.sha }}\",
+              \"commit_message\": $(echo '${{ github.event.head_commit.message }}' | head -1 | jq -Rs .),
+              \"run_id\": ${{ github.run_id }},
+              \"run_url\": \"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+            }" || true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Download AAB artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: whozin-release-${{ needs.build.outputs.version_code || '' }}
+          path: artifacts/
+        continue-on-error: true
+
+      - name: Download latest artifact
+        if: failure()
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Find AAB file
+        run: |
+          AAB_FILE=$(find artifacts/ -name "*.aab" | head -1)
+          echo "AAB_FILE=$AAB_FILE" >> $GITHUB_ENV
+          echo "Found AAB: $AAB_FILE"
+
+      - name: Upload to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: io.whozin.app
+          releaseFiles: ${{ env.AAB_FILE }}
+          track: ${{ inputs.track || 'internal' }}
+          status: completed
+
+      - name: Notify Whozin API — deploy complete
+        if: always()
+        run: |
+          STATUS="deployed"
+          if [ "${{ job.status }}" != "success" ]; then STATUS="failed"; fi
+          curl -s -X POST "${{ secrets.WHOZIN_API_URL }}/api/admin/builds" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.WHOZIN_BUILD_SECRET }}" \
+            -d "{
+              \"platform\": \"android\",
+              \"status\": \"$STATUS\",
+              \"track\": \"${{ inputs.track || 'internal' }}\",
+              \"run_id\": ${{ github.run_id }},
+              \"run_url\": \"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+            }" || true

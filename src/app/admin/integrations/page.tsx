@@ -130,7 +130,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Capacitor (Native Apps)',
-    description: 'iOS: io.whozin.app / Android: com.chumem.whozin',
+    description: 'iOS: io.whozin.app / Android: io.whozin.app — CI/CD via GitHub Actions',
     icon: '📱',
     envVars: [],
     docsUrl: 'https://capacitorjs.com/docs',
@@ -174,6 +174,10 @@ const API_ENDPOINTS = [
   { method: 'GET', path: '/api/admin/groups', desc: 'All groups (admin)' },
   { method: 'GET', path: '/api/admin/activities', desc: 'All activities (admin)' },
   { method: 'GET', path: '/api/admin/organizations', desc: 'All organizations (admin)' },
+  // Builds
+  { method: 'GET', path: '/api/admin/builds', desc: 'Build history (admin)' },
+  { method: 'POST', path: '/api/admin/builds', desc: 'Record build event (CI webhook)' },
+  { method: 'POST', path: '/api/admin/builds/setup', desc: 'Create app_builds table' },
   // Webhooks
   { method: 'POST', path: '/api/webhooks/revenuecat', desc: 'RevenueCat subscription events' },
   { method: 'POST', path: '/api/webhooks/stripe', desc: 'Stripe subscription events' },

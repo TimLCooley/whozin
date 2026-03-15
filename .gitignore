@@ -45,4 +45,10 @@ next-env.d.ts
 
 # Capacitor native projects
 /ios/
-/android/
+
+# Android — committed for CI/CD (exclude build artifacts and local config)
+/android/build/
+/android/app/build/
+/android/.gradle/
+/android/local.properties
+/android/app/whozin-keystore.jks

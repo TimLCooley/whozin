@@ -69,6 +69,7 @@ export default function CreateActivityPage() {
   const [imagePrompt, setImagePrompt] = useState('')
   const [showImageGen, setShowImageGen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   // Group Details
   const [groups, setGroups] = useState<GroupOption[]>([])
@@ -386,7 +387,7 @@ export default function CreateActivityPage() {
           <p className="text-[12px] text-muted mt-0.5">Quick fill — pick your activity, group, and go!</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-28">
+        <div className="flex-1 overflow-y-auto pb-4">
           <div className="px-4 pt-4 space-y-5 animate-enter">
             {/* Activity Type */}
             <FieldCard>
@@ -685,7 +686,7 @@ export default function CreateActivityPage() {
         </div>
 
         {/* GO Button */}
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/60 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] z-40">
+        <div className="flex-shrink-0 bg-background/95 backdrop-blur-md border-t border-border/60 p-4">
           <button
             onClick={handleFillSubmit}
             disabled={submitting || !activityName.trim() || !selectedGroup}
@@ -715,7 +716,7 @@ export default function CreateActivityPage() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); contentRef.current?.scrollTo(0, 0) }}
             className={`flex-1 py-3 text-[13px] font-semibold text-center transition-colors relative z-10 ${
               tab === t.key ? 'text-primary' : 'text-muted'
             }`}
@@ -733,7 +734,7 @@ export default function CreateActivityPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto pb-28">
+      <div ref={contentRef} className="flex-1 overflow-y-auto pb-4">
         {tab === 'details' && (
           <div className="px-4 pt-4 space-y-5 animate-enter">
             <SectionHeader>Activity Details</SectionHeader>
@@ -1245,10 +1246,10 @@ export default function CreateActivityPage() {
       </div>
 
       {/* Bottom Submit Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/60 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] z-40">
+      <div className="flex-shrink-0 bg-background/95 backdrop-blur-md border-t border-border/60 p-4">
         {tab === 'details' ? (
           <button
-            onClick={() => setTab('group')}
+            onClick={() => { setTab('group'); contentRef.current?.scrollTo(0, 0) }}
             className="btn-primary w-full py-3.5 text-[14px]"
           >
             Next: Group Details

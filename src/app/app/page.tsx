@@ -138,7 +138,7 @@ export default function AppHome() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-36">
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-20">
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
