@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "59170911909",
+    "project_id": "whozin-25999",
+    "storage_bucket": "whozin-25999.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:59170911909:android:074421285405bf5d157f4c",
+        "android_client_info": {
+          "package_name": "com.chumem.whozin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4X3YYRKUo_ryXa7-e6jqrmCRz-FcvrkU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:59170911909:android:e70a1c98030e705e157f4c",
+        "android_client_info": {
+          "package_name": "io.whozin.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4X3YYRKUo_ryXa7-e6jqrmCRz-FcvrkU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

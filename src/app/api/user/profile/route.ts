@@ -11,7 +11,7 @@ export async function GET() {
   const admin = getAdminClient()
   const { data: profile } = await admin
     .from('whozin_users')
-    .select('id, first_name, last_name, email, phone, avatar_url, membership_tier, push_notifications_enabled, text_notifications_enabled, hide_from_invites')
+    .select('id, first_name, last_name, email, phone, avatar_url, membership_tier, push_notifications_enabled, text_notifications_enabled, hide_from_invites, push_token')
     .eq('auth_user_id', user.id)
     .single()
 

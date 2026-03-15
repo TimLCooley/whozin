@@ -84,21 +84,19 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Google Play Console',
-    description: 'Android app distribution and in-app billing.',
+    description: 'Android app distribution via GitHub Actions CI/CD. Service account configured in GitHub Secrets.',
     icon: '🤖',
-    envVars: [
-      { key: 'GOOGLE_PLAY_SERVICE_ACCOUNT', label: 'Service Account JSON', secret: true },
-    ],
+    envVars: [],
     docsUrl: 'https://play.google.com/console/',
   },
   {
     name: 'Firebase (Push Notifications)',
-    description: 'Cross-platform push notifications via FCM.',
+    description: 'Push notifications via FCM v1 API. Required — reduces SMS costs by using push for invites and alerts.',
     icon: '🔔',
     envVars: [
       { key: 'FIREBASE_PROJECT_ID', label: 'Project ID' },
-      { key: 'FIREBASE_SERVER_KEY', label: 'Server Key', secret: true },
-      { key: 'NEXT_PUBLIC_FIREBASE_VAPID_KEY', label: 'VAPID Key' },
+      { key: 'FIREBASE_CLIENT_EMAIL', label: 'Service Account Email', secret: true },
+      { key: 'FIREBASE_PRIVATE_KEY', label: 'Service Account Private Key', secret: true },
     ],
     docsUrl: 'https://console.firebase.google.com/',
   },
@@ -129,8 +127,17 @@ const INTEGRATIONS: Integration[] = [
     docsUrl: 'https://app.revenuecat.com',
   },
   {
+    name: 'CI/CD (GitHub Actions)',
+    description: 'Automated Android builds, deploy to Google Play, build status webhooks.',
+    icon: '⚙️',
+    envVars: [
+      { key: 'WHOZIN_BUILD_SECRET', label: 'Build Webhook Secret', secret: true },
+    ],
+    docsUrl: 'https://github.com/TimLCooley/whozin/actions',
+  },
+  {
     name: 'Capacitor (Native Apps)',
-    description: 'iOS: io.whozin.app / Android: io.whozin.app — CI/CD via GitHub Actions',
+    description: 'iOS: io.whozin.app / Android: io.whozin.app — remote URL pattern.',
     icon: '📱',
     envVars: [],
     docsUrl: 'https://capacitorjs.com/docs',
@@ -147,6 +154,8 @@ const API_ENDPOINTS = [
   { method: 'GET', path: '/api/user/profile', desc: 'Current user profile' },
   { method: 'POST', path: '/api/user/verify-email', desc: 'Send email verification code' },
   { method: 'PUT', path: '/api/user/verify-email', desc: 'Verify and update email' },
+  { method: 'POST', path: '/api/user/push-token', desc: 'Register push notification token' },
+  { method: 'DELETE', path: '/api/user/push-token', desc: 'Unregister push token' },
   // Groups
   { method: 'GET', path: '/api/groups', desc: 'List user groups' },
   { method: 'POST', path: '/api/groups', desc: 'Create group' },

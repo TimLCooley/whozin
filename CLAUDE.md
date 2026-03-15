@@ -42,7 +42,7 @@
 
 ### Google Play / Google Cloud
 - **Google Play Account ID**: `6533159575073604082`
-- **Google Play Package Name (Android)**: `com.chumem.whozin`
+- **Google Play Package Name (Android)**: `io.whozin.app`
 - **Google Play Console**: https://play.google.com/console/
 - **Google Cloud Project**: `Whozin` (whozin-469312)
 - **Google Cloud Console**: https://console.cloud.google.com
@@ -63,9 +63,8 @@
 - **Dashboard**: https://dashboard.stripe.com
 
 ### Capacitor (Native Apps)
-- **App ID (Android)**: `com.chumem.whozin` (matches Google Play)
-- **iOS Bundle ID**: `io.whozin.app` (set in Xcode, different from Android)
-- **Config**: `capacitor.config.ts` — uses `com.chumem.whozin` as appId
+- **App ID (Android & iOS)**: `io.whozin.app`
+- **Config**: `capacitor.config.ts` — uses `io.whozin.app` as appId
 - **Server URL**: `https://whozin.io` (remote URL pattern — WebView points to production)
 
 ### Subscription Products

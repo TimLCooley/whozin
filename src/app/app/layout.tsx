@@ -1,15 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Capacitor } from '@capacitor/core'
 import { useSwipeBack } from '@/hooks/use-swipe-back'
+import { usePushNotifications } from '@/lib/use-push-notifications'
 import { BottomNav } from '@/components/app/bottom-nav'
+import { PushPermissionGate } from '@/components/app/push-permission-gate'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [ready, setReady] = useState(false)
+  const [needsPushPermission, setNeedsPushPermission] = useState(false)
   useSwipeBack()
+  usePushNotifications()
 
   useEffect(() => {
     const supabase = createClient()
@@ -28,6 +33,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           router.replace('/auth/complete-profile')
           return
         }
+
+        // On native, check if push token is saved
+        if (Capacitor.isNativePlatform() && !profile.push_token) {
+          setNeedsPushPermission(true)
+        }
       }
       setReady(true)
     })
@@ -42,12 +52,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [router])
 
+  const handlePushGranted = useCallback(() => {
+    setNeedsPushPermission(false)
+  }, [])
+
   if (!ready) {
     return (
       <div className="min-h-dvh flex items-center justify-center">
         <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
+  }
+
+  if (needsPushPermission) {
+    return <PushPermissionGate onGranted={handlePushGranted} />
   }
 
   return (

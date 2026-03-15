@@ -1,4 +1,5 @@
 import { getAdminClient } from '@/lib/supabase/admin'
+import { sendPush, pushGroupMembers } from '@/lib/push'
 
 interface CreateAlertParams {
   user_id: string
@@ -19,6 +20,14 @@ export async function createAlert(params: CreateAlertParams) {
     link: params.link || null,
     meta: params.meta || {},
   })
+
+  // Also send push notification (fire and forget)
+  sendPush({
+    userId: params.user_id,
+    title: params.title,
+    body: params.body,
+    link: params.link,
+  }).catch(() => {})
 }
 
 // Create alerts for all group members except the actor
@@ -46,4 +55,11 @@ export async function alertGroupMembers(
   }))
 
   await admin.from('whozin_alerts').insert(rows)
+
+  // Also send push notifications (fire and forget)
+  pushGroupMembers(groupId, excludeUserId, {
+    title: alert.title,
+    body: alert.body,
+    link: alert.link,
+  }).catch(() => {})
 }
