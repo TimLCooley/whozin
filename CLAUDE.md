@@ -4,8 +4,9 @@
 
 **MANDATORY on every session start (including resumed sessions):** Run these checks before doing ANY other work:
 
-1. **GitHub** — Run `gh auth status` and confirm `TimLCooley` is the **active** account. If `TimLCooley-SGS` (work) is active instead, run `gh auth switch --user TimLCooley` immediately.
-2. **Vercel** — Run `npx vercel switch tim-cooleys-projects-41557754` to ensure the correct team.
+1. **Git Pull** — Run `git pull origin master` to ensure the local repo is up to date with the latest pushed code. If there are local changes that conflict, stash them first (`git stash && git pull origin master && git stash pop`).
+2. **GitHub** — Run `gh auth status` and confirm `TimLCooley` is the **active** account. If `TimLCooley-SGS` (work) is active instead, run `gh auth switch --user TimLCooley` immediately. (Skip if `gh` is not installed.)
+3. **Vercel** — Run `npx vercel switch tim-cooleys-projects-41557754` to ensure the correct team.
 
 ### GitHub
 - **Account**: `TimLCooley` (personal) — NOT `TimLCooley-SGS` (work)

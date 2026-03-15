@@ -43,8 +43,16 @@ next-env.d.ts
 .vercel
 .env*.local
 
-# Capacitor native projects
-/ios/
+# iOS — committed for CI/CD (exclude build artifacts and local config)
+/ios/App/build/
+/ios/App/Pods/
+/ios/App/output/
+/ios/App/App/public/
+/ios/DerivedData/
+/ios/xcuserdata/
+/ios/capacitor-cordova-ios-plugins/
+/ios/App/App/capacitor.config.json
+/ios/App/App/config.xml
 
 # Android — committed for CI/CD (exclude build artifacts and local config)
 /android/build/
