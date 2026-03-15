@@ -70,7 +70,7 @@ export default function GroupsListPage() {
   ]
 
   return (
-    <div className="min-h-dvh flex flex-col bg-surface">
+    <div className="h-full flex flex-col bg-surface">
       <AppHeader showBack />
 
       <div className="flex-1 pb-20 px-4">

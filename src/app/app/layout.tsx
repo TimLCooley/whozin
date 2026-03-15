@@ -52,8 +52,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-dvh md:flex md:items-center md:justify-center md:bg-gray-100">
-      <div className="relative w-full h-full md:max-w-[480px] md:h-[calc(100dvh-4rem)] md:max-h-[932px] md:rounded-3xl md:shadow-2xl md:border md:border-gray-200 bg-background" style={{ transform: 'translateZ(0)' }}>
-        <div className="h-full overflow-y-auto">
+      <div className="relative w-full h-full md:max-w-[480px] md:h-[calc(100dvh-4rem)] md:max-h-[932px] md:rounded-3xl md:shadow-2xl md:border md:border-gray-200 bg-background flex flex-col" style={{ transform: 'translateZ(0)' }}>
+        <div className="flex-1 flex flex-col min-h-0">
           {children}
         </div>
         <BottomNav />

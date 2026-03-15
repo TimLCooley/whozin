@@ -109,7 +109,7 @@ export default function AlertsPage() {
   const unreadCount = alerts.filter((a) => !a.read).length
 
   return (
-    <div className="min-h-dvh flex flex-col bg-surface">
+    <div className="h-full flex flex-col bg-surface">
       <AppHeader showBack />
 
       <div className="bg-background border-b border-border/40 px-4 py-3 flex items-center justify-between">

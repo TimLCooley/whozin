@@ -106,7 +106,7 @@ export default function AppHome() {
   }
 
   return (
-    <div className="h-dvh flex flex-col bg-surface overflow-hidden">
+    <div className="relative h-full flex flex-col bg-surface overflow-hidden">
       <AppHeader />
 
       {/* Tabs */}
@@ -491,7 +491,7 @@ export default function AppHome() {
       {/* FAB */}
       <button
         onClick={() => router.push('/app/activities/create')}
-        className="fixed bottom-[72px] right-4 w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shadow-[0_4px_14px_rgba(66,133,244,0.35)] active:scale-95 transition-transform z-50"
+        className="absolute bottom-4 right-4 w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shadow-[0_4px_14px_rgba(66,133,244,0.35)] active:scale-95 transition-transform z-50"
         style={{ animation: 'fabPulse 3s ease-in-out infinite' }}
         aria-label="Create activity"
       >

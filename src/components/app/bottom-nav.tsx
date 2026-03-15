@@ -56,7 +56,7 @@ export function BottomNav() {
   const router = useRouter()
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/60 pb-[env(safe-area-inset-bottom)] z-40">
+    <nav className="flex-shrink-0 bg-background/95 backdrop-blur-md border-t border-border/60 pb-[env(safe-area-inset-bottom)] z-40">
       <div className="flex">
         {tabs.map((tab) => {
           const isActive = tab.href === '/app'

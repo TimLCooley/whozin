@@ -146,7 +146,7 @@ export default function ActivityDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex flex-col bg-surface">
+      <div className="h-full flex flex-col bg-surface">
         <AppHeader showBack />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -157,7 +157,7 @@ export default function ActivityDetailPage() {
 
   if (!activity) {
     return (
-      <div className="min-h-dvh flex flex-col bg-surface">
+      <div className="h-full flex flex-col bg-surface">
         <AppHeader showBack />
         <div className="flex-1 flex items-center justify-center text-muted">Activity not found.</div>
       </div>
@@ -179,7 +179,7 @@ export default function ActivityDetailPage() {
   ]
 
   return (
-    <div className="h-dvh flex flex-col bg-surface overflow-hidden">
+    <div className="h-full flex flex-col bg-surface overflow-hidden">
       <AppHeader showBack />
 
       {/* Activity Title Bar */}

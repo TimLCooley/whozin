@@ -314,7 +314,7 @@ export default function CreateActivityPage() {
   // ── MODE SELECTOR ──
   if (mode === 'select') {
     return (
-      <div className="min-h-dvh flex flex-col bg-surface">
+      <div className="h-full flex flex-col bg-surface">
         <AppHeader showBack />
         <div className="bg-background border-b border-border/40 px-4 py-3 text-center">
           <h1 className="text-[17px] font-bold text-foreground">Create Activity</h1>
@@ -373,7 +373,7 @@ export default function CreateActivityPage() {
   if (mode === 'fill') {
     const selectedPresetObj = presets.find((p) => p.id === selectedPreset)
     return (
-      <div className="min-h-dvh flex flex-col bg-surface">
+      <div className="h-full flex flex-col bg-surface">
         <AppHeader showBack onBack={() => setMode('select')} />
 
         <div className="bg-background border-b border-border/40 px-4 py-3 text-center">
@@ -701,7 +701,7 @@ export default function CreateActivityPage() {
   // ── BUILD GROUP ACTIVITY MODE (existing full flow) ──
 
   return (
-    <div className="min-h-dvh flex flex-col bg-surface">
+    <div className="h-full flex flex-col bg-surface">
       <AppHeader showBack onBack={() => setMode('select')} />
 
       {/* Title */}
