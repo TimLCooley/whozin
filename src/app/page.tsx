@@ -105,20 +105,22 @@ export default function HomePage() {
   const socialSection = useInView()
   const router = useRouter()
 
-  // If user is already logged in or on native app, skip to app
+  // On native app, go straight to auth (no landing page)
+  // Otherwise just show the landing page immediately (no auth check blocking render)
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        router.replace('/app')
-      } else {
-        // On native app, go straight to auth (no landing page)
-        if (isNative()) {
+    if (isNative()) {
+      const supabase = createClient()
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          router.replace('/app')
+        } else {
           setShowAuth(true)
+          setCheckingAuth(false)
         }
-        setCheckingAuth(false)
-      }
-    })
+      })
+    } else {
+      setCheckingAuth(false)
+    }
   }, [router])
 
   useEffect(() => {
@@ -137,6 +139,18 @@ export default function HomePage() {
     }, 3500)
     return () => clearInterval(interval)
   }, [])
+
+  // Check session before showing auth — if already logged in, go straight to app
+  function handleSignIn() {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        router.replace('/app')
+      } else {
+        setShowAuth(true)
+      }
+    })
+  }
 
   const heroActivity = HERO_ACTIVITIES[activityIdx]
 
@@ -174,7 +188,7 @@ export default function HomePage() {
           <nav className="flex items-center justify-between mb-16 md:mb-24">
             <BrandedFullLogo className="h-9" />
             <button
-              onClick={() => setShowAuth(true)}
+              onClick={handleSignIn}
               className="text-white/80 hover:text-white text-sm font-semibold px-5 py-2.5 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/5 transition-all"
             >
               Sign In
@@ -203,7 +217,7 @@ export default function HomePage() {
 
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={() => setShowAuth(true)}
+                    onClick={handleSignIn}
                     className="px-8 py-4 rounded-2xl bg-primary text-white font-bold text-base hover:bg-primary-dark active:scale-[0.97] transition-all shadow-[0_4px_24px_rgba(66,133,244,0.4)] hover:shadow-[0_8px_32px_rgba(66,133,244,0.5)]"
                   >
                     Get Started — It&apos;s Free
@@ -528,7 +542,7 @@ export default function HomePage() {
           </p>
 
           <button
-            onClick={() => setShowAuth(true)}
+            onClick={handleSignIn}
             className="px-10 py-4 rounded-2xl bg-primary text-white font-bold text-lg hover:bg-primary-dark active:scale-[0.97] transition-all shadow-[0_4px_24px_rgba(66,133,244,0.4)] hover:shadow-[0_8px_32px_rgba(66,133,244,0.5)]"
           >
             Get Started — Free Forever
