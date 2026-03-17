@@ -1,6 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import AppStoreAssets from '@/components/admin/app-store-assets'
+
+interface HealthResult {
+  id: string // integration name
+  status: 'healthy' | 'degraded' | 'down' | 'unchecked'
+  message: string
+  checked_at: string
+}
 
 interface EnvVar {
   key: string
@@ -145,35 +153,28 @@ const INTEGRATIONS: Integration[] = [
 ]
 
 const API_ENDPOINTS = [
-  // Auth
   { method: 'POST', path: '/api/auth/send-otp', desc: 'Send OTP code via SMS' },
   { method: 'POST', path: '/api/auth/verify-otp', desc: 'Verify OTP and create/link account' },
   { method: 'POST', path: '/api/auth/sign-up', desc: 'Legacy password sign-up' },
   { method: 'GET', path: '/auth/callback', desc: 'OAuth callback (Google/Apple)' },
-  // User
   { method: 'GET', path: '/api/user/profile', desc: 'Current user profile' },
   { method: 'POST', path: '/api/user/verify-email', desc: 'Send email verification code' },
   { method: 'PUT', path: '/api/user/verify-email', desc: 'Verify and update email' },
   { method: 'POST', path: '/api/user/push-token', desc: 'Register push notification token' },
   { method: 'DELETE', path: '/api/user/push-token', desc: 'Unregister push token' },
-  // Groups
   { method: 'GET', path: '/api/groups', desc: 'List user groups' },
   { method: 'POST', path: '/api/groups', desc: 'Create group' },
   { method: 'GET', path: '/api/groups/[id]', desc: 'Group detail with members' },
   { method: 'POST', path: '/api/groups/[id]/members', desc: 'Add member to group' },
   { method: 'GET', path: '/api/groups/contacts', desc: 'Contacts from user groups' },
   { method: 'GET', path: '/api/friends', desc: 'Friends list (from all groups)' },
-  // Activities
   { method: 'GET', path: '/api/activities', desc: 'List activities' },
   { method: 'POST', path: '/api/activities', desc: 'Create activity' },
   { method: 'GET', path: '/api/activities/presets', desc: 'Activity presets' },
   { method: 'POST', path: '/api/activities/upload-image', desc: 'Upload activity image' },
   { method: 'POST', path: '/api/activities/generate-image', desc: 'AI-generate activity image' },
-  // Google
   { method: 'GET', path: '/api/google/contacts', desc: 'Search Google Contacts' },
-  // Contact
   { method: 'POST', path: '/api/contact', desc: 'Contact form submission' },
-  // Admin
   { method: 'GET', path: '/api/admin/settings', desc: 'Fetch all app settings' },
   { method: 'PUT', path: '/api/admin/settings', desc: 'Update app settings' },
   { method: 'POST', path: '/api/admin/upload', desc: 'Upload branding assets' },
@@ -183,29 +184,18 @@ const API_ENDPOINTS = [
   { method: 'GET', path: '/api/admin/groups', desc: 'All groups (admin)' },
   { method: 'GET', path: '/api/admin/activities', desc: 'All activities (admin)' },
   { method: 'GET', path: '/api/admin/organizations', desc: 'All organizations (admin)' },
-  // Builds
   { method: 'GET', path: '/api/admin/builds', desc: 'Build history (admin)' },
   { method: 'POST', path: '/api/admin/builds', desc: 'Record build event (CI webhook)' },
   { method: 'POST', path: '/api/admin/builds/setup', desc: 'Create app_builds table' },
-  // Webhooks
   { method: 'POST', path: '/api/webhooks/revenuecat', desc: 'RevenueCat subscription events' },
   { method: 'POST', path: '/api/webhooks/stripe', desc: 'Stripe subscription events' },
-  // Twilio
   { method: 'POST', path: '/api/twilio/webhook', desc: 'Twilio SMS status callback' },
-  // Misc
   { method: 'POST', path: '/api/messaging/test', desc: 'Send test SMS/email' },
   { method: 'GET', path: '/api/favicon', desc: 'Dynamic favicon' },
   { method: 'GET', path: '/api/locations', desc: 'Allowed country codes' },
   { method: 'GET', path: '/api/alerts', desc: 'User alerts/notifications' },
   { method: 'POST', path: '/api/cron/process-invites', desc: 'Process invite queue (cron)' },
 ]
-
-function getStatus(integration: Integration, envStatus: Record<string, boolean>): 'configured' | 'partial' | 'missing' {
-  const set = integration.envVars.filter((v) => envStatus[v.key])
-  if (set.length === integration.envVars.length) return 'configured'
-  if (set.length > 0) return 'partial'
-  return 'missing'
-}
 
 interface PlatformStatus {
   platform: 'android' | 'ios'
@@ -230,6 +220,7 @@ interface PlatformStatus {
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
   if (mins < 60) return `${mins}m ago`
   const hrs = Math.floor(mins / 60)
   if (hrs < 24) return `${hrs}h ago`
@@ -274,7 +265,6 @@ function StoreStatusCard({ platform }: { platform: PlatformStatus }) {
         <div className="text-[12px] text-muted">No builds yet. {isAndroid ? 'CI/CD pipeline is ready.' : 'CI/CD not set up yet.'}</div>
       ) : (
         <div className="space-y-2.5">
-          {/* Latest build */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[11px] text-muted uppercase font-semibold tracking-wide">Latest Build</p>
@@ -297,7 +287,6 @@ function StoreStatusCard({ platform }: { platform: PlatformStatus }) {
             )}
           </div>
 
-          {/* Production status */}
           <div className="border-t border-border/30 pt-2">
             <p className="text-[11px] text-muted uppercase font-semibold tracking-wide">Production</p>
             {prod ? (
@@ -320,33 +309,112 @@ function StoreStatusCard({ platform }: { platform: PlatformStatus }) {
   )
 }
 
+function HealthStatusBadge({ status, message }: { status: string; message?: string }) {
+  const styles: Record<string, { bg: string; text: string; label: string }> = {
+    healthy: { bg: 'bg-green-100', text: 'text-green-700', label: 'Healthy' },
+    degraded: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Degraded' },
+    down: { bg: 'bg-red-100', text: 'text-red-600', label: 'Down' },
+    unchecked: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Unchecked' },
+  }
+  const s = styles[status] || styles.unchecked
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>
+        {s.label}
+      </span>
+    </div>
+  )
+}
+
 export default function IntegrationsPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [envStatus, setEnvStatus] = useState<Record<string, boolean>>({})
+  const [healthResults, setHealthResults] = useState<HealthResult[]>([])
   const [storeStatus, setStoreStatus] = useState<PlatformStatus[]>([])
   const [loading, setLoading] = useState(true)
+  const [checking, setChecking] = useState(false)
+  const [lastChecked, setLastChecked] = useState<string | null>(null)
 
+  // Load cached health data + env status on mount
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/env-status').then((r) => r.json()),
+      fetch('/api/admin/health-check/cached').then((r) => r.json()).catch(() => ({ results: [] })),
       fetch('/api/admin/store-status').then((r) => r.json()).catch(() => []),
-    ]).then(([env, stores]) => {
+    ]).then(([env, health, stores]) => {
       setEnvStatus(env)
+      if (health.results?.length > 0) {
+        setHealthResults(health.results)
+        // Find most recent check time
+        const latest = health.results.reduce((max: string, r: HealthResult) =>
+          r.checked_at > max ? r.checked_at : max, '')
+        if (latest) setLastChecked(latest)
+      }
       if (Array.isArray(stores)) setStoreStatus(stores)
     }).finally(() => setLoading(false))
   }, [])
 
-  const configured = INTEGRATIONS.filter((i) => getStatus(i, envStatus) === 'configured').length
+  const runHealthCheck = useCallback(async () => {
+    setChecking(true)
+    try {
+      const res = await fetch('/api/admin/health-check')
+      const data = await res.json()
+      if (data.results) {
+        // Map from health check response format to cached format
+        const mapped = data.results.map((r: { integration: string; status: string; message: string; checked_at: string }) => ({
+          id: r.integration,
+          status: r.status,
+          message: r.message,
+          checked_at: r.checked_at,
+        }))
+        setHealthResults(mapped)
+        setLastChecked(data.checked_at)
+      }
+    } catch {
+      // Failed to run check
+    } finally {
+      setChecking(false)
+    }
+  }, [])
+
+  function getHealthForIntegration(name: string): HealthResult | undefined {
+    return healthResults.find((r) => r.id === name)
+  }
+
+  function getDisplayStatus(integration: Integration): { status: string; message?: string; checkedAt?: string } {
+    const health = getHealthForIntegration(integration.name)
+    if (health) {
+      return { status: health.status, message: health.message, checkedAt: health.checked_at }
+    }
+    // Fallback to env var check
+    if (integration.envVars.length === 0) return { status: 'healthy', message: 'No server credentials needed' }
+    const set = integration.envVars.filter((v) => envStatus[v.key])
+    if (set.length === integration.envVars.length) return { status: 'healthy' }
+    if (set.length > 0) return { status: 'degraded' }
+    return { status: 'down' }
+  }
+
+  const healthyCount = INTEGRATIONS.filter((i) => getDisplayStatus(i).status === 'healthy').length
 
   const android = storeStatus.find((s) => s.platform === 'android')
   const ios = storeStatus.find((s) => s.platform === 'ios')
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-foreground mb-1">API & Integrations</h2>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-xl font-bold text-foreground">API & Integrations</h2>
+        <button
+          onClick={runHealthCheck}
+          disabled={checking}
+          className="text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {checking ? 'Checking...' : 'Run Health Check'}
+        </button>
+      </div>
       <p className="text-[13px] text-muted mb-4">
-        {loading ? '...' : `${configured}/${INTEGRATIONS.length}`} integrations fully configured.
-        Environment variables are managed in Vercel project settings.
+        {loading ? '...' : `${healthyCount}/${INTEGRATIONS.length}`} integrations healthy.
+        {lastChecked && ` Last checked ${timeAgo(lastChecked)}.`}
+        {!lastChecked && !loading && ' No health check run yet — click "Run Health Check" to start.'}
       </p>
 
       {/* Store Status Banner */}
@@ -357,9 +425,14 @@ export default function IntegrationsPage() {
         </div>
       )}
 
+      {/* App Store Assets */}
+      <AppStoreAssets />
+
+      <h3 className="text-sm font-bold text-foreground mt-8 mb-3">Integrations</h3>
       <div className="space-y-3">
         {INTEGRATIONS.map((integration) => {
-          const status = loading ? 'missing' : getStatus(integration, envStatus)
+          const display = loading ? { status: 'unchecked' } : getDisplayStatus(integration)
+          const health = getHealthForIntegration(integration.name)
           return (
             <div key={integration.name} className="bg-background border border-border/50 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
               <button
@@ -371,7 +444,7 @@ export default function IntegrationsPage() {
                   <p className="text-[13px] font-semibold text-foreground">{integration.name}</p>
                   <p className="text-[11px] text-muted truncate">{integration.description}</p>
                 </div>
-                <StatusBadge status={status} />
+                <HealthStatusBadge status={display.status} />
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8892a7" strokeWidth={2.5}
                   strokeLinecap="round" strokeLinejoin="round"
@@ -383,27 +456,45 @@ export default function IntegrationsPage() {
 
               {expanded === integration.name && (
                 <div className="px-4 pb-4 border-t border-border/40 pt-3">
-                  <div className="space-y-2.5 mb-4">
-                    {integration.envVars.map((envVar) => (
-                      <div key={envVar.key} className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[12px] font-medium text-foreground">{envVar.label}</p>
-                          <p className="text-[10px] font-mono text-muted">{envVar.key}</p>
-                        </div>
-                        {envStatus[envVar.key] ? (
-                          <span className="text-[11px] font-semibold text-green-600 bg-green-100 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
-                            Set
-                          </span>
-                        ) : (
-                          <span className="text-[11px] font-semibold text-red-500 bg-red-50 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                            Missing
-                          </span>
-                        )}
+                  {/* Health check result */}
+                  {health && (
+                    <div className="mb-3 px-3 py-2 rounded-lg bg-surface/50 border border-border/30">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[12px] text-foreground font-medium">{health.message}</p>
+                        <span className="text-[10px] text-muted">{timeAgo(health.checked_at)}</span>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+
+                  {/* Env vars */}
+                  {integration.envVars.length > 0 && (
+                    <div className="space-y-2.5 mb-4">
+                      {integration.envVars.map((envVar) => (
+                        <div key={envVar.key} className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[12px] font-medium text-foreground">{envVar.label}</p>
+                            <p className="text-[10px] font-mono text-muted">{envVar.key}</p>
+                          </div>
+                          {envStatus[envVar.key] ? (
+                            <span className="text-[11px] font-semibold text-green-600 bg-green-100 px-2.5 py-1 rounded-full flex items-center gap-1">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
+                              Set
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-red-500 bg-red-50 px-2.5 py-1 rounded-full flex items-center gap-1">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                              Missing
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {integration.envVars.length === 0 && !health && (
+                    <p className="text-[12px] text-muted mb-4">No server credentials required — configured in external dashboard.</p>
+                  )}
+
                   <a
                     href={integration.docsUrl}
                     target="_blank"
@@ -442,18 +533,5 @@ export default function IntegrationsPage() {
         </div>
       </div>
     </div>
-  )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles = {
-    configured: 'bg-green-100 text-green-700',
-    partial: 'bg-yellow-100 text-yellow-700',
-    missing: 'bg-red-100 text-red-600',
-  }
-  return (
-    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${styles[status as keyof typeof styles]}`}>
-      {status}
-    </span>
   )
 }
