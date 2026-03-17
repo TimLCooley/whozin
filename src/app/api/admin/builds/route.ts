@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   const admin = getAdminClient()
 
   // If run_id exists and status is an update (deployed/failed), update existing record
-  if (body.run_id && (body.status === 'deployed' || body.status === 'failed')) {
+  if (body.run_id && ['deployed', 'failed', 'in_review', 'rejected'].includes(body.status)) {
     const { data, error } = await admin
       .from('app_builds')
       .update({

@@ -13,6 +13,18 @@ export async function POST() {
 
   const admin = getAdminClient()
 
+  // Update status constraint to include new statuses if table exists
+  await admin.rpc('exec_sql', {
+    sql: `
+      DO $$ BEGIN
+        ALTER TABLE app_builds DROP CONSTRAINT IF EXISTS app_builds_status_check;
+        ALTER TABLE app_builds ADD CONSTRAINT app_builds_status_check
+          CHECK (status IN ('pending', 'building', 'built', 'deployed', 'failed', 'in_review', 'rejected'));
+      EXCEPTION WHEN undefined_table THEN NULL;
+      END $$;
+    `
+  })
+
   const { error } = await admin.rpc('exec_sql', {
     sql: `
       CREATE TABLE IF NOT EXISTS app_builds (
@@ -20,7 +32,7 @@ export async function POST() {
         platform text NOT NULL CHECK (platform IN ('android', 'ios')),
         version_code integer,
         version_name text,
-        status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'building', 'built', 'deployed', 'failed')),
+        status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'building', 'built', 'deployed', 'failed', 'in_review', 'rejected')),
         track text,
         commit_sha text,
         commit_message text,

@@ -231,9 +231,11 @@ function timeAgo(dateStr: string) {
 function BuildStatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
     deployed: { bg: 'bg-green-100', text: 'text-green-700', label: 'Live' },
+    in_review: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'In Review' },
     built: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Built' },
     building: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Building' },
     pending: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
+    rejected: { bg: 'bg-red-100', text: 'text-red-600', label: 'Rejected' },
     failed: { bg: 'bg-red-100', text: 'text-red-600', label: 'Failed' },
   }
   const c = config[status] || config.pending
@@ -244,7 +246,7 @@ function BuildStatusBadge({ status }: { status: string }) {
   )
 }
 
-function StoreStatusCard({ platform, onTrigger, triggering }: { platform: PlatformStatus; onTrigger: (p: 'android' | 'ios', track: string) => void; triggering: boolean }) {
+function StoreStatusCard({ platform, onTrigger, triggering, onStatusUpdate }: { platform: PlatformStatus; onTrigger: (p: 'android' | 'ios', track: string) => void; triggering: boolean; onStatusUpdate: (p: 'android' | 'ios', status: string) => void }) {
   const isAndroid = platform.platform === 'android'
   const icon = isAndroid ? '🤖' : '🍎'
   const name = isAndroid ? 'Google Play' : 'App Store'
@@ -314,6 +316,34 @@ function StoreStatusCard({ platform, onTrigger, triggering }: { platform: Platfo
       >
         {triggering ? 'Triggering...' : `Build & Deploy to ${isAndroid ? 'Google Play' : 'App Store'}`}
       </button>
+
+      {/* Status update buttons */}
+      {latest && latest.status !== 'in_review' && latest.status !== 'deployed' && latest.status !== 'failed' && (
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={() => onStatusUpdate(platform.platform, 'in_review')}
+            className="flex-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Mark as In Review
+          </button>
+        </div>
+      )}
+      {latest && latest.status === 'in_review' && (
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={() => onStatusUpdate(platform.platform, 'deployed')}
+            className="flex-1 text-[11px] font-semibold text-green-700 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Approved
+          </button>
+          <button
+            onClick={() => onStatusUpdate(platform.platform, 'rejected')}
+            className="flex-1 text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Rejected
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -433,6 +463,33 @@ export default function IntegrationsPage() {
     }
   }, [])
 
+  const updateBuildStatus = useCallback(async (platform: 'android' | 'ios', status: string) => {
+    try {
+      // Get the latest build for this platform to update
+      const buildsRes = await fetch(`/api/admin/builds?platform=${platform}`)
+      const builds = await buildsRes.json()
+      if (!builds.length) return
+
+      const latest = builds[0]
+      await fetch('/api/admin/builds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform,
+          status,
+          run_id: latest.run_id,
+          track: latest.track,
+        }),
+      })
+
+      // Refresh store status
+      const stores = await fetch('/api/admin/store-status').then((r) => r.json()).catch(() => [])
+      if (Array.isArray(stores)) setStoreStatus(stores)
+    } catch {
+      // silently fail
+    }
+  }, [])
+
   function getHealthForIntegration(name: string): HealthResult | undefined {
     return healthResults.find((r) => r.id === name)
   }
@@ -477,8 +534,8 @@ export default function IntegrationsPage() {
       {!loading && (
         <div className="mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {android && <StoreStatusCard platform={android} onTrigger={triggerBuild} triggering={triggering} />}
-            {ios && <StoreStatusCard platform={ios} onTrigger={triggerBuild} triggering={triggering} />}
+            {android && <StoreStatusCard platform={android} onTrigger={triggerBuild} triggering={triggering} onStatusUpdate={updateBuildStatus} />}
+            {ios && <StoreStatusCard platform={ios} onTrigger={triggerBuild} triggering={triggering} onStatusUpdate={updateBuildStatus} />}
           </div>
           <div className="flex items-center gap-3 mt-3">
             <button
