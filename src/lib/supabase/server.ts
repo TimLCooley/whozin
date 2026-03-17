@@ -17,7 +17,12 @@ export async function createServerSupabaseClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, {
+                ...options,
+                maxAge: options?.maxAge ?? 60 * 60 * 24 * 30,
+                sameSite: options?.sameSite ?? 'lax',
+                secure: options?.secure ?? process.env.NODE_ENV === 'production',
+              })
             )
           } catch {
             // This can be ignored in Server Components

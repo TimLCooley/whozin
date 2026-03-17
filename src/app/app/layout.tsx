@@ -49,7 +49,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }
     })
 
-    return () => subscription.unsubscribe()
+    // Proactive token refresh every 10 minutes to keep session alive
+    const refreshInterval = setInterval(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          const expiresAt = session.expires_at ?? 0
+          const now = Math.floor(Date.now() / 1000)
+          // Refresh if token expires within 15 minutes
+          if (expiresAt - now < 900) {
+            supabase.auth.refreshSession()
+          }
+        }
+      })
+    }, 10 * 60 * 1000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearInterval(refreshInterval)
+    }
   }, [router])
 
   const handlePushGranted = useCallback(() => {
