@@ -394,6 +394,15 @@ export default function IntegrationsPage() {
       }
       if (Array.isArray(stores)) setStoreStatus(stores)
     }).finally(() => setLoading(false))
+
+    // Auto-refresh store status every 30 seconds
+    const interval = setInterval(() => {
+      fetch('/api/admin/store-status').then((r) => r.json()).then((stores) => {
+        if (Array.isArray(stores)) setStoreStatus(stores)
+      }).catch(() => {})
+    }, 30_000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const runHealthCheck = useCallback(async () => {
