@@ -125,6 +125,7 @@ jobs:
           releaseFiles: artifacts/app-release.aab
           track: ${{ inputs.track || 'internal' }}
           status: completed
+          changesNotSentForReview: true
 
       - name: Notify Whozin API — deploy complete
         if: always()
