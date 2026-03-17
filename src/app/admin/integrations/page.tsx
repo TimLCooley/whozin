@@ -244,7 +244,7 @@ function BuildStatusBadge({ status }: { status: string }) {
   )
 }
 
-function StoreStatusCard({ platform }: { platform: PlatformStatus }) {
+function StoreStatusCard({ platform, onTrigger, triggering }: { platform: PlatformStatus; onTrigger: (p: 'android' | 'ios', track: string) => void; triggering: boolean }) {
   const isAndroid = platform.platform === 'android'
   const icon = isAndroid ? '🤖' : '🍎'
   const name = isAndroid ? 'Google Play' : 'App Store'
@@ -262,9 +262,9 @@ function StoreStatusCard({ platform }: { platform: PlatformStatus }) {
       </div>
 
       {!latest ? (
-        <div className="text-[12px] text-muted">No builds yet. {isAndroid ? 'CI/CD pipeline is ready.' : 'CI/CD not set up yet.'}</div>
+        <div className="text-[12px] text-muted mb-3">No builds tracked yet.</div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 mb-3">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[11px] text-muted uppercase font-semibold tracking-wide">Latest Build</p>
@@ -305,6 +305,15 @@ function StoreStatusCard({ platform }: { platform: PlatformStatus }) {
           </div>
         </div>
       )}
+
+      {/* Build & Deploy button */}
+      <button
+        onClick={() => onTrigger(platform.platform, 'production')}
+        disabled={triggering}
+        className="w-full text-[12px] font-bold text-white bg-primary hover:bg-primary/90 active:scale-[0.98] px-4 py-2.5 rounded-xl transition-all disabled:opacity-50"
+      >
+        {triggering ? 'Triggering...' : `Build & Deploy to ${isAndroid ? 'Google Play' : 'App Store'}`}
+      </button>
     </div>
   )
 }
@@ -334,6 +343,9 @@ export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState(false)
   const [lastChecked, setLastChecked] = useState<string | null>(null)
+  const [triggering, setTriggering] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [triggerMsg, setTriggerMsg] = useState<string | null>(null)
 
   // Load cached health data + env status on mount
   useEffect(() => {
@@ -374,6 +386,50 @@ export default function IntegrationsPage() {
       // Failed to run check
     } finally {
       setChecking(false)
+    }
+  }, [])
+
+  const triggerBuild = useCallback(async (platform: 'android' | 'ios', track: string) => {
+    setTriggering(true)
+    setTriggerMsg(null)
+    try {
+      const res = await fetch('/api/admin/builds/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform, track }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setTriggerMsg(`Build triggered! ${data.message}`)
+      } else {
+        setTriggerMsg(`Error: ${data.error}`)
+      }
+    } catch {
+      setTriggerMsg('Failed to trigger build.')
+    } finally {
+      setTriggering(false)
+    }
+  }, [])
+
+  const syncBuilds = useCallback(async () => {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/admin/builds/sync', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.synced > 0) {
+        // Reload store status
+        const stores = await fetch('/api/admin/store-status').then((r) => r.json()).catch(() => [])
+        if (Array.isArray(stores)) setStoreStatus(stores)
+        setTriggerMsg(`Synced ${data.synced} builds from GitHub Actions.`)
+      } else if (res.ok) {
+        setTriggerMsg('Already up to date — no new builds to sync.')
+      } else {
+        setTriggerMsg(`Sync error: ${data.error}`)
+      }
+    } catch {
+      setTriggerMsg('Failed to sync builds.')
+    } finally {
+      setSyncing(false)
     }
   }, [])
 
@@ -419,9 +475,25 @@ export default function IntegrationsPage() {
 
       {/* Store Status Banner */}
       {!loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-          {android && <StoreStatusCard platform={android} />}
-          {ios && <StoreStatusCard platform={ios} />}
+        <div className="mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {android && <StoreStatusCard platform={android} onTrigger={triggerBuild} triggering={triggering} />}
+            {ios && <StoreStatusCard platform={ios} onTrigger={triggerBuild} triggering={triggering} />}
+          </div>
+          <div className="flex items-center gap-3 mt-3">
+            <button
+              onClick={syncBuilds}
+              disabled={syncing}
+              className="text-[11px] font-semibold text-muted hover:text-foreground bg-surface hover:bg-surface/80 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {syncing ? 'Syncing...' : 'Sync Build History from GitHub'}
+            </button>
+            {triggerMsg && (
+              <p className={`text-[11px] font-medium ${triggerMsg.startsWith('Error') || triggerMsg.startsWith('Failed') ? 'text-red-500' : 'text-green-600'}`}>
+                {triggerMsg}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
