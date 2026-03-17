@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
+import { getAdminClient } from '@/lib/supabase/admin'
 import { isSuperAdmin } from '@/lib/auth'
 
 // POST — trigger a GitHub Actions build workflow
@@ -51,6 +52,14 @@ export async function POST(req: NextRequest) {
   )
 
   if (res.status === 204) {
+    // Immediately create a "building" record so the UI updates right away
+    const admin = getAdminClient()
+    await admin.from('app_builds').insert({
+      platform,
+      status: 'building',
+      track: track || 'production',
+    })
+
     return NextResponse.json({ success: true, message: `${platform} build triggered on ${track || 'production'} track` })
   }
 

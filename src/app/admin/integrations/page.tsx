@@ -441,6 +441,9 @@ export default function IntegrationsPage() {
       const data = await res.json()
       if (res.ok) {
         setTriggerMsg(`Build triggered! ${data.message}`)
+        // Refresh store status immediately to show "Building"
+        const stores = await fetch('/api/admin/store-status').then((r) => r.json()).catch(() => [])
+        if (Array.isArray(stores)) setStoreStatus(stores)
       } else {
         setTriggerMsg(`Error: ${data.error}`)
       }
