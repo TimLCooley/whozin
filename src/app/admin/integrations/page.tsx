@@ -484,14 +484,12 @@ export default function IntegrationsPage() {
       if (!builds.length) return
 
       const latest = builds[0]
-      await fetch('/api/admin/builds', {
-        method: 'POST',
+      await fetch('/api/admin/builds/status', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          platform,
+          id: latest.id,
           status,
-          run_id: latest.run_id,
-          track: latest.track,
         }),
       })
 
