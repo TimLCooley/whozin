@@ -118,7 +118,7 @@ function DimensionBadge({ dimensions, required }: { dimensions: string; required
 export default function AppStoreAssets() {
   const [assets, setAssets] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [expandedGroup, setExpandedGroup] = useState<string | null>('source')
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/admin/settings')
