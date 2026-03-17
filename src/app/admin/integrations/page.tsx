@@ -230,8 +230,9 @@ function timeAgo(dateStr: string) {
 
 function BuildStatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    deployed: { bg: 'bg-green-100', text: 'text-green-700', label: 'Live' },
+    live: { bg: 'bg-green-100', text: 'text-green-700', label: 'Live' },
     in_review: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'In Review' },
+    deployed: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Deployed' },
     built: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Built' },
     building: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Building' },
     pending: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
@@ -318,7 +319,7 @@ function StoreStatusCard({ platform, onTrigger, triggering, onStatusUpdate }: { 
       </button>
 
       {/* Status update buttons */}
-      {latest && latest.status !== 'in_review' && latest.status !== 'deployed' && latest.status !== 'failed' && (
+      {latest && !['in_review', 'live', 'failed', 'pending', 'building'].includes(latest.status) && (
         <div className="flex gap-2 mt-2">
           <button
             onClick={() => onStatusUpdate(platform.platform, 'in_review')}
@@ -331,7 +332,7 @@ function StoreStatusCard({ platform, onTrigger, triggering, onStatusUpdate }: { 
       {latest && latest.status === 'in_review' && (
         <div className="flex gap-2 mt-2">
           <button
-            onClick={() => onStatusUpdate(platform.platform, 'deployed')}
+            onClick={() => onStatusUpdate(platform.platform, 'live')}
             className="flex-1 text-[11px] font-semibold text-green-700 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-colors"
           >
             Approved

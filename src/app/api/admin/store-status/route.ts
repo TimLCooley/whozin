@@ -47,13 +47,12 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(1)
 
-  // Get latest production deploy per platform
+  // Get latest live production build per platform
   const { data: androidProd } = await admin
     .from('app_builds')
     .select('*')
     .eq('platform', 'android')
-    .eq('track', 'production')
-    .eq('status', 'deployed')
+    .eq('status', 'live')
     .order('created_at', { ascending: false })
     .limit(1)
 
@@ -61,8 +60,7 @@ export async function GET() {
     .from('app_builds')
     .select('*')
     .eq('platform', 'ios')
-    .eq('track', 'production')
-    .eq('status', 'deployed')
+    .eq('status', 'live')
     .order('created_at', { ascending: false })
     .limit(1)
 

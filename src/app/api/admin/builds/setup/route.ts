@@ -19,7 +19,7 @@ export async function POST() {
       DO $$ BEGIN
         ALTER TABLE app_builds DROP CONSTRAINT IF EXISTS app_builds_status_check;
         ALTER TABLE app_builds ADD CONSTRAINT app_builds_status_check
-          CHECK (status IN ('pending', 'building', 'built', 'deployed', 'failed', 'in_review', 'rejected'));
+          CHECK (status IN ('pending', 'building', 'built', 'deployed', 'failed', 'in_review', 'rejected', 'live'));
       EXCEPTION WHEN undefined_table THEN NULL;
       END $$;
     `
@@ -32,7 +32,7 @@ export async function POST() {
         platform text NOT NULL CHECK (platform IN ('android', 'ios')),
         version_code integer,
         version_name text,
-        status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'building', 'built', 'deployed', 'failed', 'in_review', 'rejected')),
+        status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'building', 'built', 'deployed', 'failed', 'in_review', 'rejected', 'live')),
         track text,
         commit_sha text,
         commit_message text,
