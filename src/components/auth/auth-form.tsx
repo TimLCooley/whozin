@@ -116,13 +116,11 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     try {
       if (native && platform === 'ios') {
         // Native iOS: use Capacitor Apple Sign In plugin
-        const { SignInWithApple } = await import('@capacitor-community/apple-sign-in')
-        const result = await SignInWithApple.authorize({
-          clientId: 'io.whozin.app',
-          redirectURI: 'https://whozin.io/auth/callback',
-          scopes: 'email name',
+        const { AppleSignIn, SignInScope } = await import('@capawesome/capacitor-apple-sign-in')
+        const result = await AppleSignIn.signIn({
+          scopes: [SignInScope.Email, SignInScope.FullName],
         })
-        const idToken = result.response?.identityToken
+        const idToken = result.idToken
         if (!idToken) {
           setError('No ID token received from Apple')
           setSocialLoading(null)
@@ -172,7 +170,7 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       // User cancelled
-      if (msg.includes('popup_closed') || msg.includes('cancelled') || msg.includes('canceled') || msg.includes('1001')) {
+      if (msg.includes('popup_closed') || msg.includes('cancelled') || msg.includes('canceled') || msg.includes('1001') || msg.includes('SIGN_IN_CANCELED')) {
         setSocialLoading(null)
         return
       }

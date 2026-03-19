@@ -18,7 +18,7 @@ android {
     }
     signingConfigs {
         release {
-            def ksFile = System.getenv("ANDROID_KEYSTORE_PATH") ?: 'C:/Users/tim/Downloads/whozin-keystore3.jks'
+            def ksFile = System.getenv("ANDROID_KEYSTORE_PATH") ?: "${System.getProperty('user.home')}/Downloads/whozin-keystore3.jks"
             storeFile file(ksFile)
             storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: '26Swetipa!!'
             keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: 'whozin'
