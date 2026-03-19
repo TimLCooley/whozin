@@ -11,6 +11,13 @@ const config: CapacitorConfig = {
   ios: {
     scheme: 'Whozin',
   },
+  plugins: {
+    GoogleAuth: {
+      scopes: ['email', 'profile', 'https://www.googleapis.com/auth/contacts.readonly'],
+      serverClientId: '85647149825-ppb9jgfq3umjv47s4rlbr4paj0ns4lbq.apps.googleusercontent.com',
+      forceCodeForRefreshToken: true,
+    },
+  },
 }
 
 export default config

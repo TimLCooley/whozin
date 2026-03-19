@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { isNative, getPlatform } from '@/lib/capacitor'
 
 declare global {
   interface Window {
@@ -63,8 +64,32 @@ export default function AuthForm({ onBack }: AuthFormProps) {
   const [loading, setLoading] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
 
-  const [socialLoading, setSocialLoading] = useState(false)
+  const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null)
   const phoneDigits = phoneRaw.replace(/\D/g, '').slice(0, 10)
+
+  const platform = getPlatform()
+  const native = isNative()
+
+  // Reset socialLoading when page becomes visible again (user hit back from OAuth redirect)
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        setSocialLoading(null)
+      }
+    }
+    // Also reset on pageshow (bfcache restoration)
+    function handlePageShow(e: PageTransitionEvent) {
+      if (e.persisted) {
+        setSocialLoading(null)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pageshow', handlePageShow)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pageshow', handlePageShow)
+    }
+  }, [])
 
   function formatPhone(value: string): string {
     const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -83,48 +108,76 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     return () => clearTimeout(t)
   }, [resendTimer])
 
+  // ─── Apple Sign In ───────────────────────────────────────
+
   async function handleAppleSignIn() {
-    setSocialLoading(true)
+    setSocialLoading('apple')
     setError('')
     try {
-      // Use Apple JS SDK to get id_token directly, then sign in via Supabase signInWithIdToken
-      // This bypasses Supabase GoTrue's server-side code exchange which has issues
-      await loadAppleScript()
-      window.AppleID.auth.init({
-        clientId: 'io.whozin.app.signin',
-        scope: 'email name',
-        redirectURI: window.location.origin + '/auth/callback',
-        usePopup: true,
-      })
-      const response = await window.AppleID.auth.signIn()
-      const idToken = response.authorization?.id_token
-      if (!idToken) {
-        setError('No ID token received from Apple')
-        setSocialLoading(false)
-        return
+      if (native && platform === 'ios') {
+        // Native iOS: use Capacitor Apple Sign In plugin
+        const { SignInWithApple } = await import('@capacitor-community/apple-sign-in')
+        const result = await SignInWithApple.authorize({
+          clientId: 'io.whozin.app',
+          redirectURI: 'https://whozin.io/auth/callback',
+          scopes: 'email name',
+        })
+        const idToken = result.response?.identityToken
+        if (!idToken) {
+          setError('No ID token received from Apple')
+          setSocialLoading(null)
+          return
+        }
+        const supabase = createClient()
+        const { error: signInError } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: idToken,
+        })
+        if (signInError) {
+          setError(signInError.message)
+          setSocialLoading(null)
+          return
+        }
+        await fetch('/api/auth/ensure-profile', { method: 'POST' })
+        window.location.href = '/app'
+      } else {
+        // Web / Android: use Apple JS SDK popup
+        await loadAppleScript()
+        window.AppleID.auth.init({
+          clientId: 'io.whozin.app.signin',
+          scope: 'email name',
+          redirectURI: window.location.origin + '/auth/callback',
+          usePopup: true,
+        })
+        const response = await window.AppleID.auth.signIn()
+        const idToken = response.authorization?.id_token
+        if (!idToken) {
+          setError('No ID token received from Apple')
+          setSocialLoading(null)
+          return
+        }
+        const supabase = createClient()
+        const { error: signInError } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: idToken,
+        })
+        if (signInError) {
+          setError(signInError.message)
+          setSocialLoading(null)
+          return
+        }
+        await fetch('/api/auth/ensure-profile', { method: 'POST' })
+        window.location.href = '/app'
       }
-      const supabase = createClient()
-      const { error: signInError } = await supabase.auth.signInWithIdToken({
-        provider: 'apple',
-        token: idToken,
-      })
-      if (signInError) {
-        setError(signInError.message)
-        setSocialLoading(false)
-        return
-      }
-      // Ensure whozin_users record exists
-      await fetch('/api/auth/ensure-profile', { method: 'POST' })
-      window.location.href = '/app'
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to start Apple sign-in'
-      // User cancelled the popup
-      if (msg.includes('popup_closed') || msg.includes('cancelled')) {
-        setSocialLoading(false)
+      const msg = err instanceof Error ? err.message : String(err)
+      // User cancelled
+      if (msg.includes('popup_closed') || msg.includes('cancelled') || msg.includes('canceled') || msg.includes('1001')) {
+        setSocialLoading(null)
         return
       }
-      setError(msg)
-      setSocialLoading(false)
+      setError('Apple sign-in failed. Please try again.')
+      setSocialLoading(null)
     }
   }
 
@@ -139,32 +192,72 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     })
   }
 
+  // ─── Google Sign In ──────────────────────────────────────
+
   async function handleGoogleSignIn() {
-    setSocialLoading(true)
+    setSocialLoading('google')
     setError('')
     try {
-      const supabase = createClient()
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          scopes: 'https://www.googleapis.com/auth/contacts.readonly',
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
+      if (native && platform === 'android') {
+        // Native Android: use Capacitor Google Auth plugin
+        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
+        await GoogleAuth.initialize({
+          clientId: '85647149825-ppb9jgfq3umjv47s4rlbr4paj0ns4lbq.apps.googleusercontent.com',
+          scopes: ['email', 'profile', 'https://www.googleapis.com/auth/contacts.readonly'],
+          grantOfflineAccess: true,
+        })
+        const result = await GoogleAuth.signIn()
+        const idToken = result.authentication?.idToken
+        if (!idToken) {
+          setError('No ID token received from Google')
+          setSocialLoading(null)
+          return
+        }
+        const supabase = createClient()
+        const { error: signInError } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+        })
+        if (signInError) {
+          setError(signInError.message)
+          setSocialLoading(null)
+          return
+        }
+        await fetch('/api/auth/ensure-profile', { method: 'POST' })
+        window.location.href = '/app'
+      } else {
+        // Web / iOS: use Supabase OAuth redirect
+        const supabase = createClient()
+        const { error: oauthError } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+            scopes: 'https://www.googleapis.com/auth/contacts.readonly',
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent',
+            },
           },
-        },
-      })
-      if (oauthError) {
-        setError(oauthError.message)
-        setSocialLoading(false)
+        })
+        if (oauthError) {
+          setError(oauthError.message)
+          setSocialLoading(null)
+        }
+        // Browser will redirect — no need to handle success here
       }
-      // Browser will redirect — no need to handle success here
-    } catch {
-      setError('Failed to start Google sign-in')
-      setSocialLoading(false)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // User cancelled
+      if (msg.includes('canceled') || msg.includes('cancelled') || msg.includes('12501')) {
+        setSocialLoading(null)
+        return
+      }
+      setError('Google sign-in failed. Please try again.')
+      setSocialLoading(null)
     }
   }
+
+  // ─── Phone OTP ───────────────────────────────────────────
 
   async function handleSendOtp() {
     if (phoneDigits.length !== 10) return
@@ -374,6 +467,37 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     ? `+1 ${formatPhone(phoneRaw)}`
     : `+${countryCode} ${phoneDigits}`
 
+  // Hide Apple on Android native (not a natural UX there)
+  const showApple = !(native && platform === 'android')
+  // On iOS native, show Apple first (primary). Otherwise Google first.
+  const showAppleFirst = native && platform === 'ios'
+
+  const googleButton = (
+    <button
+      onClick={handleGoogleSignIn}
+      disabled={socialLoading !== null || loading}
+      className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-border
+                 bg-background text-foreground font-semibold text-[14px]
+                 active:scale-[0.98] transition-all disabled:opacity-50 mb-4"
+    >
+      <GoogleIcon />
+      {socialLoading === 'google' ? 'Connecting...' : 'Continue with Google'}
+    </button>
+  )
+
+  const appleButton = showApple ? (
+    <button
+      onClick={handleAppleSignIn}
+      disabled={socialLoading !== null || loading}
+      className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-border
+                 bg-black text-white font-semibold text-[14px]
+                 active:scale-[0.98] transition-all disabled:opacity-50 mb-4"
+    >
+      <AppleIcon />
+      {socialLoading === 'apple' ? 'Connecting...' : 'Continue with Apple'}
+    </button>
+  ) : null
+
   return (
     <div className="min-h-dvh flex flex-col bg-background">
       {/* Header */}
@@ -405,28 +529,12 @@ export default function AuthForm({ onBack }: AuthFormProps) {
           {/* STEP 1: Phone number */}
           {step === 'phone' && (
             <>
-              {/* Social Sign-In */}
-              <button
-                onClick={handleGoogleSignIn}
-                disabled={socialLoading || loading}
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-border
-                           bg-background text-foreground font-semibold text-[14px]
-                           active:scale-[0.98] transition-all disabled:opacity-50 mb-4"
-              >
-                <GoogleIcon />
-                {socialLoading ? 'Connecting...' : 'Continue with Google'}
-              </button>
-
-              <button
-                onClick={handleAppleSignIn}
-                disabled={socialLoading || loading}
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-xl border border-border
-                           bg-black text-white font-semibold text-[14px]
-                           active:scale-[0.98] transition-all disabled:opacity-50 mb-4"
-              >
-                <AppleIcon />
-                {socialLoading ? 'Connecting...' : 'Continue with Apple'}
-              </button>
+              {/* Social Sign-In — order depends on platform */}
+              {showAppleFirst ? (
+                <>{appleButton}{googleButton}</>
+              ) : (
+                <>{googleButton}{appleButton}</>
+              )}
 
               <div className="flex items-center gap-3 mb-4">
                 <div className="flex-1 h-px bg-border" />
