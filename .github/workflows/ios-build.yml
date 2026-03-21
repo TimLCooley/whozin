@@ -116,7 +116,11 @@ jobs:
 
       - name: Notify Whozin API — build complete
         if: always()
+        continue-on-error: true
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
+          MSG=$(echo "$COMMIT_MSG" | head -1 | jq -Rs .)
           curl -s -X POST "${{ secrets.WHOZIN_API_URL }}/api/admin/builds" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.WHOZIN_BUILD_SECRET }}" \
@@ -126,7 +130,7 @@ jobs:
               \"version_name\": \"2.7\",
               \"status\": \"built\",
               \"commit_sha\": \"${{ github.sha }}\",
-              \"commit_message\": $(echo '${{ github.event.head_commit.message }}' | head -1 | jq -Rs .),
+              \"commit_message\": $MSG,
               \"run_id\": ${{ github.run_id }},
               \"run_url\": \"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
             }" || true
