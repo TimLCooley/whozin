@@ -184,6 +184,7 @@ const API_ENDPOINTS = [
   { method: 'GET', path: '/api/admin/groups', desc: 'All groups (admin)' },
   { method: 'GET', path: '/api/admin/activities', desc: 'All activities (admin)' },
   { method: 'GET', path: '/api/admin/organizations', desc: 'All organizations (admin)' },
+  { method: 'GET', path: '/api/admin/build-check', desc: 'Check if native build needed' },
   { method: 'GET', path: '/api/admin/builds', desc: 'Build history (admin)' },
   { method: 'POST', path: '/api/admin/builds', desc: 'Record build event (CI webhook)' },
   { method: 'POST', path: '/api/admin/builds/setup', desc: 'Create app_builds table' },
@@ -232,7 +233,7 @@ function BuildStatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
     live: { bg: 'bg-green-100', text: 'text-green-700', label: 'Live' },
     in_review: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'In Review' },
-    deployed: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Deployed' },
+    deployed: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Uploaded to Store' },
     built: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Built' },
     building: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Building' },
     pending: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Pending' },
@@ -349,6 +350,106 @@ function StoreStatusCard({ platform, onTrigger, triggering, onStatusUpdate }: { 
   )
 }
 
+interface BuildCheckResult {
+  needsBuild: boolean
+  changedNativeFiles: string[]
+  lastBuildSha: string | null
+  lastBuildDate: string | null
+  error?: string
+}
+
+function NativeBuildBanner({ buildCheck, loading, onRecheck, rechecking }: {
+  buildCheck: Record<string, BuildCheckResult> | null
+  loading: boolean
+  onRecheck: () => void
+  rechecking: boolean
+}) {
+  if (loading || !buildCheck) return null
+
+  const android = buildCheck.android
+  const ios = buildCheck.ios
+  const androidNoData = !android || !!android.error
+  const iosNoData = !ios || !!ios.error
+  const androidNeeds = android?.needsBuild
+  const iosNeeds = ios?.needsBuild
+  const anyNeeds = androidNeeds || iosNeeds
+
+  // Collect all changed files per platform
+  const sections: { platform: string; files: string[] }[] = []
+  if (androidNeeds && android) sections.push({ platform: 'Android', files: android.changedNativeFiles })
+  if (iosNeeds && ios) sections.push({ platform: 'iOS', files: ios.changedNativeFiles })
+
+  // Determine banner color
+  let borderColor = 'border-green-300'
+  let bgColor = 'bg-green-50'
+  let iconColor = 'text-green-600'
+  let icon = '✓'
+
+  if (androidNoData && iosNoData) {
+    borderColor = 'border-gray-300'
+    bgColor = 'bg-gray-50'
+    iconColor = 'text-gray-500'
+    icon = '—'
+  } else if (anyNeeds) {
+    borderColor = 'border-amber-300'
+    bgColor = 'bg-amber-50'
+    iconColor = 'text-amber-600'
+    icon = '⚠'
+  }
+
+  return (
+    <div className={`mb-4 border ${borderColor} ${bgColor} rounded-xl p-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className={`text-base ${iconColor} mt-0.5`}>{icon}</span>
+          <div className="min-w-0">
+            {androidNoData && iosNoData ? (
+              <p className="text-[13px] font-semibold text-gray-600">
+                No build history — sync builds from GitHub first
+              </p>
+            ) : anyNeeds ? (
+              <>
+                <p className="text-[13px] font-semibold text-amber-800">
+                  Native build needed
+                </p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  Native files changed since last successful build. A Vercel deploy alone won&apos;t pick up these changes.
+                </p>
+                {sections.map(({ platform, files }) => (
+                  <div key={platform} className="mt-2">
+                    <p className="text-[11px] font-bold text-amber-800">{platform}:</p>
+                    <ul className="mt-0.5 space-y-0.5">
+                      {files.map((f) => (
+                        <li key={f} className="text-[11px] text-amber-700 font-mono truncate">· {f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                <p className="text-[13px] font-semibold text-green-700">
+                  No native build needed
+                </p>
+                <p className="text-[11px] text-green-600 mt-0.5">
+                  No native files changed since last build — Vercel deploy is sufficient.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={onRecheck}
+          disabled={rechecking}
+          className="shrink-0 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {rechecking ? 'Checking...' : 'Recheck'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function HealthStatusBadge({ status, message }: { status: string; message?: string }) {
   const styles: Record<string, { bg: string; text: string; label: string }> = {
     healthy: { bg: 'bg-green-100', text: 'text-green-700', label: 'Healthy' },
@@ -377,9 +478,16 @@ export default function IntegrationsPage() {
   const [triggering, setTriggering] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [triggerMsg, setTriggerMsg] = useState<string | null>(null)
+  const [buildCheck, setBuildCheck] = useState<Record<string, BuildCheckResult> | null>(null)
+  const [buildCheckLoading, setBuildCheckLoading] = useState(true)
+  const [rechecking, setRechecking] = useState(false)
 
-  // Load cached health data + env status on mount
+  // Load cached health data + env status + build check on mount
   useEffect(() => {
+    fetch('/api/admin/build-check').then((r) => r.json()).then((data) => {
+      if (!data.error) setBuildCheck(data)
+    }).catch(() => {}).finally(() => setBuildCheckLoading(false))
+
     Promise.all([
       fetch('/api/admin/env-status').then((r) => r.json()),
       fetch('/api/admin/health-check/cached').then((r) => r.json()).catch(() => ({ results: [] })),
@@ -476,6 +584,19 @@ export default function IntegrationsPage() {
     }
   }, [])
 
+  const recheckBuild = useCallback(async () => {
+    setRechecking(true)
+    try {
+      const res = await fetch('/api/admin/build-check')
+      const data = await res.json()
+      if (!data.error) setBuildCheck(data)
+    } catch {
+      // silently fail
+    } finally {
+      setRechecking(false)
+    }
+  }, [])
+
   const updateBuildStatus = useCallback(async (platform: 'android' | 'ios', status: string) => {
     try {
       // Get the latest build for this platform to update
@@ -540,6 +661,14 @@ export default function IntegrationsPage() {
         {lastChecked && ` Last checked ${timeAgo(lastChecked)}.`}
         {!lastChecked && !loading && ' No health check run yet — click "Run Health Check" to start.'}
       </p>
+
+      {/* Native Build Check Banner */}
+      <NativeBuildBanner
+        buildCheck={buildCheck}
+        loading={buildCheckLoading}
+        onRecheck={recheckBuild}
+        rechecking={rechecking}
+      />
 
       {/* Store Status Banner */}
       {!loading && (

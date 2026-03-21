@@ -31,7 +31,20 @@
           "package_name": "io.whozin.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "85647149825-6p9v0e5jhbfnugsdbbjnk5sbbojncon6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "io.whozin.app",
+            "certificate_hash": "a7b9e48f304c078a6bbf850cb4662497eea0b192"
+          }
+        },
+        {
+          "client_id": "85647149825-ppb9jgfq3umjv47s4rlbr4paj0ns4lbq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD4X3YYRKUo_ryXa7-e6jqrmCRz-FcvrkU"
@@ -39,7 +52,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "85647149825-ppb9jgfq3umjv47s4rlbr4paj0ns4lbq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
