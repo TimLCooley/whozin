@@ -78,9 +78,9 @@ jobs:
 
       - name: Auto-increment build number
         run: |
-          CURRENT=$(grep -oP 'CURRENT_PROJECT_VERSION = \K\d+' ios/App/App.xcodeproj/project.pbxproj | head -1)
-          NEW_BUILD=$((CURRENT + GITHUB_RUN_NUMBER))
-          sed -i '' "s/CURRENT_PROJECT_VERSION = $CURRENT;/CURRENT_PROJECT_VERSION = $NEW_BUILD;/g" ios/App/App.xcodeproj/project.pbxproj
+          # Use a high base + run number to always exceed previous uploads
+          NEW_BUILD=$((100 + GITHUB_RUN_NUMBER))
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $NEW_BUILD;/g" ios/App/App.xcodeproj/project.pbxproj
           echo "BUILD_NUMBER=$NEW_BUILD" >> $GITHUB_ENV
           echo "Build number: $NEW_BUILD"
 
