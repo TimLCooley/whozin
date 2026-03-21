@@ -127,7 +127,7 @@ jobs:
             -d "{
               \"platform\": \"ios\",
               \"version_code\": ${{ env.BUILD_NUMBER }},
-              \"version_name\": \"2.7\",
+              \"version_name\": \"2.8\",
               \"status\": \"built\",
               \"commit_sha\": \"${{ github.sha }}\",
               \"commit_message\": $MSG,
