@@ -18,12 +18,31 @@ export function PushPermissionGate({ onGranted }: Props) {
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
 
+      // Set up listener BEFORE registering
+      const tokenPromise = new Promise<void>((resolve) => {
+        PushNotifications.addListener('registration', async (token) => {
+          try {
+            await fetch('/api/user/push-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token: token.value,
+                platform: Capacitor.getPlatform(),
+              }),
+            })
+          } catch {
+            // will retry on next app load
+          }
+          resolve()
+        })
+        // Timeout after 5s in case registration event doesn't fire
+        setTimeout(resolve, 5000)
+      })
+
       const permResult = await PushNotifications.requestPermissions()
       if (permResult.receive === 'granted') {
         await PushNotifications.register()
-
-        // Wait briefly for the registration listener to fire and save the token
-        await new Promise((r) => setTimeout(r, 1500))
+        await tokenPromise
         onGranted()
       } else {
         setErrorMsg(`Permission: ${permResult.receive}`)

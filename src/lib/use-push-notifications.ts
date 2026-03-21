@@ -16,14 +16,7 @@ export function usePushNotifications() {
       try {
         const { PushNotifications } = await import('@capacitor/push-notifications')
 
-        // Request permission
-        const permResult = await PushNotifications.requestPermissions()
-        if (permResult.receive !== 'granted') return
-
-        // Register for push
-        await PushNotifications.register()
-
-        // Listen for token
+        // Set up listeners BEFORE registering (events can fire immediately)
         PushNotifications.addListener('registration', async (token) => {
           try {
             await fetch('/api/user/push-token', {
@@ -39,23 +32,26 @@ export function usePushNotifications() {
           }
         })
 
-        // Handle registration error
         PushNotifications.addListener('registrationError', (err) => {
           console.error('Push registration failed:', err)
         })
 
-        // Handle notification received while app is open
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
           console.log('Push received in foreground:', notification)
         })
 
-        // Handle notification tapped
         PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
           const link = action.notification.data?.link
           if (link && typeof window !== 'undefined') {
             window.location.href = link
           }
         })
+
+        // Now request permission and register
+        const permResult = await PushNotifications.requestPermissions()
+        if (permResult.receive !== 'granted') return
+
+        await PushNotifications.register()
       } catch (err) {
         console.error('Push notification setup failed:', err)
       }

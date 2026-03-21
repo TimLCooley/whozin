@@ -6,7 +6,7 @@ export async function GET() {
 
   const { data, error } = await admin
     .from('whozin_users')
-    .select('id, first_name, last_name, phone, email, status, membership_tier, created_at, auth_user_id')
+    .select('id, first_name, last_name, phone, email, status, membership_tier, created_at, auth_user_id, push_token, push_platform, push_notifications_enabled')
     .order('created_at', { ascending: false })
 
   if (error) {
