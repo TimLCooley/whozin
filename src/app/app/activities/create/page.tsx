@@ -143,6 +143,7 @@ export default function CreateActivityPage() {
         setAutoEmergencyFill(data.auto_emergency_fill ?? false)
         setPriorityInvite(data.priority_invite ?? true)
         setResponseTimer(data.response_timer_minutes ?? 5)
+        if (data.image_url) setImageUrl(data.image_url)
         if (data.max_capacity) {
           if ([2, 3, 4].includes(data.max_capacity)) {
             setMaxCapacity(data.max_capacity)

@@ -37,6 +37,7 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
   const elementRef = useRef<HTMLElement | null>(null)
   const [ready, setReady] = useState(false)
   const [fallback, setFallback] = useState(false)
+  const [manualMode, setManualMode] = useState(false)
 
   useEffect(() => {
     loadGoogleMaps()
@@ -45,7 +46,7 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
   }, [])
 
   useEffect(() => {
-    if (!ready || !containerRef.current || elementRef.current) return
+    if (!ready || !containerRef.current || elementRef.current || manualMode) return
     if (!window.google?.maps?.places?.PlaceAutocompleteElement) {
       setFallback(true)
       return
@@ -60,7 +61,6 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
       const event = e as CustomEvent
       const place = event.detail?.place
       if (place) {
-        // Fetch display name and formatted address
         await place.fetchFields({ fields: ['displayName', 'formattedAddress'] })
         const name = place.displayName || ''
         const address = place.formattedAddress || ''
@@ -77,18 +77,30 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
       if (el.parentNode) el.parentNode.removeChild(el)
       elementRef.current = null
     }
-  }, [ready, onChange])
+  }, [ready, onChange, manualMode])
 
-  // Fallback: plain input if Google Maps fails to load
-  if (fallback || !process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+  // Fallback or manual mode: plain text input
+  if (fallback || manualMode || !process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
     return (
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={className || 'input-field'}
-      />
+      <div>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={className || 'input-field'}
+          autoFocus={manualMode}
+        />
+        {manualMode && !fallback && (
+          <button
+            type="button"
+            onClick={() => { setManualMode(false); elementRef.current = null }}
+            className="text-[11px] text-primary font-semibold mt-1.5"
+          >
+            Search with Google Maps
+          </button>
+        )}
+      </div>
     )
   }
 
@@ -108,6 +120,13 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
         </div>
       )}
       <div ref={containerRef} className="google-places-container" />
+      <button
+        type="button"
+        onClick={() => setManualMode(true)}
+        className="text-[11px] text-muted font-medium mt-1.5"
+      >
+        Or type location manually
+      </button>
       <style jsx global>{`
         .google-places-container gmp-place-autocomplete {
           width: 100%;
