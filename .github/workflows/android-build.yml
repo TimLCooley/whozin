@@ -52,10 +52,12 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Fix deprecated proguard in plugins
+      - name: Fix deprecated build config in plugins
         run: |
           find node_modules -path "*/android/build.gradle" -exec \
             sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" {} + || true
+          find node_modules -path "*/android/build.gradle" -exec \
+            sed -i "s/jcenter()/mavenCentral()/g" {} + || true
 
       - name: Decode keystore
         run: |
