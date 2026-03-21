@@ -35,8 +35,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         }
 
         // On native, check if push token is saved
+        // Only show gate if the plugin is actually available
         if (Capacitor.isNativePlatform() && !profile.push_token) {
-          setNeedsPushPermission(true)
+          try {
+            const { PushNotifications } = await import('@capacitor/push-notifications')
+            const perm = await PushNotifications.checkPermissions()
+            // Only gate if plugin works and permission hasn't been decided yet
+            if (perm.receive === 'prompt') {
+              setNeedsPushPermission(true)
+            }
+          } catch {
+            // Plugin not available — skip the gate
+          }
         }
       }
       setReady(true)

@@ -10,9 +10,11 @@ interface Props {
 export function PushPermissionGate({ onGranted }: Props) {
   const [requesting, setRequesting] = useState(false)
   const [denied, setDenied] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
   async function handleEnable() {
     setRequesting(true)
+    setErrorMsg('')
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
 
@@ -24,10 +26,12 @@ export function PushPermissionGate({ onGranted }: Props) {
         await new Promise((r) => setTimeout(r, 1500))
         onGranted()
       } else {
+        setErrorMsg(`Permission: ${permResult.receive}`)
         setDenied(true)
       }
     } catch (err) {
-      console.error('Push permission request failed:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      setErrorMsg(msg)
       setDenied(true)
     }
     setRequesting(false)
@@ -101,12 +105,17 @@ export function PushPermissionGate({ onGranted }: Props) {
         )}
 
         {denied && (
-          <button
-            onClick={onGranted}
-            className="text-[13px] text-primary font-semibold mt-2"
-          >
-            Skip for now
-          </button>
+          <>
+            {errorMsg && (
+              <p className="text-[10px] font-mono text-red-400 mt-2">{errorMsg}</p>
+            )}
+            <button
+              onClick={onGranted}
+              className="text-[13px] text-primary font-semibold mt-2"
+            >
+              Skip for now
+            </button>
+          </>
         )}
 
         <p className="text-[11px] text-muted/60 mt-3">

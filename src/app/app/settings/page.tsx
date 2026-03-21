@@ -15,6 +15,7 @@ export default function SettingsPage() {
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [membership, setMembership] = useState('free')
@@ -48,6 +49,7 @@ export default function SettingsPage() {
         if (profile.id) {
           setFirstName(profile.first_name || '')
           setLastName(profile.last_name || '')
+          setPhone(profile.phone || '')
           setEmail(profile.email || '')
           setAvatarUrl(profile.avatar_url || null)
           setMembership(profile.membership_tier || 'free')
@@ -158,6 +160,14 @@ export default function SettingsPage() {
             >
               {nameSaved ? 'Saved!' : 'Save Name'}
             </button>
+
+            <Field label="Phone Number">
+              <div className="input-field text-muted select-none">
+                {phone
+                  ? phone.replace(/^\+?(\d{1})(\d{3})(\d{3})(\d{4})$/, '+$1 ($2) $3-$4')
+                  : 'No phone set'}
+              </div>
+            </Field>
 
             <Field label="Email">
               <div className="flex items-center gap-2.5">
