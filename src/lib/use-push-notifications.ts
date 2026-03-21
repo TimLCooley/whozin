@@ -16,10 +16,20 @@ export function usePushNotifications() {
       try {
         const { PushNotifications } = await import('@capacitor/push-notifications')
 
+        // Log to a visible place for debugging
+        const log = (msg: string) => {
+          const logs = JSON.parse(localStorage.getItem('push_debug') || '[]')
+          logs.push(`${new Date().toLocaleTimeString()}: ${msg}`)
+          localStorage.setItem('push_debug', JSON.stringify(logs.slice(-20)))
+        }
+
+        log('Plugin loaded OK')
+
         // Set up listeners BEFORE registering (events can fire immediately)
         PushNotifications.addListener('registration', async (token) => {
+          log(`Got token: ${token.value.slice(0, 20)}...`)
           try {
-            await fetch('/api/user/push-token', {
+            const res = await fetch('/api/user/push-token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -27,17 +37,18 @@ export function usePushNotifications() {
                 platform: Capacitor.getPlatform(),
               }),
             })
+            log(`Token save: ${res.status} ${res.ok ? 'OK' : 'FAILED'}`)
           } catch (err) {
-            console.error('Failed to save push token:', err)
+            log(`Token save error: ${err instanceof Error ? err.message : String(err)}`)
           }
         })
 
         PushNotifications.addListener('registrationError', (err) => {
-          console.error('Push registration failed:', err)
+          log(`Registration ERROR: ${JSON.stringify(err)}`)
         })
 
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
-          console.log('Push received in foreground:', notification)
+          log(`Push received: ${notification.title}`)
         })
 
         PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
@@ -49,11 +60,16 @@ export function usePushNotifications() {
 
         // Now request permission and register
         const permResult = await PushNotifications.requestPermissions()
+        log(`Permission: ${permResult.receive}`)
         if (permResult.receive !== 'granted') return
 
         await PushNotifications.register()
+        log('register() called')
       } catch (err) {
-        console.error('Push notification setup failed:', err)
+        const msg = err instanceof Error ? err.message : String(err)
+        const logs = JSON.parse(localStorage.getItem('push_debug') || '[]')
+        logs.push(`${new Date().toLocaleTimeString()}: CATCH: ${msg}`)
+        localStorage.setItem('push_debug', JSON.stringify(logs.slice(-20)))
       }
     }
 

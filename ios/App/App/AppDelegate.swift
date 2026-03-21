@@ -13,9 +13,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Plugins are registered via packageClassList in capacitor.config.json.
-        // The imports above ensure they're linked into the binary.
+        // Force-load Capacitor plugin classes so NSClassFromString() can find them.
+        // Without this, the linker dead-strips SPM module classes.
+        forceLoadPlugins()
         return true
+    }
+
+    private func forceLoadPlugins() {
+        // These lookups force the linker to include the ObjC classes.
+        // The class names match @objc() annotations in the plugin source.
+        let pluginClasses: [String] = [
+            "PushNotificationsPlugin",
+            "AppleSignInPlugin",
+        ]
+        for name in pluginClasses {
+            if NSClassFromString(name) == nil {
+                NSLog("⚡️ Warning: Plugin class '\(name)' not found at runtime")
+            }
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
@@ -39,6 +54,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
+
+    // Forward push notification registration to Capacitor
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        ApplicationDelegateProxy.shared.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        ApplicationDelegateProxy.shared.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
     }
 
 }

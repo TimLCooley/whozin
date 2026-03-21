@@ -343,6 +343,19 @@ export default function SettingsPage() {
           </button>
         </div>
 
+        {/* Push Debug Log */}
+        <div className="mx-4 mt-6">
+          <button
+            onClick={() => {
+              const logs = JSON.parse(localStorage.getItem('push_debug') || '[]')
+              alert(logs.length ? logs.join('\n') : 'No push debug logs yet. Reopen the app.')
+            }}
+            className="text-[12px] text-muted font-mono underline"
+          >
+            View Push Debug Log
+          </button>
+        </div>
+
         {/* Legal links */}
         <div className="flex justify-center gap-4 mt-6 mb-4">
           <a href="/privacy" target="_blank" className="text-[12px] text-muted hover:text-primary transition-colors">Privacy Policy</a>
