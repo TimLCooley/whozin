@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (linkedUser) {
-      // Link the OAuth user to existing invited record
       await admin
         .from('whozin_users')
         .update({
@@ -76,7 +75,6 @@ export async function GET(request: NextRequest) {
         })
         .eq('id', linkedUser.id)
     } else {
-      // Create a new whozin_users record
       await admin.from('whozin_users').insert({
         auth_user_id: user.id,
         email: email,

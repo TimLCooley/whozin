@@ -100,7 +100,16 @@ export function PushPermissionGate({ onGranted }: Props) {
           </button>
         )}
 
-        <p className="text-[11px] text-muted/60">
+        {denied && (
+          <button
+            onClick={onGranted}
+            className="text-[13px] text-primary font-semibold mt-2"
+          >
+            Skip for now
+          </button>
+        )}
+
+        <p className="text-[11px] text-muted/60 mt-3">
           You can manage notification preferences in Settings anytime.
         </p>
       </div>

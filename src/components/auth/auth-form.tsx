@@ -110,24 +110,52 @@ export default function AuthForm({ onBack }: AuthFormProps) {
 
   // ─── Apple Sign In ───────────────────────────────────────
 
+  async function handleNativeOAuth(provider: 'apple' | 'google') {
+    const nonce = crypto.randomUUID() + crypto.randomUUID().slice(0, 4)
+
+    // Apple: direct Apple OAuth + signInWithIdToken (bypasses Supabase OAuth)
+    // Google: Supabase OAuth redirect
+    const url = provider === 'apple'
+      ? `/api/auth/apple-native?nonce=${nonce}`
+      : `/api/auth/oauth-start?provider=${provider}&nonce=${nonce}`
+    window.open(url, '_blank')
+
+    // Poll for session tokens (callback stores them keyed by nonce)
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      try {
+        const res = await fetch(`/api/auth/oauth-poll?nonce=${nonce}`)
+        const data = await res.json()
+        if (!data.pending && data.access_token) {
+          const supabase = createClient()
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+          })
+          if (sessionError) {
+            setError(sessionError.message)
+            setSocialLoading(null)
+            return
+          }
+          await fetch('/api/auth/ensure-profile', { method: 'POST' })
+          window.location.href = '/app'
+          return
+        }
+      } catch {
+        // Network error, keep polling
+      }
+    }
+    setError('Sign-in timed out. Please try again.')
+    setSocialLoading(null)
+  }
+
   async function handleAppleSignIn() {
     setSocialLoading('apple')
     setError('')
     try {
       if (native) {
-        // Native (iOS): use Supabase OAuth redirect (opens system browser)
-        const supabase = createClient()
-        const { error: oauthError } = await supabase.auth.signInWithOAuth({
-          provider: 'apple',
-          options: {
-            redirectTo: `${window.location.origin}/auth/callback`,
-          },
-        })
-        if (oauthError) {
-          setError(oauthError.message)
-          setSocialLoading(null)
-        }
-        // Browser will redirect — no need to handle success here
+        // Native: open OAuth in system browser, poll for session
+        await handleNativeOAuth('apple')
       } else {
         // Web: use Apple JS SDK popup
         await loadAppleScript()
@@ -571,6 +599,7 @@ export default function AuthForm({ onBack }: AuthFormProps) {
                 {' '}and{' '}
                 <a href="/privacy" target="_blank" className="text-primary font-medium">Privacy Policy</a>.
               </p>
+
             </>
           )}
 
