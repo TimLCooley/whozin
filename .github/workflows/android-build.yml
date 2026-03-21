@@ -54,7 +54,7 @@ jobs:
 
       - name: Fix deprecated proguard in plugins
         run: |
-          find node_modules/@capacitor-community -name "build.gradle" -exec \
+          find node_modules -path "*/android/build.gradle" -exec \
             sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" {} + || true
 
       - name: Decode keystore
