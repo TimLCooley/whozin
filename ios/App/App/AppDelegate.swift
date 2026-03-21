@@ -1,17 +1,11 @@
 import UIKit
 import Capacitor
 
-// Import plugin modules to prevent the linker from stripping them.
-// Without these imports, NSClassFromString() can't find the plugin classes
-// because SPM compiles them into separate modules that get dead-stripped.
+// Import plugin modules so the linker includes them in the binary.
+// Without these, NSClassFromString() can't find plugin classes at runtime
+// because SPM modules get dead-stripped when nothing references them.
 import PushNotificationsPlugin
 import AppleSignInPlugin
-
-// Force the linker to include the plugin classes by referencing them.
-private let _capacitorPlugins: [AnyClass] = [
-    PushNotificationsPlugin.PushNotificationsPlugin.self,
-    AppleSignInPlugin.AppleSignInPlugin.self,
-]
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
