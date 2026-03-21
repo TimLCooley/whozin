@@ -114,32 +114,22 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     setSocialLoading('apple')
     setError('')
     try {
-      if (native && platform === 'ios') {
-        // Native iOS: use Capacitor Apple Sign In plugin
-        const { AppleSignIn, SignInScope } = await import('@capawesome/capacitor-apple-sign-in')
-        const result = await AppleSignIn.signIn({
-          scopes: [SignInScope.Email, SignInScope.FullName],
-        })
-        const idToken = result.idToken
-        if (!idToken) {
-          setError('No ID token received from Apple')
-          setSocialLoading(null)
-          return
-        }
+      if (native) {
+        // Native (iOS): use Supabase OAuth redirect (opens system browser)
         const supabase = createClient()
-        const { error: signInError } = await supabase.auth.signInWithIdToken({
+        const { error: oauthError } = await supabase.auth.signInWithOAuth({
           provider: 'apple',
-          token: idToken,
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback`,
+          },
         })
-        if (signInError) {
-          setError(signInError.message)
+        if (oauthError) {
+          setError(oauthError.message)
           setSocialLoading(null)
-          return
         }
-        await fetch('/api/auth/ensure-profile', { method: 'POST' })
-        window.location.href = '/app'
+        // Browser will redirect — no need to handle success here
       } else {
-        // Web / Android: use Apple JS SDK popup
+        // Web: use Apple JS SDK popup
         await loadAppleScript()
         window.AppleID.auth.init({
           clientId: 'io.whozin.app.signin',
@@ -467,10 +457,12 @@ export default function AuthForm({ onBack }: AuthFormProps) {
 
   // Hide Apple on Android native (not a natural UX there)
   const showApple = !(native && platform === 'android')
+  // Hide Google on iOS native (Apple is the primary option there)
+  const showGoogle = !(native && platform === 'ios')
   // On iOS native, show Apple first (primary). Otherwise Google first.
   const showAppleFirst = native && platform === 'ios'
 
-  const googleButton = (
+  const googleButton = showGoogle ? (
     <button
       onClick={handleGoogleSignIn}
       disabled={socialLoading !== null || loading}
@@ -481,7 +473,7 @@ export default function AuthForm({ onBack }: AuthFormProps) {
       <GoogleIcon />
       {socialLoading === 'google' ? 'Connecting...' : 'Continue with Google'}
     </button>
-  )
+  ) : null
 
   const appleButton = showApple ? (
     <button

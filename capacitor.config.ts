@@ -7,6 +7,11 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://whozin.io',
     cleartext: false,
+    allowNavigation: [
+      'ooqdkonjcztjankkvejh.supabase.co',
+      '*.apple.com',
+      'accounts.google.com',
+    ],
   },
   ios: {
     scheme: 'Whozin',

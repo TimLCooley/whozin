@@ -110,14 +110,24 @@ export default function HomePage() {
   useEffect(() => {
     if (isNative()) {
       const supabase = createClient()
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (user) {
-          router.replace('/app')
-        } else {
-          setShowAuth(true)
-          setCheckingAuth(false)
-        }
-      })
+      const checkAuth = () => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
+            router.replace('/app')
+          } else {
+            setShowAuth(true)
+            setCheckingAuth(false)
+          }
+        })
+      }
+      checkAuth()
+
+      // Re-check when app returns to foreground (e.g. after OAuth in system browser)
+      const handleVisibility = () => {
+        if (document.visibilityState === 'visible') checkAuth()
+      }
+      document.addEventListener('visibilitychange', handleVisibility)
+      return () => document.removeEventListener('visibilitychange', handleVisibility)
     } else {
       setCheckingAuth(false)
     }
