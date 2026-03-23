@@ -101,7 +101,21 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${jakarta.variable} antialiased`}>{children}</body>
+      <body className={`${jakarta.variable} antialiased`}>
+        {children}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-N82VPQFJHG"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-N82VPQFJHG');
+          `}
+        </Script>
+      </body>
     </html>
   );
 }

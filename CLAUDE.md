@@ -63,6 +63,11 @@
 - **Webhook URL**: `https://whozin.io/api/webhooks/stripe`
 - **Dashboard**: https://dashboard.stripe.com
 
+### Google Analytics
+- **Measurement ID**: `G-N82VPQFJHG`
+- **Dashboard**: https://analytics.google.com
+- Loaded via `next/script` in root layout (`src/app/layout.tsx`)
+
 ### Capacitor (Native Apps)
 - **App ID (Android & iOS)**: `io.whozin.app`
 - **Config**: `capacitor.config.ts` — uses `io.whozin.app` as appId
@@ -87,6 +92,7 @@ All env vars go in `.env.local` (gitignored). Also set in Vercel project setting
 | **RevenueCat** | `REVENUECAT_WEBHOOK_SECRET` | iOS/Android IAP webhook auth |
 | **Google Cloud** | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, `GOOGLE_AI_API_KEY` | Maps, Places, Gemini AI |
 | **Apple** | `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` | Push notifications (APNs) |
+| **Google Analytics** | — | Measurement ID: `G-N82VPQFJHG`, loaded in root layout |
 
 Other env vars: `NEXT_PUBLIC_SITE_URL`
 
