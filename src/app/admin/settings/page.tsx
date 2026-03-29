@@ -62,6 +62,7 @@ export default function SettingsPage() {
     { id: 'legal', label: 'Legal' },
     { id: 'social', label: 'Social' },
     { id: 'app-stores', label: 'App Stores' },
+    { id: 'app-updates', label: 'App Updates' },
   ]
 
   if (loading) {
@@ -212,6 +213,30 @@ export default function SettingsPage() {
             <SettingInput label="Facebook" value={settings.social_facebook} onChange={(v) => update('social_facebook', v)} placeholder="https://facebook.com/whozin" />
             <SettingInput label="LinkedIn" value={settings.social_linkedin} onChange={(v) => update('social_linkedin', v)} placeholder="https://linkedin.com/company/whozin" />
             <SettingInput label="TikTok" value={settings.social_tiktok} onChange={(v) => update('social_tiktok', v)} placeholder="https://tiktok.com/@whozin" />
+          </div>
+        )}
+
+        {activeSection === 'app-updates' && (
+          <div className="space-y-5">
+            <h3 className="text-lg font-semibold mb-4">Force Update</h3>
+            <p className="text-sm text-muted -mt-2 mb-4">
+              Set the minimum native app version required. Users on older versions will be forced to update
+              before they can use the app. Leave blank to disable.
+            </p>
+            <SettingInput
+              label="Minimum iOS Version"
+              value={settings.min_ios_version}
+              onChange={(v) => update('min_ios_version', v)}
+              placeholder="e.g. 1.0.2"
+              hint="Users on older iOS versions will see an update prompt"
+            />
+            <SettingInput
+              label="Minimum Android Version"
+              value={settings.min_android_version}
+              onChange={(v) => update('min_android_version', v)}
+              placeholder="e.g. 1.0.2"
+              hint="Users on older Android versions will see an update prompt"
+            />
           </div>
         )}
 
