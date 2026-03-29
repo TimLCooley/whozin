@@ -3,8 +3,8 @@ import { getAdminClient } from '@/lib/supabase/admin'
 
 // GET — return all store asset URLs organized by platform for CI/CD
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('authorization')?.replace('Bearer ', '')
-  if (secret !== process.env.WHOZIN_BUILD_SECRET) {
+  const secret = req.headers.get('authorization')?.replace('Bearer ', '').trim()
+  if (!secret || secret !== process.env.WHOZIN_BUILD_SECRET?.trim()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
