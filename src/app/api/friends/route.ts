@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   // Fetch friend user records
   const { data: friends } = await admin
     .from('whozin_users')
-    .select('id, first_name, last_name, phone, avatar_url, status')
+    .select('id, first_name, last_name, phone, avatar_url, status, show_phone')
     .in('id', friendIds)
 
   const allFriends = friends ?? []

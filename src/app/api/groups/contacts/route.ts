@@ -31,7 +31,7 @@ export async function GET() {
 
   const { data: groupMembers } = await admin
     .from('whozin_group_members')
-    .select('user_id, whozin_users(id, first_name, last_name, phone, avatar_url, status)')
+    .select('user_id, whozin_users(id, first_name, last_name, phone, avatar_url, status, show_phone)')
     .in('group_id', groupIds)
     .neq('user_id', whozinUser.id)
 

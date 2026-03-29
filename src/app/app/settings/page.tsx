@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [membership, setMembership] = useState('free')
   const [pushNotifications, setPushNotifications] = useState(false)
   const [hideFromSearch, setHideFromSearch] = useState(false)
+  const [showPhone, setShowPhone] = useState(false)
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [blockPhoneNumber, setBlockPhoneNumber] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -55,6 +56,7 @@ export default function SettingsPage() {
           setMembership(profile.membership_tier || 'free')
           setPushNotifications(profile.push_notifications_enabled ?? false)
           setHideFromSearch(profile.hide_from_invites ?? false)
+          setShowPhone(profile.show_phone ?? false)
           setProfileLoaded(true)
         }
       })
@@ -292,14 +294,25 @@ export default function SettingsPage() {
           onToggle={() => toggleSection('privacy')}
           delay={3}
         >
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[14px] text-foreground">Hide myself from being invited</span>
-              <Toggle checked={hideFromSearch} onChange={(v) => { setHideFromSearch(v); saveProfile({ hide_from_invites: v }) }} />
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] text-foreground">Show my phone number</span>
+                <Toggle checked={showPhone} onChange={(v) => { setShowPhone(v); saveProfile({ show_phone: v }) }} />
+              </div>
+              <p className="text-[12px] text-muted leading-relaxed mt-1">
+                Allow group members and friends to see your phone number.
+              </p>
             </div>
-            <p className="text-[12px] text-muted leading-relaxed">
-              You won&apos;t appear in friends&apos; contacts when they create a new activity.
-            </p>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] text-foreground">Hide myself from being invited</span>
+                <Toggle checked={hideFromSearch} onChange={(v) => { setHideFromSearch(v); saveProfile({ hide_from_invites: v }) }} />
+              </div>
+              <p className="text-[12px] text-muted leading-relaxed mt-1">
+                You won&apos;t appear in friends&apos; contacts when they create a new activity.
+              </p>
+            </div>
           </div>
         </Section>
 
@@ -340,19 +353,6 @@ export default function SettingsPage() {
             className="w-full border border-danger/30 text-danger font-semibold text-[14px] py-3.5 rounded-xl bg-danger/[0.04] active:bg-danger/10 transition-colors"
           >
             Delete Account
-          </button>
-        </div>
-
-        {/* Push Debug Log */}
-        <div className="mx-4 mt-6">
-          <button
-            onClick={() => {
-              const logs = JSON.parse(localStorage.getItem('push_debug') || '[]')
-              alert(logs.length ? logs.join('\n') : 'No push debug logs yet. Reopen the app.')
-            }}
-            className="text-[12px] text-muted font-mono underline"
-          >
-            View Push Debug Log
           </button>
         </div>
 

@@ -38,7 +38,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: members } = await admin
     .from('whozin_group_members')
-    .select('id, user_id, priority_order, whozin_users(id, first_name, last_name, phone, avatar_url, status)')
+    .select('id, user_id, priority_order, whozin_users(id, first_name, last_name, phone, avatar_url, status, show_phone)')
     .eq('group_id', id)
     .order('priority_order', { ascending: true })
 

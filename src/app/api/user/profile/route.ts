@@ -11,7 +11,7 @@ export async function GET() {
   const admin = getAdminClient()
   const { data: profile } = await admin
     .from('whozin_users')
-    .select('id, first_name, last_name, email, phone, avatar_url, membership_tier, push_notifications_enabled, text_notifications_enabled, hide_from_invites, push_token')
+    .select('id, first_name, last_name, email, phone, avatar_url, membership_tier, push_notifications_enabled, text_notifications_enabled, hide_from_invites, show_phone, push_token')
     .eq('auth_user_id', user.id)
     .single()
 
@@ -31,7 +31,7 @@ export async function PUT(req: NextRequest) {
 
   // Only allow updating specific fields
   const allowed: Record<string, unknown> = {}
-  const fields = ['first_name', 'last_name', 'email', 'membership_tier', 'push_notifications_enabled', 'text_notifications_enabled', 'hide_from_invites']
+  const fields = ['first_name', 'last_name', 'email', 'membership_tier', 'push_notifications_enabled', 'text_notifications_enabled', 'hide_from_invites', 'show_phone']
   for (const field of fields) {
     if (body[field] !== undefined) allowed[field] = body[field]
   }

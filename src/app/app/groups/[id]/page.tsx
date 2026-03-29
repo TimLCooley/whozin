@@ -18,6 +18,7 @@ interface Member {
   avatar_url: string | null
   status: string
   priority_order: number
+  show_phone?: boolean
 }
 
 interface GroupDetail {
@@ -694,7 +695,7 @@ export default function GroupDetailPage() {
                         {member.first_name} {member.last_name}
                         {isCurrentUser && <span className="text-[11px] text-muted font-normal ml-1">(You)</span>}
                       </p>
-                      <p className="text-[11px] text-muted truncate">{member.phone}</p>
+                      {member.show_phone && <p className="text-[11px] text-muted truncate">{member.phone}</p>}
                     </div>
 
                     {/* Reorder arrows (not for owner position) */}
