@@ -209,6 +209,13 @@ jobs:
           SCREENSHOT_COUNT=$(find /tmp/screenshots/en-US -name "*.png" 2>/dev/null | wc -l | tr -d ' ')
           if [ "$SCREENSHOT_COUNT" -gt "0" ]; then
             echo "Uploading $SCREENSHOT_COUNT screenshots..."
+            cat > /tmp/api_key.json << KEYEOF
+            {
+              "key_id": "$API_KEY_ID",
+              "issuer_id": "$API_ISSUER_ID",
+              "key_filepath": "$HOME/private_keys/AuthKey_${API_KEY_ID}.p8"
+            }
+          KEYEOF
             fastlane deliver \
               --skip_binary_upload \
               --skip_metadata \
@@ -216,11 +223,7 @@ jobs:
               --screenshots_path /tmp/screenshots \
               --app_identifier io.whozin.app \
               --force \
-              --api_key_path <(echo "{
-                \"key_id\": \"$API_KEY_ID\",
-                \"issuer_id\": \"$API_ISSUER_ID\",
-                \"key_filepath\": \"$HOME/private_keys/AuthKey_${API_KEY_ID}.p8\"
-              }")
+              --api_key_path /tmp/api_key.json
             echo "Screenshots synced!"
           else
             echo "No screenshots to upload"
@@ -232,17 +235,20 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          cat > /tmp/api_key.json << KEYEOF
+          {
+            "key_id": "$API_KEY_ID",
+            "issuer_id": "$API_ISSUER_ID",
+            "key_filepath": "$HOME/private_keys/AuthKey_${API_KEY_ID}.p8"
+          }
+          KEYEOF
           fastlane run deliver \
             submit_for_review:true \
             automatic_release:true \
             skip_metadata:true \
             skip_screenshots:true \
             skip_binary_upload:true \
-            api_key_path:<(echo '{
-              "key_id": "'"$API_KEY_ID"'",
-              "issuer_id": "'"$API_ISSUER_ID"'",
-              "key_filepath": "'"$HOME/private_keys/AuthKey_${API_KEY_ID}.p8"'"
-            }')
+            api_key_path:/tmp/api_key.json
 
       - name: Notify Whozin API — deploy complete
         if: always()

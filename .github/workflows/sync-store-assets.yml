@@ -77,6 +77,15 @@ jobs:
 
           echo "Uploading $SCREENSHOT_COUNT screenshots to App Store Connect..."
 
+          # Write API key JSON to a real file (process substitution doesn't work in CI)
+          cat > /tmp/api_key.json << KEYEOF
+          {
+            "key_id": "$API_KEY_ID",
+            "issuer_id": "$API_ISSUER_ID",
+            "key_filepath": "$HOME/private_keys/AuthKey_${API_KEY_ID}.p8"
+          }
+          KEYEOF
+
           fastlane deliver \
             --skip_binary_upload \
             --skip_metadata \
@@ -84,11 +93,7 @@ jobs:
             --screenshots_path /tmp/screenshots \
             --app_identifier io.whozin.app \
             --force \
-            --api_key_path <(echo "{
-              \"key_id\": \"$API_KEY_ID\",
-              \"issuer_id\": \"$API_ISSUER_ID\",
-              \"key_filepath\": \"$HOME/private_keys/AuthKey_${API_KEY_ID}.p8\"
-            }")
+            --api_key_path /tmp/api_key.json
 
           echo "iOS screenshots uploaded successfully!"
 
