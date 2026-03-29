@@ -31,6 +31,7 @@
 ## Platform Credentials & Identifiers
 
 ### Apple Developer
+- **App Store Listing**: https://apps.apple.com/us/app/whozin-app/id6754605540
 - **Team ID**: `3QM6SDB8NG`
 - **Sign in with Apple Service ID**: `io.whozin.app.signin` (configured in Supabase)
 - **Sign in with Apple Key ID**: `CBRF43DM33`
@@ -42,6 +43,7 @@
 - **App Store Connect**: https://appstoreconnect.apple.com
 
 ### Google Play / Google Cloud
+- **Google Play Listing**: https://play.google.com/store/apps/details?id=io.whozin.app
 - **Google Play Account ID**: `6533159575073604082`
 - **Google Play Package Name (Android)**: `io.whozin.app`
 - **Google Play Console**: https://play.google.com/console/

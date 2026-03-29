@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       push_platform: platform || 'android',
       push_notifications_enabled: true,
     })
-    .eq('id', user.id)
+    .eq('auth_user_id', user.id)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -44,7 +44,7 @@ export async function DELETE() {
   await admin
     .from('whozin_users')
     .update({ push_token: null })
-    .eq('id', user.id)
+    .eq('auth_user_id', user.id)
 
   return NextResponse.json({ success: true })
 }
