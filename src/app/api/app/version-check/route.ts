@@ -10,15 +10,38 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = getAdminClient()
-  const key = platform === 'ios' ? 'min_ios_version' : 'min_android_version'
 
-  const { data } = await admin
+  // First check for a manual override in settings
+  const settingsKey = platform === 'ios' ? 'min_ios_version' : 'min_android_version'
+  const { data: setting } = await admin
     .from('whozin_settings')
     .select('value')
-    .eq('key', key)
+    .eq('key', settingsKey)
     .single()
 
-  const minVersion = (data?.value as string)?.replace(/"/g, '')?.trim()
+  const manualMin = (setting?.value as string)?.replace(/"/g, '')?.trim()
+
+  // Then get the two most recent live builds to auto-calculate minimum
+  const { data: builds } = await admin
+    .from('app_builds')
+    .select('version_name')
+    .eq('platform', platform)
+    .eq('status', 'live')
+    .order('created_at', { ascending: false })
+    .limit(2)
+
+  let minVersion: string | null = null
+
+  if (manualMin) {
+    // Manual override takes priority
+    minVersion = manualMin
+  } else if (builds && builds.length >= 2) {
+    // Allow current + previous version, block anything older
+    minVersion = builds[1].version_name
+  } else if (builds && builds.length === 1) {
+    // Only one live build — that's the minimum
+    minVersion = builds[0].version_name
+  }
 
   if (!minVersion) {
     return NextResponse.json({ updateRequired: false })
@@ -30,6 +53,7 @@ export async function GET(req: NextRequest) {
     updateRequired: needsUpdate,
     minVersion,
     currentVersion,
+    latestVersion: builds?.[0]?.version_name || null,
     storeUrl:
       platform === 'ios'
         ? 'https://apps.apple.com/us/app/whozin-app/id6754605540'

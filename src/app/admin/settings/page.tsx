@@ -220,22 +220,22 @@ export default function SettingsPage() {
           <div className="space-y-5">
             <h3 className="text-lg font-semibold mb-4">Force Update</h3>
             <p className="text-sm text-muted -mt-2 mb-4">
-              Set the minimum native app version required. Users on older versions will be forced to update
-              before they can use the app. Leave blank to disable.
+              By default, users are allowed the current and previous live build. Anything older is
+              forced to update. Set a manual override below to force a specific minimum version instead.
             </p>
             <SettingInput
-              label="Minimum iOS Version"
+              label="Minimum iOS Version (override)"
               value={settings.min_ios_version}
               onChange={(v) => update('min_ios_version', v)}
-              placeholder="e.g. 1.0.2"
-              hint="Users on older iOS versions will see an update prompt"
+              placeholder="Leave blank for automatic"
+              hint="Overrides auto-detection. Leave blank to use the previous live build as minimum."
             />
             <SettingInput
-              label="Minimum Android Version"
+              label="Minimum Android Version (override)"
               value={settings.min_android_version}
               onChange={(v) => update('min_android_version', v)}
-              placeholder="e.g. 1.0.2"
-              hint="Users on older Android versions will see an update prompt"
+              placeholder="Leave blank for automatic"
+              hint="Overrides auto-detection. Leave blank to use the previous live build as minimum."
             />
           </div>
         )}
