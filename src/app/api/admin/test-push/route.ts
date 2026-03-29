@@ -37,6 +37,19 @@ export async function POST() {
         continue
       }
 
+      // Debug: log credential info (not the actual values)
+      const debugInfo = {
+        teamId_len: teamId.length,
+        teamId_val: teamId,
+        keyId_len: keyId.length,
+        keyId_val: keyId,
+        pk_len: privateKey.length,
+        pk_starts: privateKey.slice(0, 27),
+        pk_ends: privateKey.slice(-25),
+        raw_teamId: JSON.stringify(process.env.APPLE_TEAM_ID?.slice(0, 20)),
+        raw_keyId: JSON.stringify((process.env.APPLE_PUSH_KEY_ID || process.env.APPLE_KEY_ID)?.slice(0, 20)),
+      }
+
       try {
         const now = Math.floor(Date.now() / 1000)
         const token = jwt.sign(
@@ -83,6 +96,7 @@ export async function POST() {
           token: u.push_token.slice(0, 20) + '...',
           apns_status: apnsResult.status,
           apns_response: apnsResult.body || 'OK',
+          debug: debugInfo,
         })
       } catch (err) {
         results.push({
