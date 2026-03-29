@@ -36,7 +36,7 @@
 - **Sign in with Apple Service ID**: `io.whozin.app.signin` (configured in Supabase)
 - **Sign in with Apple Key ID**: `CBRF43DM33`
 - **Sign in with Apple .p8 key**: `AuthKey_CBRF43DM33.p8`
-- **Push Notifications Key ID**: `96S7QHD6MQ` (push only, NOT for Sign in with Apple)
+- **Push Notifications Key ID**: `U32747768S` (push only, NOT for Sign in with Apple)
 - **App Store Bundle ID (iOS)**: `io.whozin.app`
 - **Apple JWT client secret**: Generated from .p8 key, expires every 6 months — regenerate before September 2026
 - **Portal**: https://developer.apple.com/account/
