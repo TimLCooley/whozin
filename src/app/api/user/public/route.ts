@@ -15,5 +15,19 @@ export async function GET(req: NextRequest) {
 
   if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  return NextResponse.json(profile)
+  // If group param provided, include group name
+  const groupId = req.nextUrl.searchParams.get('group')
+  let group: { id: string; name: string } | null = null
+
+  if (groupId) {
+    const { data: groupData } = await admin
+      .from('whozin_groups')
+      .select('id, name')
+      .eq('id', groupId)
+      .single()
+
+    if (groupData) group = groupData
+  }
+
+  return NextResponse.json({ ...profile, group })
 }

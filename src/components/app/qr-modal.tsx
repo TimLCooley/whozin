@@ -39,9 +39,10 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
   const scannerRef = useRef<HTMLDivElement>(null)
   const html5QrRef = useRef<unknown>(null)
 
-  const qrUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/u/${userId}`
-    : `https://whozin.io/u/${userId}`
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://whozin.io'
+  const qrUrl = groupId
+    ? `${baseUrl}/u/${userId}?group=${groupId}`
+    : `${baseUrl}/u/${userId}`
 
   const stopScanner = useCallback(() => {
     const scanner = html5QrRef.current as { stop?: () => Promise<void>; isScanning?: boolean } | null
