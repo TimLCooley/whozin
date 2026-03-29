@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { BrandedFullLogo } from '@/components/ui/branded-logo'
 
 interface Profile {
   id: string
@@ -129,16 +130,7 @@ export default function PublicProfilePage() {
     <div className="min-h-screen bg-background">
       {/* Header bar */}
       <div className="bg-gradient-to-b from-primary to-primary-dark px-4 py-3.5 flex items-center gap-2.5">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <ellipse cx="7.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
-          <ellipse cx="16.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
-          <circle cx="4" cy="13" r="1.8" fill="white" opacity="0.95" />
-          <circle cx="20" cy="13" r="1.8" fill="white" opacity="0.95" />
-          <ellipse cx="12" cy="16.5" rx="5.5" ry="4.2" fill="white" />
-        </svg>
-        <h1 className="text-[22px] font-extrabold text-white tracking-tight leading-none">
-          Whoz<span className="italic font-extrabold">in</span>
-        </h1>
+        <BrandedFullLogo className="h-9" />
       </div>
 
       {/* Profile card */}
