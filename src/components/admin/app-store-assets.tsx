@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import CropUpload from '@/components/admin/crop-upload'
 
 interface AssetSpec {
@@ -317,15 +317,81 @@ export default function AppStoreAssets() {
         )
       })}
 
-      {/* Help note */}
+      {/* Sync + Help */}
+      <SyncToStores />
       <div className="bg-surface/50 border border-border/30 rounded-xl p-4 mt-2">
         <p className="text-[12px] text-muted leading-relaxed">
-          <strong className="text-foreground">How to use:</strong> Upload your source icon (1024×1024) and splash (2732×2732) first.
-          Then run <code className="text-[11px] bg-background px-1.5 py-0.5 rounded border border-border/50 font-mono">npx capacitor-assets generate</code> locally
-          to generate all native icon sizes from the source. Store listing screenshots should be uploaded directly here
-          and also to <a href="https://play.google.com/console/" target="_blank" rel="noopener noreferrer" className="text-primary font-semibold hover:underline">Google Play Console</a> and <a href="https://appstoreconnect.apple.com" target="_blank" rel="noopener noreferrer" className="text-primary font-semibold hover:underline">App Store Connect</a>.
+          <strong className="text-foreground">How to use:</strong> Upload screenshots here, then click &quot;Sync to Stores&quot; above
+          to push them to App Store Connect and Google Play automatically. Screenshots also sync during every native build.
         </p>
       </div>
+    </div>
+  )
+}
+
+function SyncToStores() {
+  const [syncing, setSyncing] = useState<string | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const triggerSync = useCallback(async (platforms: string) => {
+    setSyncing(platforms)
+    setResult(null)
+    try {
+      const res = await fetch('/api/admin/builds/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync-assets', platform: platforms }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setResult({ ok: true, msg: data.message || 'Sync triggered!' })
+      } else {
+        setResult({ ok: false, msg: data.error || 'Failed to trigger sync' })
+      }
+    } catch {
+      setResult({ ok: false, msg: 'Network error' })
+    } finally {
+      setSyncing(null)
+    }
+  }, [])
+
+  return (
+    <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mt-3 flex items-center gap-3 flex-wrap">
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] font-semibold text-foreground">Push to App Stores</p>
+        <p className="text-[11px] text-muted">Sync uploaded screenshots &amp; assets to store listings</p>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={() => triggerSync('both')}
+          disabled={!!syncing}
+          className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold
+                     hover:bg-primary-dark active:scale-[0.98] transition-all disabled:opacity-50"
+        >
+          {syncing === 'both' ? 'Syncing...' : 'Sync Both'}
+        </button>
+        <button
+          onClick={() => triggerSync('ios')}
+          disabled={!!syncing}
+          className="px-3 py-2 rounded-xl bg-surface border border-border text-xs font-semibold
+                     hover:bg-border active:scale-[0.98] transition-all disabled:opacity-50"
+        >
+          {syncing === 'ios' ? '...' : 'iOS Only'}
+        </button>
+        <button
+          onClick={() => triggerSync('android')}
+          disabled={!!syncing}
+          className="px-3 py-2 rounded-xl bg-surface border border-border text-xs font-semibold
+                     hover:bg-border active:scale-[0.98] transition-all disabled:opacity-50"
+        >
+          {syncing === 'android' ? '...' : 'Android Only'}
+        </button>
+      </div>
+      {result && (
+        <p className={`w-full text-[11px] font-medium ${result.ok ? 'text-green-600' : 'text-red-500'}`}>
+          {result.msg}
+        </p>
+      )}
     </div>
   )
 }

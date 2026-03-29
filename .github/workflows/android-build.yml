@@ -129,6 +129,95 @@ jobs:
           status: completed
           changesNotSentForReview: false
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Sync screenshots from admin panel
+        continue-on-error: true
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          # Fetch asset URLs
+          ASSETS=$(curl -sf "${{ secrets.WHOZIN_API_URL }}/api/admin/store-assets" \
+            -H "Authorization: Bearer ${{ secrets.WHOZIN_BUILD_SECRET }}" || echo '{}')
+
+          mkdir -p /tmp/android/phoneScreenshots /tmp/android/sevenInchScreenshots /tmp/android/tenInchScreenshots
+
+          python3 << PYEOF
+          import json, urllib.request, os
+
+          data = json.loads('''$ASSETS''')
+          android = data.get('android', {})
+
+          fg = android.get('featureGraphic')
+          if fg:
+              urllib.request.urlretrieve(fg, '/tmp/android/featureGraphic.png')
+              print(f"Downloaded feature graphic")
+
+          icon = android.get('icon')
+          if icon:
+              urllib.request.urlretrieve(icon, '/tmp/android/icon.png')
+              print(f"Downloaded icon")
+
+          for i, url in enumerate(android.get('phoneScreenshots', []), 1):
+              urllib.request.urlretrieve(url, f'/tmp/android/phoneScreenshots/{i}.png')
+              print(f"Downloaded phone screenshot {i}")
+
+          for i, url in enumerate(android.get('tablet7Screenshots', []), 1):
+              urllib.request.urlretrieve(url, f'/tmp/android/sevenInchScreenshots/{i}.png')
+
+          for i, url in enumerate(android.get('tablet10Screenshots', []), 1):
+              urllib.request.urlretrieve(url, f'/tmp/android/tenInchScreenshots/{i}.png')
+          PYEOF
+
+          PHONE_COUNT=$(find /tmp/android/phoneScreenshots -name "*.png" 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$PHONE_COUNT" -gt "0" ]; then
+            pip install google-api-python-client google-auth
+
+            python3 << PYEOF
+            import json, os, glob
+            from google.oauth2 import service_account
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload
+
+            PACKAGE = 'io.whozin.app'
+            creds = service_account.Credentials.from_service_account_info(
+                json.loads(os.environ['GOOGLE_PLAY_SERVICE_ACCOUNT_JSON']),
+                scopes=['https://www.googleapis.com/auth/androidpublisher']
+            )
+            service = build('androidpublisher', 'v3', credentials=creds)
+            edit = service.edits().insert(packageName=PACKAGE, body={}).execute()
+            eid = edit['id']
+
+            for img_type, path in [('phoneScreenshots', '/tmp/android/phoneScreenshots'),
+                                   ('sevenInchScreenshots', '/tmp/android/sevenInchScreenshots'),
+                                   ('tenInchScreenshots', '/tmp/android/tenInchScreenshots')]:
+                files = sorted(glob.glob(f'{path}/*.png'))
+                if not files: continue
+                try:
+                    service.edits().images().deleteall(packageName=PACKAGE, editId=eid, language='en-US', imageType=img_type).execute()
+                except: pass
+                for f in files:
+                    service.edits().images().upload(packageName=PACKAGE, editId=eid, language='en-US', imageType=img_type, media_body=MediaFileUpload(f, mimetype='image/png')).execute()
+                    print(f"Uploaded {img_type}: {os.path.basename(f)}")
+
+            for img_type, path in [('featureGraphic', '/tmp/android/featureGraphic.png'), ('icon', '/tmp/android/icon.png')]:
+                if not os.path.exists(path): continue
+                try:
+                    service.edits().images().deleteall(packageName=PACKAGE, editId=eid, language='en-US', imageType=img_type).execute()
+                except: pass
+                service.edits().images().upload(packageName=PACKAGE, editId=eid, language='en-US', imageType=img_type, media_body=MediaFileUpload(path, mimetype='image/png')).execute()
+                print(f"Uploaded {img_type}")
+
+            service.edits().commit(packageName=PACKAGE, editId=eid).execute()
+            print("Committed — Android assets synced!")
+            PYEOF
+          else
+            echo "No screenshots to upload"
+          fi
+
       - name: Notify Whozin API — deploy complete
         if: always()
         run: |

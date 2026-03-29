@@ -12,7 +12,38 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { platform, track } = body as { platform: 'android' | 'ios'; track?: string }
+  const { platform, track, action } = body as { platform: 'android' | 'ios'; track?: string; action?: string }
+
+  // Handle asset sync action
+  if (action === 'sync-assets') {
+    const token = process.env.GITHUB_PAT?.trim()
+    if (!token) {
+      return NextResponse.json({ error: 'GITHUB_PAT not configured' }, { status: 500 })
+    }
+
+    const targetPlatform = platform || 'both'
+    const res = await fetch(
+      `https://api.github.com/repos/TimLCooley/whozin/actions/workflows/sync-store-assets.yml/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ref: 'master',
+          inputs: { platforms: targetPlatform },
+        }),
+      }
+    )
+
+    if (res.status === 204) {
+      return NextResponse.json({ success: true, message: `Store asset sync triggered for ${targetPlatform}` })
+    }
+    const errorText = await res.text()
+    return NextResponse.json({ error: `GitHub API error (${res.status}): ${errorText}` }, { status: res.status })
+  }
 
   if (!platform || !['android', 'ios'].includes(platform)) {
     return NextResponse.json({ error: 'Invalid platform' }, { status: 400 })

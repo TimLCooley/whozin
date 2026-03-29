@@ -1,0 +1,258 @@
+name: Sync Store Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Which platforms to sync'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - ios
+          - android
+
+jobs:
+  sync-ios:
+    if: ${{ inputs.platforms == 'both' || inputs.platforms == 'ios' }}
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch asset URLs from Whozin API
+        run: |
+          ASSETS=$(curl -sf "${{ secrets.WHOZIN_API_URL }}/api/admin/store-assets" \
+            -H "Authorization: Bearer ${{ secrets.WHOZIN_BUILD_SECRET }}")
+          echo "$ASSETS" > /tmp/assets.json
+          echo "Fetched store assets"
+
+      - name: Download iOS screenshots
+        run: |
+          mkdir -p /tmp/screenshots/en-US
+
+          # Download screenshots by display type
+          for DISPLAY_TYPE in APP_IPHONE_67 APP_IPHONE_65 APP_IPHONE_55 APP_IPAD_PRO_129; do
+            URLS=$(cat /tmp/assets.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          urls = data.get('ios', {}).get('screenshots', {}).get('$DISPLAY_TYPE', [])
+          for u in urls:
+              print(u)
+          ")
+
+            IDX=1
+            for URL in $URLS; do
+              if [ -n "$URL" ]; then
+                FILENAME="${DISPLAY_TYPE}_$(printf '%02d' $IDX).png"
+                echo "Downloading $FILENAME from $URL"
+                curl -sfL "$URL" -o "/tmp/screenshots/en-US/$FILENAME" || echo "Failed: $URL"
+                IDX=$((IDX + 1))
+              fi
+            done
+          done
+
+          echo "Downloaded screenshots:"
+          ls -la /tmp/screenshots/en-US/ || echo "No screenshots downloaded"
+
+      - name: Create App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo '${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}' > ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8
+
+      - name: Install Fastlane
+        run: gem install fastlane --no-document
+
+      - name: Upload screenshots to App Store Connect
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          SCREENSHOT_COUNT=$(find /tmp/screenshots/en-US -name "*.png" 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$SCREENSHOT_COUNT" -eq "0" ]; then
+            echo "No screenshots to upload, skipping"
+            exit 0
+          fi
+
+          echo "Uploading $SCREENSHOT_COUNT screenshots to App Store Connect..."
+
+          fastlane deliver \
+            --skip_binary_upload \
+            --skip_metadata \
+            --overwrite_screenshots \
+            --screenshots_path /tmp/screenshots \
+            --app_identifier io.whozin.app \
+            --force \
+            --api_key_path <(echo "{
+              \"key_id\": \"$API_KEY_ID\",
+              \"issuer_id\": \"$API_ISSUER_ID\",
+              \"key_filepath\": \"$HOME/private_keys/AuthKey_${API_KEY_ID}.p8\"
+            }")
+
+          echo "iOS screenshots uploaded successfully!"
+
+  sync-android:
+    if: ${{ inputs.platforms == 'both' || inputs.platforms == 'android' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch asset URLs from Whozin API
+        run: |
+          ASSETS=$(curl -sf "${{ secrets.WHOZIN_API_URL }}/api/admin/store-assets" \
+            -H "Authorization: Bearer ${{ secrets.WHOZIN_BUILD_SECRET }}")
+          echo "$ASSETS" > /tmp/assets.json
+          echo "Fetched store assets"
+
+      - name: Download Android assets
+        run: |
+          mkdir -p /tmp/android/phoneScreenshots
+          mkdir -p /tmp/android/sevenInchScreenshots
+          mkdir -p /tmp/android/tenInchScreenshots
+
+          python3 << 'PYEOF'
+          import json, urllib.request, os
+
+          with open('/tmp/assets.json') as f:
+              data = json.load(f)
+
+          android = data.get('android', {})
+
+          # Feature graphic
+          fg = android.get('featureGraphic')
+          if fg:
+              print(f"Downloading feature graphic: {fg}")
+              urllib.request.urlretrieve(fg, '/tmp/android/featureGraphic.png')
+
+          # Hi-res icon
+          icon = android.get('icon')
+          if icon:
+              print(f"Downloading icon: {icon}")
+              urllib.request.urlretrieve(icon, '/tmp/android/icon.png')
+
+          # Phone screenshots
+          for i, url in enumerate(android.get('phoneScreenshots', []), 1):
+              print(f"Downloading phone screenshot {i}: {url}")
+              urllib.request.urlretrieve(url, f'/tmp/android/phoneScreenshots/{i}.png')
+
+          # 7" tablet
+          for i, url in enumerate(android.get('tablet7Screenshots', []), 1):
+              print(f"Downloading 7\" tablet screenshot {i}: {url}")
+              urllib.request.urlretrieve(url, f'/tmp/android/sevenInchScreenshots/{i}.png')
+
+          # 10" tablet
+          for i, url in enumerate(android.get('tablet10Screenshots', []), 1):
+              print(f"Downloading 10\" tablet screenshot {i}: {url}")
+              urllib.request.urlretrieve(url, f'/tmp/android/tenInchScreenshots/{i}.png')
+
+          print("Done downloading Android assets")
+          PYEOF
+
+          echo "Downloaded Android assets:"
+          find /tmp/android -type f | head -20
+
+      - name: Upload to Google Play via API
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          pip install google-api-python-client google-auth
+
+          python3 << 'PYEOF'
+          import json, os, glob
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          PACKAGE = 'io.whozin.app'
+          creds_json = json.loads(os.environ['GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'])
+          creds = service_account.Credentials.from_service_account_info(
+              creds_json,
+              scopes=['https://www.googleapis.com/auth/androidpublisher']
+          )
+          service = build('androidpublisher', 'v3', credentials=creds)
+
+          # Create an edit
+          edit = service.edits().insert(packageName=PACKAGE, body={}).execute()
+          edit_id = edit['id']
+          print(f"Created edit: {edit_id}")
+
+          # Upload screenshots
+          SCREENSHOT_TYPES = {
+              'phoneScreenshots': '/tmp/android/phoneScreenshots',
+              'sevenInchScreenshots': '/tmp/android/sevenInchScreenshots',
+              'tenInchScreenshots': '/tmp/android/tenInchScreenshots',
+          }
+
+          for img_type, path in SCREENSHOT_TYPES.items():
+              files = sorted(glob.glob(f'{path}/*.png'))
+              if not files:
+                  continue
+
+              # Clear existing screenshots for this type
+              try:
+                  service.edits().images().deleteall(
+                      packageName=PACKAGE, editId=edit_id,
+                      language='en-US', imageType=img_type
+                  ).execute()
+                  print(f"Cleared existing {img_type}")
+              except Exception as e:
+                  print(f"Note clearing {img_type}: {e}")
+
+              for f in files:
+                  media = MediaFileUpload(f, mimetype='image/png')
+                  result = service.edits().images().upload(
+                      packageName=PACKAGE, editId=edit_id,
+                      language='en-US', imageType=img_type,
+                      media_body=media
+                  ).execute()
+                  print(f"Uploaded {img_type}: {os.path.basename(f)} -> {result.get('image', {}).get('id', 'ok')}")
+
+          # Upload feature graphic
+          fg_path = '/tmp/android/featureGraphic.png'
+          if os.path.exists(fg_path):
+              try:
+                  service.edits().images().deleteall(
+                      packageName=PACKAGE, editId=edit_id,
+                      language='en-US', imageType='featureGraphic'
+                  ).execute()
+              except Exception:
+                  pass
+              media = MediaFileUpload(fg_path, mimetype='image/png')
+              service.edits().images().upload(
+                  packageName=PACKAGE, editId=edit_id,
+                  language='en-US', imageType='featureGraphic',
+                  media_body=media
+              ).execute()
+              print("Uploaded feature graphic")
+
+          # Upload icon
+          icon_path = '/tmp/android/icon.png'
+          if os.path.exists(icon_path):
+              try:
+                  service.edits().images().deleteall(
+                      packageName=PACKAGE, editId=edit_id,
+                      language='en-US', imageType='icon'
+                  ).execute()
+              except Exception:
+                  pass
+              media = MediaFileUpload(icon_path, mimetype='image/png')
+              service.edits().images().upload(
+                  packageName=PACKAGE, editId=edit_id,
+                  language='en-US', imageType='icon',
+                  media_body=media
+              ).execute()
+              print("Uploaded icon")
+
+          # Commit the edit
+          service.edits().commit(packageName=PACKAGE, editId=edit_id).execute()
+          print("Committed edit — assets are live!")
+          PYEOF
+
+          echo "Android store assets synced successfully!"
