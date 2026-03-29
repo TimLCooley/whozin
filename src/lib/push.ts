@@ -69,8 +69,8 @@ async function sendFcm(token: string, title: string, body: string, link?: string
 async function sendApns(deviceToken: string, title: string, body: string, link?: string, data?: Record<string, string>) {
   const http2 = await import('http2')
 
-  const teamId = process.env.APPLE_TEAM_ID?.trim()
-  const keyId = (process.env.APPLE_PUSH_KEY_ID || process.env.APPLE_KEY_ID)?.trim()
+  const teamId = process.env.APPLE_TEAM_ID?.replace(/\\n/g, '').trim()
+  const keyId = (process.env.APPLE_PUSH_KEY_ID || process.env.APPLE_KEY_ID)?.replace(/\\n/g, '').trim()
   const privateKey = (process.env.APPLE_PUSH_PRIVATE_KEY || process.env.APPLE_PRIVATE_KEY)?.trim()
 
   if (!teamId || !keyId || !privateKey) {
