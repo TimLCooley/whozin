@@ -1003,7 +1003,7 @@ export default function GroupDetailPage() {
 
       {/* Add Member Menu */}
       {modal === 'add-menu' && (
-        <BottomSheet open onClose={() => setModal(null)}>
+        <BottomSheet onClose={() => setModal(null)}>
           <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Add Member</h3>
           <div className="space-y-2">
             <button
