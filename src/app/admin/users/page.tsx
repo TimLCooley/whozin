@@ -20,6 +20,10 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<UserRow | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [editUser, setEditUser] = useState<UserRow | null>(null)
+  const [editFirst, setEditFirst] = useState('')
+  const [editLast, setEditLast] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     fetch('/api/admin/users')
@@ -67,6 +71,27 @@ export default function UsersPage() {
     setDeleteConfirm(null)
   }
 
+  function openEdit(user: UserRow) {
+    setEditUser(user)
+    setEditFirst(user.first_name)
+    setEditLast(user.last_name)
+  }
+
+  async function handleSaveEdit() {
+    if (!editUser) return
+    setSaving(true)
+    const res = await fetch('/api/admin/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editUser.id, first_name: editFirst, last_name: editLast }),
+    })
+    if (res.ok) {
+      setUsers((prev) => prev.map((u) => u.id === editUser.id ? { ...u, first_name: editFirst, last_name: editLast } : u))
+      setEditUser(null)
+    }
+    setSaving(false)
+  }
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -98,7 +123,9 @@ export default function UsersPage() {
               <div key={user.id} className="rounded-2xl border border-border bg-background p-4">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="font-semibold">{user.first_name} {user.last_name}</h3>
+                    <h3 className="font-semibold cursor-pointer hover:text-primary" onClick={() => openEdit(user)}>
+                      {user.first_name || user.last_name ? `${user.first_name} ${user.last_name}`.trim() : <span className="text-muted italic">No name</span>}
+                    </h3>
                     <p className="text-sm text-muted mt-0.5">{user.phone}</p>
                     {user.email && <p className="text-sm text-muted">{user.email}</p>}
                   </div>
@@ -148,7 +175,9 @@ export default function UsersPage() {
               <tbody>
                 {filtered.map((user) => (
                   <tr key={user.id} className="border-b border-border last:border-0 hover:bg-surface/50">
-                    <td className="px-4 py-3 font-medium">{user.first_name} {user.last_name}</td>
+                    <td className="px-4 py-3 font-medium cursor-pointer hover:text-primary" onClick={() => openEdit(user)}>
+                      {user.first_name || user.last_name ? `${user.first_name} ${user.last_name}`.trim() : <span className="text-muted italic">No name</span>}
+                    </td>
                     <td className="px-4 py-3">{user.phone}</td>
                     <td className="px-4 py-3 text-muted">{user.email ?? '—'}</td>
                     <td className="px-4 py-3 text-center">
@@ -184,6 +213,55 @@ export default function UsersPage() {
       )}
 
       <p className="text-xs text-muted mt-4">{filtered.length} user{filtered.length !== 1 ? 's' : ''}</p>
+
+      {/* Edit Name Modal */}
+      {editUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !saving && setEditUser(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[17px] font-bold text-foreground text-center mb-1">Edit Name</h3>
+            <p className="text-[13px] text-muted text-center mb-4">{editUser.phone}</p>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={editFirst}
+                onChange={(e) => setEditFirst(e.target.value)}
+                placeholder="First name"
+                autoFocus
+                className="w-full h-12 px-4 rounded-xl border border-border bg-surface text-[15px]
+                           placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+              <input
+                type="text"
+                value={editLast}
+                onChange={(e) => setEditLast(e.target.value)}
+                placeholder="Last name"
+                className="w-full h-12 px-4 rounded-xl border border-border bg-surface text-[15px]
+                           placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setEditUser(null)}
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (

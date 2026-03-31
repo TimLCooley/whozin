@@ -67,7 +67,7 @@ interface DeviceContact {
 }
 
 type Tab = 'details' | 'chat' | 'members'
-type Modal = null | 'add-phone' | 'add-friends' | 'add-google' | 'add-device' | 'qr-scan'
+type Modal = null | 'add-phone' | 'add-friends' | 'add-google' | 'add-device' | 'qr-scan' | 'add-menu'
 
 export default function GroupDetailPage() {
   const router = useRouter()
@@ -619,56 +619,12 @@ export default function GroupDetailPage() {
               </div>
             </div>
 
-            {/* Add member buttons */}
+            {/* Add member button */}
             <button
-              onClick={() => setModal('add-phone')}
-              className="btn-primary w-full py-3 mb-2.5 text-[14px]"
+              onClick={() => setModal('add-menu')}
+              className="btn-primary w-full py-3 mb-4 text-[14px]"
             >
               + Add Member
-            </button>
-            <button
-              onClick={openAddFriends}
-              className="w-full py-3 mb-2.5 text-[14px] font-semibold text-primary bg-primary/8 rounded-xl active:bg-primary/15 transition-colors border border-primary/20"
-            >
-              + Add from Friends
-            </button>
-            <button
-              onClick={openGoogleContacts}
-              className="w-full py-3 mb-4 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center justify-center gap-2"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-              </svg>
-              Search Google Contacts
-            </button>
-            <button
-              onClick={openDeviceContacts}
-              className="w-full py-3 mb-4 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center justify-center gap-2"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v-2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 00-3-3.87" />
-                <path d="M16 3.13a4 4 0 010 7.75" />
-              </svg>
-              Search Phone Contacts
-            </button>
-            <button
-              onClick={() => setModal('qr-scan')}
-              className="w-full py-3 mb-4 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center justify-center gap-2"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="2" width="8" height="8" rx="1" />
-                <rect x="14" y="2" width="8" height="8" rx="1" />
-                <rect x="2" y="14" width="8" height="8" rx="1" />
-                <rect x="14" y="14" width="4" height="4" />
-                <path d="M22 14h-4v4" />
-                <path d="M22 22h-4v-4" />
-              </svg>
-              Scan QR to Add
             </button>
 
             {/* Member list */}
@@ -1042,6 +998,72 @@ export default function GroupDetailPage() {
               ))}
             </div>
           )}
+        </BottomSheet>
+      )}
+
+      {/* Add Member Menu */}
+      {modal === 'add-menu' && (
+        <BottomSheet open onClose={() => setModal(null)}>
+          <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Add Member</h3>
+          <div className="space-y-2">
+            <button
+              onClick={() => setModal('add-phone')}
+              className="w-full py-3 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center gap-3 px-4"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+              </svg>
+              Add by Phone Number
+            </button>
+            <button
+              onClick={() => { setModal(null); setTimeout(() => openAddFriends(), 100) }}
+              className="w-full py-3 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center gap-3 px-4"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4-4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Add from Friends
+            </button>
+            <button
+              onClick={() => { setModal(null); setTimeout(() => openGoogleContacts(), 100) }}
+              className="w-full py-3 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center gap-3 px-4"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" className="ml-0.5 mr-0.5">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+              </svg>
+              Search Google Contacts
+            </button>
+            <button
+              onClick={() => { setModal(null); setTimeout(() => openDeviceContacts(), 100) }}
+              className="w-full py-3 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center gap-3 px-4"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v-2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 00-3-3.87" />
+                <path d="M16 3.13a4 4 0 010 7.75" />
+              </svg>
+              Search Phone Contacts
+            </button>
+            <button
+              onClick={() => setModal('qr-scan')}
+              className="w-full py-3 text-[14px] font-semibold text-foreground bg-background rounded-xl active:bg-surface transition-colors border border-border/50 flex items-center gap-3 px-4"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="8" height="8" rx="1" />
+                <rect x="14" y="2" width="8" height="8" rx="1" />
+                <rect x="2" y="14" width="8" height="8" rx="1" />
+                <rect x="14" y="14" width="4" height="4" />
+                <path d="M22 14h-4v4" />
+                <path d="M22 22h-4v-4" />
+              </svg>
+              Scan QR to Add
+            </button>
+          </div>
         </BottomSheet>
       )}
 

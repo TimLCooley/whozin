@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [pushNotifications, setPushNotifications] = useState(false)
   const [hideFromSearch, setHideFromSearch] = useState(false)
   const [showPhone, setShowPhone] = useState(false)
+  const [showLastName, setShowLastName] = useState(true)
   const [profileLoaded, setProfileLoaded] = useState(false)
   const [blockPhoneNumber, setBlockPhoneNumber] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -57,6 +58,7 @@ export default function SettingsPage() {
           setPushNotifications(profile.push_notifications_enabled ?? false)
           setHideFromSearch(profile.hide_from_invites ?? false)
           setShowPhone(profile.show_phone ?? false)
+          setShowLastName(profile.show_last_name ?? true)
           setProfileLoaded(true)
         }
       })
@@ -302,6 +304,18 @@ export default function SettingsPage() {
               </div>
               <p className="text-[12px] text-muted leading-relaxed mt-1">
                 Allow group members and friends to see your phone number.
+              </p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] text-foreground">Show my full last name</span>
+                <Toggle checked={showLastName} onChange={(v) => { setShowLastName(v); saveProfile({ show_last_name: v }) }} />
+              </div>
+              <p className="text-[12px] text-muted leading-relaxed mt-1">
+                {showLastName
+                  ? 'Others see your full last name.'
+                  : <>Others see: <span className="font-medium">{firstName} {lastName ? `${lastName[0].toUpperCase()}${'*'.repeat(7)}` : ''}</span></>
+                }
               </p>
             </div>
             <div>

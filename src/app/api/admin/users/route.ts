@@ -17,15 +17,26 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { id, membership_tier } = await req.json()
-  if (!id || !membership_tier) {
-    return NextResponse.json({ error: 'Missing id or membership_tier' }, { status: 400 })
+  const body = await req.json()
+  const { id } = body
+  if (!id) {
+    return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  }
+
+  const allowed = ['first_name', 'last_name', 'membership_tier'] as const
+  const updates: Record<string, unknown> = {}
+  for (const field of allowed) {
+    if (body[field] !== undefined) updates[field] = body[field]
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
   const admin = getAdminClient()
   const { error } = await admin
     .from('whozin_users')
-    .update({ membership_tier })
+    .update(updates)
     .eq('id', id)
 
   if (error) {

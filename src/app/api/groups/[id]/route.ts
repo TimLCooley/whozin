@@ -38,7 +38,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: members } = await admin
     .from('whozin_group_members')
-    .select('id, user_id, priority_order, whozin_users(id, first_name, last_name, phone, avatar_url, status, show_phone)')
+    .select('id, user_id, priority_order, whozin_users(id, first_name, last_name, phone, avatar_url, status, show_phone, show_last_name)')
     .eq('group_id', id)
     .order('priority_order', { ascending: true })
 
@@ -47,12 +47,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     is_owner: group.creator_id === whozinUser.id,
     current_user_id: whozinUser.id,
     creator_is_pro: creator?.membership_tier === 'pro',
-    members: (members ?? []).map((m) => ({
-      membership_id: m.id,
-      user_id: m.user_id,
-      priority_order: m.priority_order,
-      ...(m.whozin_users as unknown as Record<string, unknown>),
-    })),
+    members: (members ?? []).map((m) => {
+      const u = m.whozin_users as unknown as Record<string, unknown>
+      const isSelf = m.user_id === whozinUser.id
+      const lastName = u.last_name as string || ''
+      const showLast = (u.show_last_name as boolean) ?? true
+      return {
+        membership_id: m.id,
+        user_id: m.user_id,
+        priority_order: m.priority_order,
+        ...u,
+        last_name: isSelf || showLast ? lastName : (lastName ? `${lastName[0].toUpperCase()}${'*'.repeat(7)}` : ''),
+      }
+    }),
   })
 }
 

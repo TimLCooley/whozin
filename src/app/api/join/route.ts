@@ -8,7 +8,7 @@ import { createAlert, alertGroupMembers } from '@/lib/alerts'
 // Allows a non-app user to enter their phone number and get added
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { phone, country_code, inviter_id, group_id } = body
+  const { phone, country_code, inviter_id, group_id, first_name, last_name, show_phone, show_last_name } = body
 
   if (!phone || !inviter_id) {
     return NextResponse.json({ error: 'Phone and inviter_id are required' }, { status: 400 })
@@ -46,14 +46,28 @@ export async function POST(req: NextRequest) {
 
   if (existingUser) {
     targetUserId = existingUser.id
+    // Update name/privacy if provided and user hasn't set a name yet
+    if (first_name) {
+      const { data: current } = await admin.from('whozin_users').select('first_name').eq('id', existingUser.id).single()
+      if (current && !current.first_name) {
+        await admin.from('whozin_users').update({
+          first_name,
+          ...(last_name ? { last_name } : {}),
+          ...(show_phone !== undefined ? { show_phone } : {}),
+          ...(show_last_name !== undefined ? { show_last_name } : {}),
+        }).eq('id', existingUser.id)
+      }
+    }
   } else {
     const { data: newUser, error: createError } = await admin
       .from('whozin_users')
       .insert({
         phone: normalizedPhone,
         country_code: country_code || '1',
-        first_name: '',
-        last_name: '',
+        first_name: first_name || '',
+        last_name: last_name || '',
+        show_phone: show_phone ?? false,
+        show_last_name: show_last_name ?? true,
         status: 'invited',
         membership_tier: 'free',
       })

@@ -26,6 +26,10 @@ export default function PublicProfilePage() {
   // Join flow state
   const [showJoinForm, setShowJoinForm] = useState(false)
   const [phone, setPhone] = useState('')
+  const [joinFirstName, setJoinFirstName] = useState('')
+  const [joinLastName, setJoinLastName] = useState('')
+  const [joinShowPhone, setJoinShowPhone] = useState(false)
+  const [joinShowLastName, setJoinShowLastName] = useState(true)
   const [joining, setJoining] = useState(false)
   const [joined, setJoined] = useState(false)
   const [joinError, setJoinError] = useState('')
@@ -74,8 +78,13 @@ export default function PublicProfilePage() {
     }
   }
 
+  function maskLastName(name: string) {
+    if (!name) return ''
+    return name[0].toUpperCase() + '*'.repeat(7)
+  }
+
   async function handleJoin() {
-    if (joining || !phone.trim()) return
+    if (joining || !phone.trim() || !joinFirstName.trim()) return
     setJoining(true)
     setJoinError('')
     try {
@@ -84,6 +93,10 @@ export default function PublicProfilePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: phone.trim(),
+          first_name: joinFirstName.trim(),
+          last_name: joinLastName.trim(),
+          show_phone: joinShowPhone,
+          show_last_name: joinShowLastName,
           inviter_id: id,
           group_id: groupId || undefined,
         }),
@@ -205,7 +218,7 @@ export default function PublicProfilePage() {
           </div>
         )}
 
-        {/* ===== PHONE NUMBER FORM ===== */}
+        {/* ===== JOIN FORM ===== */}
         {!isLoggedIn && !joined && showJoinForm && (
           <div className="mt-6 w-full max-w-xs">
             <div className="bg-surface/50 border border-border/50 rounded-2xl p-5">
@@ -216,11 +229,33 @@ export default function PublicProfilePage() {
                 }
               </p>
               <p className="text-[12px] text-muted text-center mb-4">
-                Enter your number to join securely.
-                <br />
-                <span className="font-medium">{firstName} won&apos;t see it.</span>
+                Enter your info to join securely.
               </p>
 
+              {/* Name fields */}
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={joinFirstName}
+                  onChange={(e) => setJoinFirstName(e.target.value)}
+                  placeholder="First name"
+                  autoFocus
+                  className="flex-1 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
+                             placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30
+                             focus:border-primary"
+                />
+                <input
+                  type="text"
+                  value={joinLastName}
+                  onChange={(e) => setJoinLastName(e.target.value)}
+                  placeholder="Last name"
+                  className="flex-1 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
+                             placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30
+                             focus:border-primary"
+                />
+              </div>
+
+              {/* Phone field */}
               <div className="flex gap-2">
                 <div className="flex items-center px-3 rounded-xl border border-border bg-background text-[14px] text-muted">
                   +1
@@ -230,20 +265,63 @@ export default function PublicProfilePage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(555) 123-4567"
-                  autoFocus
                   className="flex-1 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
                              placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30
                              focus:border-primary"
                 />
               </div>
 
+              {/* Privacy toggles */}
+              <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
+                <p className="text-[12px] text-muted font-semibold uppercase tracking-wide">Privacy</p>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-foreground">Show my phone number</span>
+                  <button
+                    role="switch"
+                    aria-checked={joinShowPhone}
+                    onClick={() => setJoinShowPhone(!joinShowPhone)}
+                    className={`relative w-[42px] h-[26px] rounded-full transition-colors duration-200 flex-shrink-0 ${
+                      joinShowPhone ? 'bg-primary' : 'bg-[#d5d9e2]'
+                    }`}
+                  >
+                    <span className={`absolute top-[3px] left-[3px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                      joinShowPhone ? 'translate-x-[16px]' : ''
+                    }`} />
+                  </button>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] text-foreground">Show my full last name</span>
+                    <button
+                      role="switch"
+                      aria-checked={joinShowLastName}
+                      onClick={() => setJoinShowLastName(!joinShowLastName)}
+                      className={`relative w-[42px] h-[26px] rounded-full transition-colors duration-200 flex-shrink-0 ${
+                        joinShowLastName ? 'bg-primary' : 'bg-[#d5d9e2]'
+                      }`}
+                    >
+                      <span className={`absolute top-[3px] left-[3px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                        joinShowLastName ? 'translate-x-[16px]' : ''
+                      }`} />
+                    </button>
+                  </div>
+                  {joinLastName && !joinShowLastName && (
+                    <p className="text-[12px] text-muted mt-1">
+                      Others will see: <span className="font-medium">{joinFirstName || 'You'} {maskLastName(joinLastName)}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
               {joinError && (
-                <p className="text-[12px] text-danger mt-2 text-center">{joinError}</p>
+                <p className="text-[12px] text-danger mt-3 text-center">{joinError}</p>
               )}
 
               <button
                 onClick={handleJoin}
-                disabled={joining || !phone.trim()}
+                disabled={joining || !phone.trim() || !joinFirstName.trim()}
                 className="w-full mt-4 py-3.5 rounded-xl bg-primary text-white font-bold text-[15px]
                            active:scale-[0.98] transition-transform disabled:opacity-50"
               >
@@ -259,7 +337,7 @@ export default function PublicProfilePage() {
             </div>
 
             <p className="text-[11px] text-muted text-center mt-3 px-2 leading-relaxed">
-              Your number is stored securely and is never shared with {firstName} or other members.
+              Your info is stored securely. Privacy settings can be changed anytime in the app.
             </p>
           </div>
         )}
