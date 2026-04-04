@@ -90,17 +90,17 @@ export function AppHeader({ showBack, onBack }: AppHeaderProps) {
           aria-label="Home"
         >
           {navLogo ? (
-            <img src={navLogo} alt="Whozin" className="h-8 object-contain" />
+            <img src={navLogo} alt="Whozin" className="h-6 object-contain" />
           ) : (
             <>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <ellipse cx="7.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
                 <ellipse cx="16.5" cy="6.5" rx="2.2" ry="2.5" fill="white" opacity="0.95" />
                 <circle cx="4" cy="13" r="1.8" fill="white" opacity="0.95" />
                 <circle cx="20" cy="13" r="1.8" fill="white" opacity="0.95" />
                 <ellipse cx="12" cy="16.5" rx="5.5" ry="4.2" fill="white" />
               </svg>
-              <h1 className="text-[22px] font-extrabold text-white tracking-tight leading-none">
+              <h1 className="text-[17px] font-extrabold text-white tracking-tight leading-none">
                 Whoz<span className="italic font-extrabold">in</span>
               </h1>
             </>
@@ -108,11 +108,11 @@ export function AppHeader({ showBack, onBack }: AppHeaderProps) {
         </button>
       </div>
 
-      <div className="relative flex items-center gap-3.5">
+      <div className="relative flex items-center gap-1">
         {/* Admin shield - only for super admins */}
         {isAdmin && (
           <button
-            className="p-1.5 -m-1.5 text-white/90 active:text-white transition-colors"
+            className="p-3 text-white/90 active:text-white transition-colors"
             aria-label="Admin Portal"
             onClick={() => router.push('/admin')}
           >
@@ -126,7 +126,7 @@ export function AppHeader({ showBack, onBack }: AppHeaderProps) {
         {/* QR Code */}
         {userId && (
           <button
-            className="p-1.5 -m-1.5 text-white/90 active:text-white transition-colors"
+            className="p-3 text-white/90 active:text-white transition-colors"
             aria-label="QR Code"
             onClick={() => setShowQR(true)}
           >
@@ -146,7 +146,7 @@ export function AppHeader({ showBack, onBack }: AppHeaderProps) {
 
         {/* Notification bell */}
         <button
-          className="relative p-1.5 -m-1.5 text-white/90 active:text-white transition-colors"
+          className="relative p-3 text-white/90 active:text-white transition-colors"
           aria-label="Alerts"
           onClick={() => router.push('/app/alerts')}
         >
@@ -161,7 +161,7 @@ export function AppHeader({ showBack, onBack }: AppHeaderProps) {
 
         {/* Settings gear */}
         <button
-          className="p-1.5 -m-1.5 text-white/90 active:text-white transition-colors"
+          className="p-3 text-white/90 active:text-white transition-colors"
           aria-label="Settings"
           onClick={() => router.push('/app/settings')}
         >
