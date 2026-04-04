@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
+import { usePaywall } from '@/hooks/use-pro-status'
+import ProBadge from '@/components/ui/pro-badge'
 
 interface Preset {
   id: string
@@ -44,7 +46,7 @@ export default function CreateActivityPage() {
   const [mode, setMode] = useState<Mode>(cloneId ? 'build' : 'select')
   const [tab, setTab] = useState<Tab>('details')
   const [submitting, setSubmitting] = useState(false)
-  const [isPro, setIsPro] = useState(false)
+  const { isPro, requirePro } = usePaywall()
   const [isTestUser, setIsTestUser] = useState(false)
   const [allTimers, setAllTimers] = useState<TimerOption[]>(FALLBACK_TIMERS)
   const [defaultTimerFill, setDefaultTimerFill] = useState(5)
@@ -99,7 +101,6 @@ export default function CreateActivityPage() {
     fetch('/api/user/profile')
       .then((r) => r.json())
       .then((data) => {
-        if (data.membership_tier === 'pro') setIsPro(true)
         if (data.phone?.replace(/\D/g, '').includes('999')) setIsTestUser(true)
       })
 
@@ -120,9 +121,11 @@ export default function CreateActivityPage() {
     const now = new Date()
     const dateStr = now.toISOString().split('T')[0]
     const hours = String(now.getHours()).padStart(2, '0')
-    const minutes = String(now.getMinutes()).padStart(2, '0')
+    const roundedMin = Math.ceil(now.getMinutes() / 15) * 15
+    const minutes = roundedMin === 60 ? '00' : String(roundedMin).padStart(2, '0')
+    const adjustedHours = roundedMin === 60 ? String((now.getHours() + 1) % 24).padStart(2, '0') : hours
     setActivityDate(dateStr)
-    setActivityTime(`${hours}:${minutes}`)
+    setActivityTime(`${adjustedHours}:${minutes}`)
   }, [cloneId])
 
   // Load cloned activity data
@@ -504,7 +507,7 @@ export default function CreateActivityPage() {
                     </svg>
                     {uploadingImage ? 'Uploading...' : 'Upload'}
                   </button>
-                  <button type="button" onClick={() => { if (isPro) setShowImageGen(true) }}
+                  <button type="button" onClick={() => { if (!requirePro()) return; setShowImageGen(true) }}
                     className={`flex-1 py-2.5 rounded-xl border text-[13px] font-semibold flex items-center justify-center gap-1.5 ${
                       isPro ? 'border-primary/40 text-primary active:bg-primary/5' : 'border-border/40 text-muted/50'
                     }`}>
@@ -618,7 +621,7 @@ export default function CreateActivityPage() {
                           return (
                             <button
                               key={o.value}
-                              onClick={() => { if (!locked) { setResponseTimer(o.value); setShowTimerDropdown(false) } }}
+                              onClick={() => { if (locked) { requirePro(); return } setResponseTimer(o.value); setShowTimerDropdown(false) }}
                               className={`w-full px-4 py-3 text-left text-[14px] flex items-center justify-between border-b border-border/20 last:border-0 transition-colors ${
                                 locked
                                   ? 'text-muted/50 bg-surface/30'
@@ -654,7 +657,49 @@ export default function CreateActivityPage() {
               <FieldLabel>When?</FieldLabel>
               <div className="flex gap-3">
                 <input type="date" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} className="input-field flex-1" />
-                <input type="time" value={activityTime} onChange={(e) => setActivityTime(e.target.value)} className="input-field flex-1" />
+                <div className="flex gap-1.5 flex-1">
+                  <select
+                    value={activityTime.split(':')[0] || ''}
+                    onChange={(e) => {
+                      const mins = activityTime.split(':')[1] || '00'
+                      setActivityTime(`${e.target.value}:${mins}`)
+                    }}
+                    className="input-field flex-1 text-center"
+                  >
+                    <option value="" disabled>Hr</option>
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const h12 = i === 0 ? 12 : i
+                      const ampm = 'AM'
+                      return (
+                        <option key={`am-${i}`} value={String(i).padStart(2, '0')}>
+                          {h12} {ampm}
+                        </option>
+                      )
+                    })}
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const h24 = i + 12
+                      const h12 = i === 0 ? 12 : i
+                      const ampm = 'PM'
+                      return (
+                        <option key={`pm-${h24}`} value={String(h24).padStart(2, '0')}>
+                          {h12} {ampm}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  <select
+                    value={activityTime.split(':')[1] || '00'}
+                    onChange={(e) => {
+                      const hrs = activityTime.split(':')[0] || '12'
+                      setActivityTime(`${hrs}:${e.target.value}`)
+                    }}
+                    className="input-field flex-1 text-center"
+                  >
+                    {['00', '15', '30', '45'].map((m) => (
+                      <option key={m} value={m}>:{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </FieldCard>
 
@@ -667,8 +712,7 @@ export default function CreateActivityPage() {
                 </div>
                 <Toggle
                   checked={chatEnabled}
-                  onChange={(v) => { if (!isPro) return; setChatEnabled(v) }}
-                  disabled={!isPro}
+                  onChange={(v) => { if (v && !requirePro()) return; setChatEnabled(v) }}
                 />
               </div>
               <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
@@ -961,7 +1005,7 @@ export default function CreateActivityPage() {
                     </svg>
                     {uploadingImage ? 'Uploading...' : 'Upload'}
                   </button>
-                  <button type="button" onClick={() => { if (isPro) setShowImageGen(true) }}
+                  <button type="button" onClick={() => { if (!requirePro()) return; setShowImageGen(true) }}
                     className={`flex-1 py-2.5 rounded-xl border text-[13px] font-semibold flex items-center justify-center gap-1.5 ${
                       isPro ? 'border-primary/40 text-primary active:bg-primary/5' : 'border-border/40 text-muted/50'
                     }`}>
@@ -995,10 +1039,9 @@ export default function CreateActivityPage() {
                 <Toggle
                   checked={reminderEnabled}
                   onChange={(v) => {
-                    if (!isPro) return
+                    if (v && !requirePro()) return
                     setReminderEnabled(v)
                   }}
-                  disabled={!isPro}
                 />
               </div>
               <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
@@ -1097,7 +1140,7 @@ export default function CreateActivityPage() {
                 ))}
                 <button
                   onClick={() => {
-                    if (!isPro) return
+                    if (!requirePro()) return
                     setMaxCapacity('custom')
                   }}
                   className={`px-4 h-10 rounded-full text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${
@@ -1173,7 +1216,7 @@ export default function CreateActivityPage() {
                           <button
                             key={opt.value}
                             onClick={() => {
-                              if (locked) return
+                              if (locked) { requirePro(); return }
                               setResponseTimer(opt.value)
                               setShowTimerDropdown(false)
                             }}
@@ -1214,10 +1257,9 @@ export default function CreateActivityPage() {
                 <Toggle
                   checked={chatEnabled}
                   onChange={(v) => {
-                    if (!isPro) return
+                    if (v && !requirePro()) return
                     setChatEnabled(v)
                   }}
-                  disabled={!isPro}
                 />
               </div>
               <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
@@ -1285,16 +1327,6 @@ function FieldCard({ children }: { children: React.ReactNode }) {
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">{children}</label>
-}
-
-function ProBadge({ small }: { small?: boolean }) {
-  return (
-    <span className={`inline-flex items-center font-bold tracking-wide uppercase bg-primary/10 text-primary rounded-full ${
-      small ? 'text-[8px] px-1.5 py-0.5' : 'text-[10px] px-2 py-0.5'
-    }`}>
-      PRO
-    </span>
-  )
 }
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {

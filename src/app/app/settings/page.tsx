@@ -258,21 +258,35 @@ export default function SettingsPage() {
           delay={1}
         >
           <div className="space-y-3">
-            <Field label="Current Membership">
-              <div className="input-field text-foreground/70 select-none capitalize">{membership}</div>
-            </Field>
-            <div className="flex items-center gap-3 pt-1">
-              <button
-                onClick={() => {
-                  const newTier = membership === 'free' ? 'pro' : 'free'
-                  setMembership(newTier)
-                  saveProfile({ membership_tier: newTier })
-                }}
-                className="btn-primary flex-1 py-2.5"
-              >
-                {membership === 'free' ? 'Upgrade to Pro' : 'Downgrade to Free'}
-              </button>
-            </div>
+            {membership === 'free' ? (
+              <>
+                <Field label="Current Membership">
+                  <div className="input-field text-foreground/70 select-none capitalize">Free</div>
+                </Field>
+                <button
+                  onClick={() => router.push('/app/upgrade?returnTo=/app/settings')}
+                  className="btn-primary w-full py-2.5"
+                >
+                  Upgrade to Pro
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary text-[13px] font-semibold px-3 py-1 rounded-full">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    Pro
+                  </span>
+                  <span className="text-[14px] text-foreground font-medium">Pro Member</span>
+                </div>
+                <button
+                  onClick={() => router.push('/app/upgrade?returnTo=/app/settings')}
+                  className="btn-primary w-full py-2.5 text-[13px]"
+                >
+                  Manage Subscription
+                </button>
+              </>
+            )}
           </div>
         </Section>
 

@@ -31,7 +31,7 @@ export async function PUT(req: NextRequest) {
 
   // Only allow updating specific fields
   const allowed: Record<string, unknown> = {}
-  const fields = ['first_name', 'last_name', 'email', 'membership_tier', 'push_notifications_enabled', 'text_notifications_enabled', 'hide_from_invites', 'show_phone', 'show_last_name']
+  const fields = ['first_name', 'last_name', 'email', 'push_notifications_enabled', 'text_notifications_enabled', 'hide_from_invites', 'show_phone', 'show_last_name']
   for (const field of fields) {
     if (body[field] !== undefined) allowed[field] = body[field]
   }

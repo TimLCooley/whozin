@@ -1265,7 +1265,10 @@ function GroupChat({ group }: { group: GroupDetail }) {
             : 'Chat requires a Pro membership. The group owner needs to upgrade to enable chat for everyone.'}
         </p>
         {group.is_owner && !group.creator_is_pro && (
-          <button className="btn-primary px-6 py-2.5 text-[13px]">
+          <button
+            onClick={() => window.location.href = `/app/upgrade?returnTo=/app/groups/${group.id}`}
+            className="btn-primary px-6 py-2.5 text-[13px]"
+          >
             Upgrade to Pro
           </button>
         )}

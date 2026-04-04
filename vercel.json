@@ -6,6 +6,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/process-reminders",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/health-check",
       "schedule": "0 8 * * *"
     }

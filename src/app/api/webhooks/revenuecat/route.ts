@@ -96,11 +96,28 @@ export async function POST(req: NextRequest) {
 
     // Only update if tier actually changed
     if (user.membership_tier !== newTier) {
-      await admin
-        .from('whozin_users')
-        .update({ membership_tier: newTier })
-        .eq('id', user.id)
+      const productId = (event.product_id as string) || ''
+      const subType = productId.includes('lifetime') ? 'lifetime'
+        : productId.includes('annual') ? 'annual'
+        : productId.includes('monthly') ? 'monthly'
+        : null
+      const expiresAt = event.expiration_at_ms
+        ? new Date(event.expiration_at_ms as number).toISOString()
+        : null
 
+      const updates: Record<string, unknown> = {
+        membership_tier: newTier,
+        subscription_platform: 'revenuecat',
+      }
+      if (newTier === 'pro') {
+        if (subType) updates.subscription_type = subType
+        if (expiresAt) updates.subscription_expires_at = expiresAt
+      } else {
+        updates.subscription_type = null
+        updates.subscription_expires_at = null
+      }
+
+      await admin.from('whozin_users').update(updates).eq('id', user.id)
       console.log(`[RevenueCat] Updated ${appUserId} tier: ${user.membership_tier} → ${newTier}`)
     }
 

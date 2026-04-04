@@ -35,6 +35,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           return
         }
 
+        // On native, initialize RevenueCat for IAP
+        if (Capacitor.isNativePlatform()) {
+          try {
+            const { Purchases } = await import('@revenuecat/purchases-capacitor')
+            const platform = Capacitor.getPlatform()
+            const rcKey = platform === 'ios'
+              ? process.env.NEXT_PUBLIC_REVENUECAT_APPLE_KEY?.trim()
+              : process.env.NEXT_PUBLIC_REVENUECAT_GOOGLE_KEY?.trim()
+            if (rcKey) {
+              await Purchases.configure({ apiKey: rcKey, appUserID: user.id })
+            }
+          } catch {
+            // RevenueCat not available — skip
+          }
+        }
+
         // On native, check if push token is saved
         // Only show gate if the plugin is actually available
         if (Capacitor.isNativePlatform() && !profile.push_token) {

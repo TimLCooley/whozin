@@ -60,6 +60,28 @@ export async function POST(req: NextRequest) {
       await updateTierByStripeCustomer(admin, customerId, 'free')
     }
 
+    if (eventType === 'checkout.session.completed') {
+      const session = subscription
+      const mode = session.mode as string
+      const customerId = session.customer as string
+      const metadata = session.metadata as Record<string, string> | undefined
+
+      if (mode === 'payment') {
+        // Lifetime one-time purchase
+        if (customerId) {
+          await updateTierByStripeCustomer(admin, customerId, 'pro', 'lifetime')
+        } else if (metadata?.supabase_user_id) {
+          // Fallback: match by Supabase auth user ID
+          await admin
+            .from('whozin_users')
+            .update({ membership_tier: 'pro', subscription_type: 'lifetime', subscription_platform: 'stripe' })
+            .eq('auth_user_id', metadata.supabase_user_id)
+          console.log(`[Stripe] Lifetime purchase for auth user ${metadata.supabase_user_id}`)
+        }
+      }
+      // Subscription checkouts are handled by customer.subscription.created
+    }
+
     if (eventType === 'invoice.payment_failed') {
       const customerId = subscription.customer as string
       console.warn(`[Stripe] Payment failed for customer ${customerId}`)
@@ -76,9 +98,9 @@ export async function POST(req: NextRequest) {
 async function updateTierByStripeCustomer(
   admin: ReturnType<typeof getAdminClient>,
   customerId: string,
-  tier: 'pro' | 'free'
+  tier: 'pro' | 'free',
+  subscriptionType?: string
 ) {
-  // Look up user by stripe_customer_id
   const { data: user } = await admin
     .from('whozin_users')
     .select('id, membership_tier')
@@ -86,10 +108,10 @@ async function updateTierByStripeCustomer(
     .maybeSingle()
 
   if (user && user.membership_tier !== tier) {
-    await admin
-      .from('whozin_users')
-      .update({ membership_tier: tier })
-      .eq('id', user.id)
+    const updates: Record<string, unknown> = { membership_tier: tier, subscription_platform: 'stripe' }
+    if (subscriptionType) updates.subscription_type = subscriptionType
+    if (tier === 'free') { updates.subscription_type = null; updates.subscription_expires_at = null }
+    await admin.from('whozin_users').update(updates).eq('id', user.id)
     console.log(`[Stripe] Updated customer ${customerId} tier: ${user.membership_tier} → ${tier}`)
   } else if (!user) {
     console.warn(`[Stripe] No user found for customer ${customerId}`)

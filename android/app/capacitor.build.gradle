@@ -15,6 +15,7 @@ dependencies {
     implementation project(':capacitor-push-notifications')
     implementation project(':capawesome-capacitor-apple-sign-in')
     implementation project(':codetrix-studio-capacitor-google-auth')
+    implementation project(':revenuecat-purchases-capacitor')
 
 }
 
