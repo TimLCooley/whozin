@@ -52,19 +52,19 @@ export async function GET(request: NextRequest) {
     .maybeSingle()
 
   if (!existingUser) {
-    // Check if there's a whozin_users record with this email (invited via email)
+    // Check if there's a whozin_users record with this email (invited or existing phone user)
     let linkedUser = null
     if (email) {
       const { data } = await admin
         .from('whozin_users')
         .select('id, auth_user_id')
         .eq('email', email)
-        .is('auth_user_id', null)
         .maybeSingle()
       linkedUser = data
     }
 
     if (linkedUser) {
+      // Link this OAuth identity to the existing user record
       await admin
         .from('whozin_users')
         .update({

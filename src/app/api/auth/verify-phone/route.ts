@@ -68,24 +68,20 @@ export async function POST(req: NextRequest) {
     .eq('phone', normalizedPhone)
     .maybeSingle()
 
-  if (existingUser && existingUser.auth_user_id && existingUser.auth_user_id !== user.id) {
-    return NextResponse.json({ error: 'This phone number is already linked to another account.' }, { status: 400 })
-  }
-
-  if (existingUser && !existingUser.auth_user_id) {
-    // Invited user with this phone — link the OAuth account to them
-    // First delete the OAuth user's empty profile
+  if (existingUser && existingUser.auth_user_id !== user.id) {
+    // Phone belongs to another record — merge by linking this OAuth user to that record
+    // Delete the OAuth user's empty/new profile first
     await admin.from('whozin_users').delete().eq('auth_user_id', user.id)
-    // Then link the invited record
+    // Link the existing record to this OAuth identity
     await admin
       .from('whozin_users')
       .update({
         auth_user_id: user.id,
-        phone: normalizedPhone,
-        country_code: country_code || '1',
         status: 'active',
       })
       .eq('id', existingUser.id)
+  } else if (existingUser) {
+    // Same auth user already owns this phone — no-op
   } else {
     // Update the OAuth user's profile with the phone
     await admin

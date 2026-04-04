@@ -118,7 +118,23 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     const url = provider === 'apple'
       ? `/api/auth/apple-native?nonce=${nonce}`
       : `/api/auth/oauth-start?provider=${provider}&nonce=${nonce}`
-    window.open(url, '_blank')
+    const fullUrl = `${window.location.origin}${url}`
+
+    // Open in system browser (not WebView) — Google blocks OAuth from embedded WebViews
+    try {
+      const { Browser } = await import('@capacitor/browser')
+      await Browser.open({ url: fullUrl })
+    } catch {
+      // Fallback: create an anchor with intent scheme to force system browser on Android
+      if (/Android/i.test(navigator.userAgent)) {
+        const stripped = fullUrl.replace(/^https:\/\//, '')
+        const a = document.createElement('a')
+        a.href = `intent://${stripped}#Intent;scheme=https;action=android.intent.action.VIEW;end`
+        a.click()
+      } else {
+        window.open(fullUrl, '_blank')
+      }
+    }
 
     // Poll for session tokens (callback stores them keyed by nonce)
     for (let i = 0; i < 60; i++) {
@@ -214,41 +230,16 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     setSocialLoading('google')
     setError('')
     try {
-      if (native && platform === 'android') {
-        // Native Android: use Capacitor Google Auth plugin
-        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
-        await GoogleAuth.initialize({
-          clientId: '85647149825-ppb9jgfq3umjv47s4rlbr4paj0ns4lbq.apps.googleusercontent.com',
-          scopes: ['email', 'profile', 'https://www.googleapis.com/auth/contacts.readonly'],
-          grantOfflineAccess: true,
-        })
-        const result = await GoogleAuth.signIn()
-        const idToken = result.authentication?.idToken
-        if (!idToken) {
-          setError('No ID token received from Google')
-          setSocialLoading(null)
-          return
-        }
-        const supabase = createClient()
-        const { error: signInError } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: idToken,
-        })
-        if (signInError) {
-          setError(signInError.message)
-          setSocialLoading(null)
-          return
-        }
-        await fetch('/api/auth/ensure-profile', { method: 'POST' })
-        window.location.href = '/app'
+      if (native) {
+        // Native (Android & iOS): open OAuth in system browser, poll for session
+        await handleNativeOAuth('google')
       } else {
-        // Web / iOS: use Supabase OAuth redirect
+        // Web: use Supabase OAuth redirect
         const supabase = createClient()
         const { error: oauthError } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
             redirectTo: `${window.location.origin}/auth/callback`,
-            scopes: 'https://www.googleapis.com/auth/contacts.readonly',
             queryParams: {
               access_type: 'offline',
               prompt: 'consent',
@@ -259,16 +250,14 @@ export default function AuthForm({ onBack }: AuthFormProps) {
           setError(oauthError.message)
           setSocialLoading(null)
         }
-        // Browser will redirect — no need to handle success here
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      // User cancelled
       if (msg.includes('canceled') || msg.includes('cancelled') || msg.includes('12501')) {
         setSocialLoading(null)
         return
       }
-      setError('Google sign-in failed. Please try again.')
+      setError(`Google sign-in failed: ${msg}`)
       setSocialLoading(null)
     }
   }

@@ -50,19 +50,19 @@ export async function POST() {
     return NextResponse.json({ ok: true, existing: true })
   }
 
-  // Check if there's an invited record with this email
+  // Check if there's a record with this email (invited or existing phone user)
   let linkedUser = null
   if (email) {
     const { data } = await admin
       .from('whozin_users')
       .select('id, auth_user_id')
       .eq('email', email)
-      .is('auth_user_id', null)
       .maybeSingle()
     linkedUser = data
   }
 
   if (linkedUser) {
+    // Link this OAuth identity to the existing user record
     await admin
       .from('whozin_users')
       .update({

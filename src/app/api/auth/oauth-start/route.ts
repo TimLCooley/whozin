@@ -32,15 +32,10 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  const scopes = provider === 'google'
-    ? 'https://www.googleapis.com/auth/contacts.readonly'
-    : undefined
-
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo: `${origin}/auth/callback`,
-      scopes,
       skipBrowserRedirect: true,
       ...(provider === 'google' ? {
         queryParams: {
