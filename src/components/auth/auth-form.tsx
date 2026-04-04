@@ -120,20 +120,14 @@ export default function AuthForm({ onBack }: AuthFormProps) {
       : `/api/auth/oauth-start?provider=${provider}&nonce=${nonce}`
     const fullUrl = `${window.location.origin}${url}`
 
-    // Open in system browser (not WebView) — Google blocks OAuth from embedded WebViews
+    // Open OAuth in system browser / in-app browser
+    // Try Browser plugin first (Chrome Custom Tab / SFSafariViewController)
+    // Fall back to window.open if plugin not available (pre-rebuild iOS)
     try {
       const { Browser } = await import('@capacitor/browser')
       await Browser.open({ url: fullUrl })
     } catch {
-      // Fallback: create an anchor with intent scheme to force system browser on Android
-      if (/Android/i.test(navigator.userAgent)) {
-        const stripped = fullUrl.replace(/^https:\/\//, '')
-        const a = document.createElement('a')
-        a.href = `intent://${stripped}#Intent;scheme=https;action=android.intent.action.VIEW;end`
-        a.click()
-      } else {
-        window.open(fullUrl, '_blank')
-      }
+      window.open(fullUrl, '_blank')
     }
 
     // Poll for session tokens (callback stores them keyed by nonce)
@@ -170,7 +164,8 @@ export default function AuthForm({ onBack }: AuthFormProps) {
     setError('')
     try {
       if (native) {
-        // Native: open OAuth in system browser, poll for session
+        // Native: use Browser plugin (SFSafariViewController on iOS, Custom Tab on Android)
+        // Opens in-app overlay, polls for session tokens
         await handleNativeOAuth('apple')
       } else {
         // Web: use Apple JS SDK popup
@@ -208,7 +203,7 @@ export default function AuthForm({ onBack }: AuthFormProps) {
         setSocialLoading(null)
         return
       }
-      setError('Apple sign-in failed. Please try again.')
+      setError(`Apple sign-in failed: ${msg}`)
       setSocialLoading(null)
     }
   }

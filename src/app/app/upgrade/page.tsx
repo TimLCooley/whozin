@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { isNative, getPlatform } from '@/lib/capacitor'
 import { useProStatus } from '@/hooks/use-pro-status'
+import { BrandedFavicon } from '@/components/ui/branded-logo'
 
 type Plan = 'monthly' | 'annual' | 'lifetime'
 
@@ -217,8 +218,8 @@ export default function UpgradePage() {
       <div className="flex-1 px-5 pb-24 overflow-y-auto">
         {/* Hero */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-3xl">✨</span>
+          <div className="mx-auto mb-4">
+            <BrandedFavicon className="w-20 h-20 rounded-2xl shadow-lg" />
           </div>
           <h1 className="text-[24px] font-bold text-foreground">Unlock Whozin Pro</h1>
           <p className="text-[14px] text-muted mt-2">Get the most out of your group activities</p>

@@ -11,8 +11,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing nonce' }, { status: 400 })
   }
 
-  // Generate a random state for CSRF protection
-  const state = crypto.randomBytes(16).toString('hex')
+  // Encode nonce in state so it survives the redirect without cookies
+  // Format: randomHex.nonce
+  const state = crypto.randomBytes(16).toString('hex') + '.' + nonce
 
   const params = new URLSearchParams({
     client_id: 'io.whozin.app.signin',
