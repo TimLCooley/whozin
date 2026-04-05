@@ -320,8 +320,9 @@ export default function GroupDetailPage() {
         .sort((a, b) => a.name.localeCompare(b.name))
       setAllDeviceContacts(mapped)
       setDeviceContacts(mapped)
-    } catch {
-      setDeviceError('Contacts not available. This feature works in the Whozin app on iOS or Android.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setDeviceError(`Contacts error: ${msg}`)
     }
     setLoadingDevice(false)
   }
@@ -1397,10 +1398,30 @@ function GroupChat({ group }: { group: GroupDetail }) {
 }
 
 function BottomSheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const sheetRef = useRef<HTMLDivElement>(null)
+
+  // When keyboard opens on iOS, scroll the focused input into view
+  useEffect(() => {
+    const sheet = sheetRef.current
+    if (!sheet) return
+    const handleFocus = () => {
+      // Small delay to let keyboard finish animating
+      setTimeout(() => {
+        const active = document.activeElement as HTMLElement
+        if (active && sheet.contains(active)) {
+          active.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 300)
+    }
+    sheet.addEventListener('focusin', handleFocus)
+    return () => sheet.removeEventListener('focusin', handleFocus)
+  }, [])
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center modal-backdrop bg-black/40" onClick={onClose}>
       <div
-        className="modal-panel bg-background rounded-t-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto"
+        ref={sheetRef}
+        className="modal-panel bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle */}
