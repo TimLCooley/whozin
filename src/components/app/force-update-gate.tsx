@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Capacitor } from '@capacitor/core'
+import { isNative, getPlatform } from '@/lib/capacitor'
 
 interface UpdateInfo {
   updateRequired: boolean
@@ -15,7 +15,9 @@ export function ForceUpdateGate({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false)
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) {
+    // Check user agent for WebView (more reliable than Capacitor bridge on Android)
+    const inWebView = typeof window !== 'undefined' && (/wv/i.test(navigator.userAgent) || /Android.*Version\/[\d.]+/i.test(navigator.userAgent))
+    if (!inWebView && !isNative()) {
       setChecked(true)
       return
     }
@@ -24,7 +26,7 @@ export function ForceUpdateGate({ children }: { children: React.ReactNode }) {
       try {
         const { App } = await import('@capacitor/app')
         const info = await App.getInfo()
-        const platform = Capacitor.getPlatform()
+        const platform = getPlatform()
 
         const res = await fetch(
           `/api/app/version-check?platform=${platform}&version=${info.version}`
