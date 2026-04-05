@@ -823,7 +823,8 @@ export default function GroupDetailPage() {
                   value={googleSearch}
                   onChange={(e) => searchGoogleContacts(e.target.value)}
                   placeholder="Search by name..."
-                  className="input-field pl-10"
+                  className="input-field"
+                  style={{ paddingLeft: '2.5rem' }}
                   autoFocus
                 />
               </div>
@@ -900,7 +901,8 @@ export default function GroupDetailPage() {
                   value={deviceSearch}
                   onChange={(e) => searchDeviceContacts(e.target.value)}
                   placeholder="Search by name..."
-                  className="input-field pl-10"
+                  className="input-field"
+                  style={{ paddingLeft: '2.5rem' }}
                   autoFocus
                 />
               </div>
