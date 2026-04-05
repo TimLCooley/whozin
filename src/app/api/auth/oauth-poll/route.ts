@@ -15,18 +15,15 @@ export async function GET(request: NextRequest) {
     .from('pending_auth_sessions')
     .select('access_token, refresh_token')
     .eq('nonce', nonce)
-    .gt('created_at', new Date(Date.now() - 120_000).toISOString()) // expire after 2 min
+    .gt('created_at', new Date(Date.now() - 300_000).toISOString()) // expire after 5 min
     .maybeSingle()
 
   if (!data) {
     return NextResponse.json({ pending: true })
   }
 
-  // Delete after retrieval (one-time use)
-  await admin
-    .from('pending_auth_sessions')
-    .delete()
-    .eq('nonce', nonce)
+  // Don't delete — let it expire naturally so recovery polls can use it too
+  // Android kills the WebView during OAuth, so the page needs to re-poll on restart
 
   return NextResponse.json({
     pending: false,

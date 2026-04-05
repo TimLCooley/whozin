@@ -113,16 +113,17 @@ export default function AuthForm({ onBack }: AuthFormProps) {
   async function handleNativeOAuth(provider: 'apple' | 'google') {
     const nonce = crypto.randomUUID() + crypto.randomUUID().slice(0, 4)
 
-    // Apple: direct Apple OAuth + signInWithIdToken (bypasses Supabase OAuth)
-    // Google: Supabase OAuth redirect
+    // Save nonce in a JS cookie BEFORE opening the browser
+    // Android kills the WebView process while Chrome Custom Tab is open,
+    // so the polling loop dies. When the page reloads, we recover using this cookie.
+    document.cookie = `_whozin_nonce=${nonce};path=/;max-age=300;samesite=lax`
+
     const url = provider === 'apple'
       ? `/api/auth/apple-native?nonce=${nonce}`
       : `/api/auth/oauth-start?provider=${provider}&nonce=${nonce}`
     const fullUrl = `${window.location.origin}${url}`
 
     // Open OAuth in system browser / in-app browser
-    // Try Browser plugin first (Chrome Custom Tab / SFSafariViewController)
-    // Fall back to window.open if plugin not available (pre-rebuild iOS)
     try {
       const { Browser } = await import('@capacitor/browser')
       await Browser.open({ url: fullUrl })
@@ -130,7 +131,11 @@ export default function AuthForm({ onBack }: AuthFormProps) {
       window.open(fullUrl, '_blank')
     }
 
-    // Poll for session tokens (callback stores them keyed by nonce)
+    // Poll for session tokens (may be killed by Android if WebView is backgrounded)
+    await pollForSession(nonce)
+  }
+
+  async function pollForSession(nonce: string) {
     for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 2000))
       try {
@@ -147,6 +152,8 @@ export default function AuthForm({ onBack }: AuthFormProps) {
             setSocialLoading(null)
             return
           }
+          // Clear the nonce cookie
+          document.cookie = '_whozin_nonce=;path=/;max-age=0'
           await fetch('/api/auth/ensure-profile', { method: 'POST' })
           window.location.href = '/app'
           return

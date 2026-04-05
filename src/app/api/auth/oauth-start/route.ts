@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: `${origin}/auth/callback`,
+      redirectTo: nonce ? `${origin}/auth/callback?nonce=${nonce}` : `${origin}/auth/callback`,
       skipBrowserRedirect: true,
       ...(provider === 'google' ? {
         queryParams: {

@@ -110,15 +110,45 @@ export default function HomePage() {
   useEffect(() => {
     if (isNative()) {
       const supabase = createClient()
-      const checkAuth = () => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-          if (user) {
-            router.replace('/app')
-          } else {
-            setShowAuth(true)
-            setCheckingAuth(false)
+      const checkAuth = async () => {
+        // Check if we have an existing session
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          router.replace('/app')
+          return
+        }
+
+        // Check if we're returning from OAuth (nonce cookie saved before browser opened)
+        // Android kills the WebView while Chrome Custom Tab is open, so we recover here
+        const nonceMatch = document.cookie.match(/(^| )_whozin_nonce=([^;]*)/)
+        const savedNonce = nonceMatch ? nonceMatch[2] : null
+        if (savedNonce) {
+          // Poll for the OAuth session
+          for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 2000))
+            try {
+              const res = await fetch(`/api/auth/oauth-poll?nonce=${savedNonce}`)
+              const data = await res.json()
+              if (!data.pending && data.access_token) {
+                const { error: sessionError } = await supabase.auth.setSession({
+                  access_token: data.access_token,
+                  refresh_token: data.refresh_token,
+                })
+                if (!sessionError) {
+                  document.cookie = '_whozin_nonce=;path=/;max-age=0'
+                  await fetch('/api/auth/ensure-profile', { method: 'POST' })
+                  router.replace('/app')
+                  return
+                }
+              }
+            } catch (e) { /* keep polling */ }
           }
-        })
+          // Nonce polling failed — keep the cookie for next attempt
+          // It will expire naturally after 5 minutes
+        }
+
+        setShowAuth(true)
+        setCheckingAuth(false)
       }
       checkAuth()
 

@@ -86,5 +86,17 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Store session for native WebView polling
+  // Nonce comes from URL query param (reliable) or cookie (fallback)
+  const nonce = searchParams.get('nonce') || cookieStore.get('auth_nonce')?.value
+  if (nonce && sessionData.session) {
+    await admin.from('pending_auth_sessions').upsert({
+      nonce,
+      access_token: sessionData.session.access_token,
+      refresh_token: sessionData.session.refresh_token,
+    })
+    try { cookieStore.delete('auth_nonce') } catch {}
+  }
+
   return NextResponse.redirect(`${origin}/app`)
 }
