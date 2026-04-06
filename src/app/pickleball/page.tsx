@@ -242,7 +242,7 @@ export default function PickleballPage() {
             headline={<>Stop managing the chaos.<br /><span className="text-[#f59e0b]">Own the courts.</span></>}
             subheadline="Set up your pickleball group in 2 minutes. Every session fills to the exact right number."
             buttonText="Organize Your Courts — Free"
-            footnote="Free forever. No credit card. Your players respond via SMS — no app needed."
+            footnote="Free forever. No credit card. Your players respond via text — no app needed."
           />
         </>
       )}

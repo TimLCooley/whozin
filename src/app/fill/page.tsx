@@ -327,7 +327,7 @@ export default function FillPage() {
             headline={<>Stop chasing subs.<br /><span className="text-[#34c759]">Let Whozin fill the spot.</span></>}
             subheadline="Build your waitlist once. Next time someone bails, you won't even notice."
             buttonText="Never Cancel Again — Free"
-            footnote="Free forever. No credit card. Waitlisted people respond via SMS — no app needed."
+            footnote="Free forever. No credit card. Waitlisted people respond via text — no app needed."
           />
         </>
       )}

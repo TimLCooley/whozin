@@ -282,7 +282,7 @@ export default function VolleyballPage() {
             headline={<>Never scramble for a setter again.<br /><span className="text-[#dc2626]">Build the roster that fills itself.</span></>}
             subheadline="Set up your volleyball group in 2 minutes. Every position covered. Every week."
             buttonText="Build Your Roster — Free"
-            footnote="Free forever. No credit card. Your players respond via SMS — no app needed."
+            footnote="Free forever. No credit card. Your players respond via text — no app needed."
           />
         </>
       )}
