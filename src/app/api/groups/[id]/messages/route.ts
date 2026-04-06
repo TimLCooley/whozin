@@ -160,7 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     type: 'chat_message',
     title: `New message in ${groupName}`,
     body: `${senderName}: ${text.length > 80 ? text.slice(0, 80) + '...' : text}`,
-    link: `/app/groups/${groupId}`,
+    link: `/app/groups/${groupId}?tab=chat`,
   })
 
   return NextResponse.json({

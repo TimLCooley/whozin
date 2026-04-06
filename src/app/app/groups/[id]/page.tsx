@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { createClient } from '@/lib/supabase/client'
 import { AvatarImg } from '@/components/ui/avatar-img'
@@ -125,9 +125,14 @@ export default function GroupDetailPage() {
       setGroupName(data.name)
       setChatEnabled(data.chat_enabled)
       setMembersVisible(data.members_visible ?? true)
-      // Default tab: host sees details, non-host sees chat
+      // Default tab: use URL param if present, else host sees details, non-host sees chat
       if (tab === null) {
-        setTab(data.is_owner ? 'details' : 'chat')
+        const urlTab = new URLSearchParams(window.location.search).get('tab') as Tab
+        if (urlTab && ['details', 'chat', 'members'].includes(urlTab)) {
+          setTab(urlTab)
+        } else {
+          setTab(data.is_owner ? 'details' : 'chat')
+        }
       }
     }
     setLoading(false)

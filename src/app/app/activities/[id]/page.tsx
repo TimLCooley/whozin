@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { AvatarImg } from '@/components/ui/avatar-img'
 import { createClient } from '@/lib/supabase/client'
@@ -83,7 +83,9 @@ export default function ActivityDetailPage() {
 
   const [activity, setActivity] = useState<ActivityDetail | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('details')
+  const searchParams = useSearchParams()
+  const initialTab = (searchParams.get('tab') as Tab) || 'details'
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [responding, setResponding] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)

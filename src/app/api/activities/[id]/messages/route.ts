@@ -181,7 +181,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         type: 'chat_message',
         title: `New message in ${activity.activity_name}`,
         body: `${senderName}: ${text.length > 80 ? text.slice(0, 80) + '...' : text}`,
-        link: `/app/activities/${activityId}`,
+        link: `/app/activities/${activityId}?tab=chat`,
       })
     }
   }
