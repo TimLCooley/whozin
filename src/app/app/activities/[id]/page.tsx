@@ -52,7 +52,7 @@ type Tab = 'details' | 'group' | 'chat'
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   confirmed: { label: 'Confirmed', color: 'text-green-600', icon: 'check' },
   waiting: { label: 'Invited', color: 'text-yellow-600', icon: 'clock' },
-  tbd: { label: 'In Queue', color: 'text-muted', icon: 'queue' },
+  tbd: { label: 'On Deck', color: 'text-muted', icon: 'queue' },
   missed: { label: 'Missed', color: 'text-orange-500', icon: 'missed' },
   out: { label: 'Out', color: 'text-red-500', icon: 'x' },
 }
@@ -328,7 +328,28 @@ export default function ActivityDetailPage() {
           <div className="px-4 pt-4 space-y-5 animate-enter">
             <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" />
             <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" />
-            <StatusSection title="TBD" count={tbd.length} members={tbd} statusKey="tbd" />
+
+            {/* Status banner — show when invites are done */}
+            {isFull && tbd.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/10">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                  <path d="M22 4L12 14.01l-3-3" />
+                </svg>
+                <span className="text-[12px] text-foreground/70">All spots filled — no more invites will be sent</span>
+              </div>
+            )}
+            {!isFull && tbd.length === 0 && waiting.length === 0 && confirmed.length > 1 && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/10">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                  <path d="M22 4L12 14.01l-3-3" />
+                </svg>
+                <span className="text-[12px] text-foreground/70">Everyone has been invited</span>
+              </div>
+            )}
+
+            <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" />
             <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" />
             <StatusSection title="Out" count={out.length} members={out} statusKey="out" />
 
