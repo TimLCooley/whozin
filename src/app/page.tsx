@@ -42,10 +42,6 @@ export default function HomePage() {
   const [heroLoaded, setHeroLoaded] = useState(false)
   const [activityIdx, setActivityIdx] = useState(0)
   const [activityFade, setActivityFade] = useState(true)
-  const buildSection = useInView()
-  const fillSection = useInView()
-  const howSection = useInView()
-  const proofSection = useInView()
 
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 100)
@@ -274,8 +270,8 @@ export default function HomePage() {
           {/* ═══════════════════════════════════════════════
               BUILD — The fastest way to build a group
               ═══════════════════════════════════════════════ */}
-          <section ref={buildSection.ref} className="py-20 md:py-28">
-            <div className={`max-w-5xl mx-auto px-6 transition-all duration-700 ${buildSection.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+          <section className="py-20 md:py-28">
+            <div className="max-w-5xl mx-auto px-6">
               <div className="md:flex md:items-center md:gap-16">
                 {/* Left: Copy */}
                 <div className="flex-1 mb-10 md:mb-0">
@@ -350,8 +346,8 @@ export default function HomePage() {
           {/* ═══════════════════════════════════════════════
               FILL — The fastest way to fill a group
               ═══════════════════════════════════════════════ */}
-          <section ref={fillSection.ref} className="py-20 md:py-28 bg-surface">
-            <div className={`max-w-5xl mx-auto px-6 transition-all duration-700 ${fillSection.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+          <section className="py-20 md:py-28 bg-surface">
+            <div className="max-w-5xl mx-auto px-6">
               <div className="md:flex md:items-center md:gap-16 md:flex-row-reverse">
                 {/* Right: Copy */}
                 <div className="flex-1 mb-10 md:mb-0">
@@ -419,13 +415,13 @@ export default function HomePage() {
           {/* ═══════════════════════════════════════════════
               HOW IT WORKS — 3 steps
               ═══════════════════════════════════════════════ */}
-          <section ref={howSection.ref} className="py-20 md:py-28 relative" id="how-it-works">
+          <section className="py-20 md:py-28 relative" id="how-it-works">
             <div className="absolute inset-0 opacity-[0.015] pointer-events-none" style={{
               backgroundImage: 'repeating-linear-gradient(45deg, #4285F4 0, #4285F4 1px, transparent 0, transparent 50%)',
               backgroundSize: '20px 20px',
             }} />
 
-            <div className={`relative max-w-4xl mx-auto px-6 transition-all duration-700 ${howSection.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+            <div className="relative max-w-4xl mx-auto px-6">
               <div className="text-center mb-16">
                 <p className="text-primary text-sm font-bold uppercase tracking-widest mb-3">How It Works</p>
                 <h2 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
@@ -501,8 +497,8 @@ export default function HomePage() {
           {/* ═══════════════════════════════════════════════
               NICHE CALLOUTS — Sport-specific pages
               ═══════════════════════════════════════════════ */}
-          <section ref={proofSection.ref} className="py-20 md:py-28">
-            <div className={`max-w-4xl mx-auto px-6 transition-all duration-700 ${proofSection.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
+          <section className="py-20 md:py-28">
+            <div className="max-w-4xl mx-auto px-6">
               <div className="text-center mb-10">
                 <p className="text-primary text-sm font-bold uppercase tracking-widest mb-3">Built For Your Sport</p>
                 <h2 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">
