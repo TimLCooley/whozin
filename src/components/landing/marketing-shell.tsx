@@ -1,26 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isNative } from '@/lib/capacitor'
 import AuthForm from '@/components/auth/auth-form'
 import { BrandedFullLogo } from '@/components/ui/branded-logo'
 import { ContactModal } from '@/components/ui/contact-modal'
-
-/* ── Scroll-triggered visibility hook ── */
-export function useInView(threshold = 0.15) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [visible, setVisible] = useState(false)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true) }, { threshold })
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [threshold])
-  return { ref, visible }
-}
 
 /* ── Navigation links ── */
 const NAV_LINKS = [
@@ -42,7 +28,6 @@ export function MarketingShell({
   const [showAuth, setShowAuth] = useState(false)
   const [showContact, setShowContact] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
-  const [menuOpen, setMenuOpen] = useState(false)
   const router = useRouter()
 
   // On native app, go straight to auth (no landing page)
@@ -212,11 +197,10 @@ export function CtaSection({
   buttonText?: string
   footnote?: string
 }) {
-  const cta = useInView()
   return (
-    <section ref={cta.ref} className="py-24 md:py-32 relative overflow-hidden">
+    <section className="py-24 md:py-32 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-[#6366f1]/5" />
-      <div className={`relative max-w-2xl mx-auto px-6 text-center transition-all duration-700 ${cta.visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+      <div className="relative max-w-2xl mx-auto px-6 text-center">
         <h2 className="text-3xl md:text-5xl font-extrabold text-foreground tracking-tight mb-4">
           {headline}
         </h2>

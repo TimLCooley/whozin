@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { MarketingShell, HeroNav, CtaSection, useInView } from '@/components/landing/marketing-shell'
+import { MarketingShell, HeroNav, CtaSection } from '@/components/landing/marketing-shell'
 
 /* ── Animated waitlist demo ── */
 function WaitlistDemo() {
@@ -31,7 +31,6 @@ function WaitlistDemo() {
         </div>
       </div>
 
-      {/* Roster */}
       <p className="text-white/30 text-[11px] font-semibold uppercase tracking-wider mb-3 px-1">Roster (5/5)</p>
       <div className="space-y-2">
         {['Sarah M.', 'Jake R.', 'Alex W.', 'Dev P.'].map((name, i) => (
@@ -54,7 +53,7 @@ function WaitlistDemo() {
         </div>
       </div>
 
-      {/* Waitlist */}
+      {/* Waitlist promotion */}
       {step >= 2 && (
         <div className="mt-3 animate-enter">
           <p className="text-white/30 text-[11px] font-semibold uppercase tracking-wider mb-2 px-1">Waitlist</p>
@@ -106,10 +105,6 @@ function WaitlistDemo() {
 
 export default function FillPage() {
   const [heroLoaded, setHeroLoaded] = useState(false)
-  const problemSection = useInView()
-  const agitateSection = useInView()
-  const solveSection = useInView()
-  const comparisonSection = useInView()
 
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 100)
@@ -152,7 +147,7 @@ export default function FillPage() {
                       We&apos;ve all been there. Someone bails. Now you&apos;re panic-texting 15 people to find a replacement.
                     </p>
                     <p className="text-white/80 text-lg md:text-xl font-semibold max-w-md mb-8">
-                      Whozin&apos;s auto-waitlist fills the spot before you even notice.
+                      Whozin gives you three ways to fill the spot. All of them faster than a group text.
                     </p>
 
                     <button
@@ -180,8 +175,8 @@ export default function FillPage() {
           {/* ═══════════════════════════════════════════════
               PROBLEM — The last-minute cancellation nightmare
               ═══════════════════════════════════════════════ */}
-          <section ref={problemSection.ref} className="py-20 md:py-28">
-            <div className={`max-w-3xl mx-auto px-6 transition-all duration-700 ${problemSection.visible ? 'opacity-100' : 'opacity-0'}`}>
+          <section className="py-20 md:py-28">
+            <div className="max-w-3xl mx-auto px-6">
               <div className="text-center mb-14">
                 <p className="text-red-500 text-sm font-bold uppercase tracking-widest mb-3">The Problem</p>
                 <h2 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
@@ -190,19 +185,6 @@ export default function FillPage() {
                 <p className="text-muted text-lg mt-4 max-w-xl mx-auto">
                   People will always bail. That&apos;s life. The real problem is what happens next.
                 </p>
-              </div>
-            </div>
-          </section>
-
-          {/* ═══════════════════════════════════════════════
-              AGITATION — The old way
-              ═══════════════════════════════════════════════ */}
-          <section ref={agitateSection.ref} className="py-16 md:py-20 bg-surface">
-            <div className={`max-w-3xl mx-auto px-6 transition-all duration-700 ${agitateSection.visible ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="text-center mb-10">
-                <h2 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">
-                  What you do right now when someone bails:
-                </h2>
               </div>
 
               <div className="space-y-4 max-w-2xl mx-auto">
@@ -231,55 +213,102 @@ export default function FillPage() {
           </section>
 
           {/* ═══════════════════════════════════════════════
-              SOLUTION — Auto-Waitlist
+              SOLUTION — Three ways to fill
               ═══════════════════════════════════════════════ */}
-          <section ref={solveSection.ref} className="py-20 md:py-28">
-            <div className={`max-w-4xl mx-auto px-6 transition-all duration-700 ${solveSection.visible ? 'opacity-100' : 'opacity-0'}`}>
+          <section className="py-20 md:py-28 bg-surface">
+            <div className="max-w-5xl mx-auto px-6">
               <div className="text-center mb-14">
                 <p className="text-[#34c759] text-sm font-bold uppercase tracking-widest mb-3">The Solution</p>
                 <h2 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
-                  What Whozin does instead:
+                  Three ways to fill a spot. Pick your style.
                 </h2>
+                <p className="text-muted text-lg mt-4 max-w-2xl mx-auto">
+                  Whether you want full control, full automation, or something in between — Whozin has you covered.
+                </p>
               </div>
 
-              <div className="grid md:grid-cols-3 gap-8 max-w-3xl mx-auto">
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">👋</span>
+              <div className="grid md:grid-cols-3 gap-6">
+                {/* Way 1: Emergency Fill */}
+                <div className="bg-white rounded-2xl p-6 border border-red-100 shadow-[0_2px_12px_rgba(0,0,0,0.04)] relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-400 to-red-500" />
+                  <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center mb-4">
+                    <span className="text-2xl">🚨</span>
                   </div>
-                  <h3 className="text-[16px] font-bold text-foreground mb-2">Someone Drops</h3>
-                  <p className="text-[14px] text-muted leading-relaxed">Mike taps OUT. The spot opens instantly.</p>
-                </div>
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">📱</span>
+                  <h3 className="text-[17px] font-bold text-foreground mb-2">Emergency Fill</h3>
+                  <p className="text-[14px] text-muted leading-relaxed mb-4">
+                    Someone bails. You tap <strong className="text-foreground">Emergency Fill</strong>. Whozin blasts a text to everyone in the group at once. First person to reply IN gets the spot.
+                  </p>
+                  <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+                    <p className="text-[12px] font-bold text-red-700 mb-1">How it works:</p>
+                    <ol className="text-[12px] text-red-700/80 space-y-1 list-decimal list-inside">
+                      <li>Someone drops out</li>
+                      <li>You hit Emergency Fill</li>
+                      <li>Everyone in the group gets texted</li>
+                      <li>First &ldquo;IN&rdquo; reply takes the spot</li>
+                    </ol>
                   </div>
-                  <h3 className="text-[16px] font-bold text-foreground mb-2">Auto-Text Sent</h3>
-                  <p className="text-[14px] text-muted leading-relaxed">Whozin texts the next person on the waitlist. Instantly. No input from you.</p>
+                  <p className="text-[12px] text-muted mt-3 font-medium">Best for: You want to control when the alert goes out.</p>
                 </div>
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-full bg-[#34c759]/10 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">✅</span>
-                  </div>
-                  <h3 className="text-[16px] font-bold text-foreground mb-2">Spot Filled</h3>
-                  <p className="text-[14px] text-muted leading-relaxed">They reply IN. If they pass, Whozin texts the next person. Automatic.</p>
-                </div>
-              </div>
 
-              <div className="mt-12 text-center">
-                <div className="inline-block bg-[#34c759]/10 border border-[#34c759]/20 rounded-2xl px-8 py-4">
-                  <p className="text-[#34c759] font-extrabold text-2xl">Average fill time: 47 seconds.</p>
-                  <p className="text-muted text-sm mt-1">Your time spent: zero.</p>
+                {/* Way 2: Auto Emergency Fill */}
+                <div className="bg-white rounded-2xl p-6 border border-[#34c759]/20 shadow-[0_4px_20px_rgba(52,199,89,0.08)] relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#34c759] to-[#22d3ee]" />
+                  <div className="w-12 h-12 rounded-xl bg-[#34c759]/10 flex items-center justify-center mb-4">
+                    <span className="text-2xl">⚡</span>
+                  </div>
+                  <h3 className="text-[17px] font-bold text-foreground mb-2">Auto Emergency Fill</h3>
+                  <p className="text-[14px] text-muted leading-relaxed mb-4">
+                    Turn it on and forget it. The moment someone bails, Whozin <strong className="text-foreground">automatically</strong> texts everyone in the group. You don&apos;t even have to open the app.
+                  </p>
+                  <div className="bg-[#34c759]/5 border border-[#34c759]/15 rounded-xl p-3">
+                    <p className="text-[12px] font-bold text-[#15803d] mb-1">How it works:</p>
+                    <ol className="text-[12px] text-[#15803d]/80 space-y-1 list-decimal list-inside">
+                      <li>Someone drops out</li>
+                      <li>Whozin auto-texts the whole group</li>
+                      <li>First &ldquo;IN&rdquo; reply takes the spot</li>
+                      <li>You didn&apos;t do a thing</li>
+                    </ol>
+                  </div>
+                  <p className="text-[12px] text-muted mt-3 font-medium">Best for: Full autopilot. Zero effort from you.</p>
+                </div>
+
+                {/* Way 3: Open Fill */}
+                <div className="bg-white rounded-2xl p-6 border border-primary/20 shadow-[0_2px_12px_rgba(0,0,0,0.04)] relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary to-[#818cf8]" />
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                    <span className="text-2xl">📢</span>
+                  </div>
+                  <h3 className="text-[17px] font-bold text-foreground mb-2">Open Fill</h3>
+                  <p className="text-[14px] text-muted leading-relaxed mb-4">
+                    You didn&apos;t start the group — but you&apos;re in it and someone bailed. Choose how many spots you need, and send a fill request to the whole group.
+                  </p>
+                  <div className="bg-primary/5 border border-primary/15 rounded-xl p-3">
+                    <p className="text-[12px] font-bold text-primary mb-1">How it works:</p>
+                    <ol className="text-[12px] text-primary/80 space-y-1 list-decimal list-inside">
+                      <li>Someone bails from a group you&apos;re in</li>
+                      <li>You pick how many spots to fill</li>
+                      <li>Whozin sends it to the group</li>
+                      <li>Spots fill from responses</li>
+                    </ol>
+                  </div>
+                  <p className="text-[12px] text-muted mt-3 font-medium">Best for: You&apos;re a member, not the organizer, but you want the game to happen.</p>
                 </div>
               </div>
             </div>
           </section>
 
           {/* ═══════════════════════════════════════════════
-              COMPARISON
+              COMPARISON — Old way vs Whozin
               ═══════════════════════════════════════════════ */}
-          <section ref={comparisonSection.ref} className="py-16 md:py-20 bg-surface">
-            <div className={`max-w-4xl mx-auto px-6 transition-all duration-700 ${comparisonSection.visible ? 'opacity-100' : 'opacity-0'}`}>
+          <section className="py-20 md:py-28">
+            <div className="max-w-4xl mx-auto px-6">
+              <div className="text-center mb-14">
+                <p className="text-primary text-sm font-bold uppercase tracking-widest mb-3">The Difference</p>
+                <h2 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
+                  Stop begging. Start filling.
+                </h2>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="bg-white border border-border/60 rounded-2xl p-6 relative overflow-hidden">
                   <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-400 to-red-500" />
@@ -308,14 +337,20 @@ export default function FillPage() {
           {/* ═══════════════════════════════════════════════
               ZERO APP CALLOUT
               ═══════════════════════════════════════════════ */}
-          <section className="py-16 md:py-20">
+          <section className="py-16 md:py-20 bg-surface">
             <div className="max-w-3xl mx-auto px-6 text-center">
-              <h2 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight mb-4">
-                Your waitlist doesn&apos;t need the app.
-              </h2>
-              <p className="text-muted text-lg max-w-xl mx-auto">
-                They get a text. They reply IN or OUT. That&apos;s it. No download. No account. No excuse not to respond.
-              </p>
+              <div className="bg-[#0a0f1e] rounded-3xl p-8 md:p-10 relative overflow-hidden">
+                <div className="absolute top-[-50%] left-[-20%] w-[400px] h-[400px] rounded-full bg-[#34c759]/10 blur-[80px] pointer-events-none" />
+                <div className="absolute bottom-[-50%] right-[-20%] w-[300px] h-[300px] rounded-full bg-primary/10 blur-[80px] pointer-events-none" />
+                <div className="relative">
+                  <h2 className="text-2xl md:text-3xl font-extrabold text-white mb-4">
+                    Nobody needs the app to fill a spot.
+                  </h2>
+                  <p className="text-white/60 text-lg leading-relaxed max-w-xl mx-auto">
+                    They get a text. They reply IN or OUT. That&apos;s it. No download. No account. No excuse not to respond.
+                  </p>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -325,9 +360,9 @@ export default function FillPage() {
           <CtaSection
             onSignIn={onSignIn}
             headline={<>Stop chasing subs.<br /><span className="text-[#34c759]">Let Whozin fill the spot.</span></>}
-            subheadline="Build your waitlist once. Next time someone bails, you won't even notice."
+            subheadline="Three ways to fill. Zero effort from you. The game always happens."
             buttonText="Never Cancel Again — Free"
-            footnote="Free forever. No credit card. Waitlisted people respond via text — no app needed."
+            footnote="Free forever. No credit card. Everyone responds via text — no app needed."
           />
         </>
       )}

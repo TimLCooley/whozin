@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { MarketingShell, HeroNav, CtaSection, useInView } from '@/components/landing/marketing-shell'
+import { MarketingShell, HeroNav, CtaSection } from '@/components/landing/marketing-shell'
 import { DEFAULT_ACTIVITY_PRESETS } from '@/lib/activity-presets'
 
 /* ── Rotating activities for the hero mockup ── */

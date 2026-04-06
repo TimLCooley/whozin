@@ -1,13 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { MarketingShell, HeroNav, CtaSection, useInView } from '@/components/landing/marketing-shell'
+import { MarketingShell, HeroNav, CtaSection } from '@/components/landing/marketing-shell'
 
 export default function PickleballPage() {
   const [heroLoaded, setHeroLoaded] = useState(false)
-  const problemSection = useInView()
-  const agitateSection = useInView()
-  const solveSection = useInView()
 
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 100)
@@ -128,8 +125,8 @@ export default function PickleballPage() {
           {/* ═══════════════════════════════════════════════
               PROBLEM — The court rotation nightmare
               ═══════════════════════════════════════════════ */}
-          <section ref={problemSection.ref} className="py-20 md:py-28">
-            <div className={`max-w-3xl mx-auto px-6 transition-all duration-700 ${problemSection.visible ? 'opacity-100' : 'opacity-0'}`}>
+          <section className="py-20 md:py-28">
+            <div className="max-w-3xl mx-auto px-6">
               <div className="text-center mb-14">
                 <p className="text-red-500 text-sm font-bold uppercase tracking-widest mb-3">The Problem</p>
                 <h2 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
@@ -156,8 +153,8 @@ export default function PickleballPage() {
           {/* ═══════════════════════════════════════════════
               AGITATION — What organizing pickleball actually looks like
               ═══════════════════════════════════════════════ */}
-          <section ref={agitateSection.ref} className="py-16 md:py-20 bg-surface">
-            <div className={`max-w-3xl mx-auto px-6 transition-all duration-700 ${agitateSection.visible ? 'opacity-100' : 'opacity-0'}`}>
+          <section className="py-16 md:py-20 bg-surface">
+            <div className="max-w-3xl mx-auto px-6">
               <div className="text-center mb-10">
                 <h2 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">
                   You&apos;re not an organizer. You&apos;re a traffic cop.
@@ -192,8 +189,8 @@ export default function PickleballPage() {
           {/* ═══════════════════════════════════════════════
               SOLUTION — Whozin for Pickleball
               ═══════════════════════════════════════════════ */}
-          <section ref={solveSection.ref} className="py-20 md:py-28">
-            <div className={`max-w-4xl mx-auto px-6 transition-all duration-700 ${solveSection.visible ? 'opacity-100' : 'opacity-0'}`}>
+          <section className="py-20 md:py-28">
+            <div className="max-w-4xl mx-auto px-6">
               <div className="text-center mb-14">
                 <p className="text-[#f59e0b] text-sm font-bold uppercase tracking-widest mb-3">The Solution</p>
                 <h2 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
