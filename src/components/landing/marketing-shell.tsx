@@ -10,7 +10,9 @@ import { ContactModal } from '@/components/ui/contact-modal'
 
 /* ── Navigation links ── */
 const NAV_LINKS = [
+  { href: '/how-it-works', label: 'How It Works' },
   { href: '/build', label: 'Build' },
+  { href: '/groups', label: 'Groups' },
   { href: '/fill', label: 'Fill' },
   { href: '/golf', label: 'Golf' },
   { href: '/pickleball', label: 'Pickleball' },

@@ -110,10 +110,10 @@ export default function HomePage() {
                         Become the Organizer — Free
                       </button>
                       <a
-                        href="#the-problem"
+                        href="/how-it-works"
                         className="px-8 py-4 rounded-2xl text-white/80 font-semibold text-base border border-white/15 hover:bg-white/5 hover:border-white/25 transition-all text-center"
                       >
-                        See the Problem
+                        How It Works
                       </a>
                     </div>
                   </div>
