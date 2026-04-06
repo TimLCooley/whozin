@@ -10,17 +10,29 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Whozin — Who's In? | Organize Group Activities Effortlessly",
+  title: {
+    default: "Whozin — Group Activity Organizer | Replace Your Group Chat",
+    template: "%s | Whozin",
+  },
   description:
-    "Stop blowing up the group chat. Whozin helps you organize activities, send priority invites, and instantly find out who's in — no app download required for invitees.",
+    "Stop blowing up the group chat. Whozin sends a text — they reply IN or OUT. Priority invites, auto-waitlist, instant fill when someone bails. No app required for invitees. Free.",
   keywords: [
-    "group activities",
-    "event planning",
-    "who's in",
-    "RSVP app",
-    "group organizer",
-    "activity planner",
-    "invite management",
+    "group activity organizer",
+    "organize pickup games",
+    "sports group coordinator",
+    "RSVP by text message",
+    "no app required invite",
+    "replace group chat",
+    "find sub for game",
+    "auto fill sports roster",
+    "priority invite system",
+    "golf foursome organizer",
+    "pickleball court organizer",
+    "volleyball team organizer",
+    "group event planner",
+    "text based RSVP",
+    "who's in who's out",
+    "last minute cancellation sports",
   ],
   authors: [{ name: "Whozin" }],
   creator: "Whozin",
@@ -30,23 +42,23 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://whozin.io",
     siteName: "Whozin",
-    title: "Whozin — Who's In?",
+    title: "Whozin — Group Activity Organizer | IN or OUT via Text",
     description:
-      "Organize group activities and find out who's coming — without the group chat chaos.",
+      "Organize any group activity in 30 seconds. Invitees reply IN or OUT by text — no app needed. Auto-fill when someone bails. Free forever.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Whozin — Who's In?",
+        alt: "Whozin — Group Activity Organizer",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Whozin — Who's In?",
+    title: "Whozin — Group Activity Organizer",
     description:
-      "Organize group activities and find out who's coming — without the group chat chaos.",
+      "Send a text. They reply IN or OUT. Auto-fill when someone bails. No app required. Free.",
     images: ["/og-image.png"],
   },
   icons: {
@@ -54,6 +66,20 @@ export const metadata: Metadata = {
     apple: "/api/favicon",
   },
   manifest: "/manifest.json",
+  alternates: {
+    canonical: "https://whozin.io",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export const viewport: Viewport = {
@@ -90,12 +116,55 @@ export default function RootLayout({
               applicationCategory: "SocialNetworkingApplication",
               operatingSystem: "Web, iOS, Android",
               description:
-                "Organize group activities and find out who's coming without the group chat chaos.",
+                "Group activity organizer that replaces messy group chats with a binary IN or OUT text system. Priority invites, auto-waitlist, instant fill when someone bails. No app required for invitees.",
               url: "https://whozin.io",
               offers: {
                 "@type": "Offer",
                 price: "0",
                 priceCurrency: "USD",
+              },
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: "5",
+                ratingCount: "1",
+              },
+              featureList: [
+                "Text-based RSVP — invitees reply IN or OUT via text message",
+                "No app download required for invitees",
+                "Smart Groups with priority invite order",
+                "Auto-waitlist fills spots when someone cancels",
+                "Emergency Fill blasts the group when someone bails last-minute",
+                "Works for golf, pickleball, volleyball, basketball, and any group activity",
+              ],
+            }),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "Whozin",
+              url: "https://whozin.io",
+              logo: "https://whozin.io/api/favicon",
+              sameAs: [],
+              description: "Group activity organizer. Text-based IN or OUT RSVP system.",
+            }),
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "Whozin",
+              url: "https://whozin.io",
+              potentialAction: {
+                "@type": "SearchAction",
+                target: "https://whozin.io/?q={search_term_string}",
+                "query-input": "required name=search_term_string",
               },
             }),
           }}

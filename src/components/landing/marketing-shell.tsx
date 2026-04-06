@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isNative } from '@/lib/capacitor'
@@ -8,8 +8,20 @@ import AuthForm from '@/components/auth/auth-form'
 import { BrandedFullLogo } from '@/components/ui/branded-logo'
 import { ContactModal } from '@/components/ui/contact-modal'
 
-/* ── Navigation links ── */
-const NAV_LINKS = [
+/* ── Navigation structure ── */
+const DROPDOWN_ITEMS = [
+  { href: '/build', label: 'Build', desc: 'Create an activity' },
+  { href: '/groups', label: 'Groups', desc: 'Smart Groups & Priority' },
+  { href: '/fill', label: 'Fill', desc: 'Auto-fill empty spots' },
+]
+
+const SPORT_LINKS = [
+  { href: '/golf', label: 'Golf' },
+  { href: '/pickleball', label: 'Pickleball' },
+  { href: '/volleyball', label: 'Volleyball' },
+]
+
+const ALL_FOOTER_LINKS = [
   { href: '/how-it-works', label: 'How It Works' },
   { href: '/build', label: 'Build' },
   { href: '/groups', label: 'Groups' },
@@ -32,7 +44,6 @@ export function MarketingShell({
   const [checkingAuth, setCheckingAuth] = useState(true)
   const router = useRouter()
 
-  // On native app, go straight to auth (no landing page)
   useEffect(() => {
     if (isNative() && isHome) {
       const supabase = createClient()
@@ -109,10 +120,9 @@ export function MarketingShell({
       {/* ═══ FOOTER ═══ */}
       <footer className="bg-[#0a0f1e] text-white/50 py-10">
         <div className="max-w-6xl mx-auto px-6">
-          {/* Nav links */}
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mb-6 text-sm">
             {!isHome && <a href="/" className="hover:text-white transition-colors">Home</a>}
-            {NAV_LINKS.map((l) => (
+            {ALL_FOOTER_LINKS.map((l) => (
               <a key={l.href} href={l.href} className="hover:text-white transition-colors">{l.label}</a>
             ))}
           </div>
@@ -135,19 +145,65 @@ export function MarketingShell({
   )
 }
 
-/* ── Hero Nav Bar (used inside hero sections) ── */
+/* ── Hero Nav Bar with dropdown ── */
 export function HeroNav({ onSignIn }: { onSignIn: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   return (
     <nav className="flex items-center justify-between mb-16 md:mb-24 relative">
       <a href="/"><BrandedFullLogo className="h-9" /></a>
 
-      {/* Desktop links */}
+      {/* Desktop nav */}
       <div className="hidden md:flex items-center gap-6">
-        {NAV_LINKS.map((l) => (
-          <a key={l.href} href={l.href} className="text-white/50 hover:text-white text-sm font-medium transition-colors">{l.label}</a>
-        ))}
+        {/* How It Works dropdown */}
+        <div ref={dropdownRef} className="relative">
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="text-white/50 hover:text-white text-sm font-medium transition-colors flex items-center gap-1"
+          >
+            How It Works
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}>
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+
+          {dropdownOpen && (
+            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-56 bg-[#0a0f1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2 z-50 shadow-[0_16px_48px_rgba(0,0,0,0.4)]">
+              <a
+                href="/how-it-works"
+                className="block px-4 py-2.5 rounded-xl text-white/70 hover:text-white hover:bg-white/5 transition-all text-sm font-medium"
+              >
+                Overview
+                <span className="block text-[11px] text-white/30 font-normal mt-0.5">The full flow, start to finish</span>
+              </a>
+              <div className="h-px bg-white/5 mx-2 my-1" />
+              {DROPDOWN_ITEMS.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="block px-4 py-2.5 rounded-xl text-white/70 hover:text-white hover:bg-white/5 transition-all text-sm font-medium"
+                >
+                  {item.label}
+                  <span className="block text-[11px] text-white/30 font-normal mt-0.5">{item.desc}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button
           onClick={onSignIn}
           className="text-white/80 hover:text-white text-sm font-semibold px-5 py-2.5 rounded-xl border border-white/15 hover:border-white/30 hover:bg-white/5 transition-all"
@@ -169,10 +225,18 @@ export function HeroNav({ onSignIn }: { onSignIn: () => void }) {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0f1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex flex-col gap-3 md:hidden z-50">
-          {NAV_LINKS.map((l) => (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0f1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex flex-col gap-1 md:hidden z-50">
+          <p className="text-white/30 text-[11px] font-semibold uppercase tracking-wider px-3 pt-1 pb-2">How It Works</p>
+          <a href="/how-it-works" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Overview</a>
+          <a href="/build" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Build</a>
+          <a href="/groups" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Groups</a>
+          <a href="/fill" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Fill</a>
+          <div className="h-px bg-white/10 mx-2 my-2" />
+          <p className="text-white/30 text-[11px] font-semibold uppercase tracking-wider px-3 pt-1 pb-2">Sports</p>
+          {SPORT_LINKS.map((l) => (
             <a key={l.href} href={l.href} className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">{l.label}</a>
           ))}
+          <div className="h-px bg-white/10 mx-2 my-2" />
           <button
             onClick={() => { setMenuOpen(false); onSignIn() }}
             className="text-white font-semibold text-sm py-2.5 px-3 rounded-xl bg-primary hover:bg-primary-dark transition-all text-center"
