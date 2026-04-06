@@ -62,8 +62,9 @@ function resolveRecipient(toPhone: string) {
 export async function sendSmsInvite(toPhone: string, inviterName: string) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
   const message =
-    `${inviterName} added you to a group on Whozin! Are you in? ` +
-    `Download the app to see what's happening: https://whozin.io/dl` +
+    `${inviterName} added you to a group on Whozin!\n\n` +
+    `How it works: When there's an activity, you'll get a text. Just reply IN or OUT — that's it. No app needed.\n\n` +
+    `Want to see your groups and activities? Download the app: https://whozin.io/dl` +
     testNote
   return sendSms(actualTo, message)
 }
