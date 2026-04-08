@@ -79,7 +79,24 @@ export async function sendActivityInvite(
 ) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
   const message =
-    `${inviterName} is inviting you to ${activityName} on ${dateTime}. ` +
+    `${inviterName} is using Whozin to organize ${activityName} on ${dateTime}. ` +
+    `Are you in? Reply IN or OUT` +
+    testNote
+  return sendSms(actualTo, message, imageUrl)
+}
+
+export async function sendFillInvite(
+  toPhone: string,
+  inviterName: string,
+  activityName: string,
+  dateTime: string,
+  spotsNeeded: number,
+  imageUrl?: string
+) {
+  const { actualTo, testNote } = resolveRecipient(toPhone)
+  const spotsText = spotsNeeded === 1 ? '1 spot' : `${spotsNeeded} spots`
+  const message =
+    `${inviterName} is using Whozin to fill ${spotsText} for ${activityName} on ${dateTime}. ` +
     `Are you in? Reply IN or OUT` +
     testNote
   return sendSms(actualTo, message, imageUrl)

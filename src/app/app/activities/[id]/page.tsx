@@ -45,6 +45,7 @@ interface ActivityDetail {
   creator_name: string
   confirmed_count: number
   members: MemberInfo[]
+  invite_starts_at: string | null
 }
 
 type Tab = 'details' | 'group' | 'chat'
@@ -91,6 +92,9 @@ export default function ActivityDetailPage() {
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [countdownSeconds, setCountdownSeconds] = useState(0)
+  const [selectedMember, setSelectedMember] = useState<MemberInfo | null>(null)
+  const [memberActioning, setMemberActioning] = useState(false)
 
   const loadActivity = useCallback(async () => {
     const res = await fetch(`/api/activities/${id}`)
@@ -108,6 +112,63 @@ export default function ActivityDetailPage() {
     const interval = setInterval(loadActivity, 6000)
     return () => clearInterval(interval)
   }, [loadActivity])
+
+  // Auto-switch to group tab during countdown
+  useEffect(() => {
+    if (activity?.is_creator && activity?.invite_starts_at && new Date(activity.invite_starts_at) > new Date()) {
+      setTab('group')
+    }
+  }, [activity?.is_creator, activity?.invite_starts_at])
+
+  // Countdown timer for Build workflow
+  useEffect(() => {
+    if (!activity?.invite_starts_at) return
+    const target = new Date(activity.invite_starts_at).getTime()
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.floor((target - Date.now()) / 1000))
+      setCountdownSeconds(remaining)
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [activity?.invite_starts_at])
+
+  const isCountdownActive = !!(
+    activity?.is_creator &&
+    activity?.priority_invite &&
+    activity?.invite_starts_at &&
+    countdownSeconds > 0
+  )
+
+  async function handleConfirmMember(member: MemberInfo) {
+    setMemberActioning(true)
+    await fetch(`/api/activities/${id}/confirm-member`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: member.user_id }),
+    })
+    setSelectedMember(null)
+    setMemberActioning(false)
+    await loadActivity()
+  }
+
+  async function handleRemoveMember(member: MemberInfo) {
+    setMemberActioning(true)
+    await fetch(`/api/activities/${id}/remove-member`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: member.user_id }),
+    })
+    setSelectedMember(null)
+    setMemberActioning(false)
+    await loadActivity()
+  }
+
+  async function handleStartInvites() {
+    await fetch(`/api/activities/${id}/start-invites`, { method: 'POST' })
+    await loadActivity()
+  }
 
   async function handleEmergencyFill() {
     const res = await fetch(`/api/activities/${id}/emergency-fill`, { method: 'POST' })
@@ -244,6 +305,7 @@ export default function ActivityDetailPage() {
                   'bg-surface text-muted border border-border/50'
                 }`}>
                   {activity.status === 'full' ? 'Activity is Full!' :
+                   isCountdownActive ? 'Getting ready to send invites...' :
                    activity.status === 'open' ? (activity.priority_invite ? 'Invites in progress...' : 'Open') :
                    activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
                 </div>
@@ -328,11 +390,29 @@ export default function ActivityDetailPage() {
 
         {tab === 'group' && (
           <div className="px-4 pt-4 space-y-5 animate-enter">
+            {/* Countdown banner */}
+            {isCountdownActive && (
+              <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-4 text-center space-y-2">
+                <div className="text-[32px] font-bold text-primary tabular-nums tracking-wider">
+                  {Math.floor(countdownSeconds / 60)}:{String(countdownSeconds % 60).padStart(2, '0')}
+                </div>
+                <p className="text-[13px] text-foreground/70 leading-snug">
+                  Invites will go out when the timer ends. Tap anyone below to <span className="font-semibold text-green-600">mark them in</span> or <span className="font-semibold text-red-500">remove them</span>.
+                </p>
+                <button
+                  onClick={handleStartInvites}
+                  className="mt-2 px-5 py-2 rounded-xl text-[13px] font-bold text-primary border border-primary/30 active:bg-primary/10 transition-colors"
+                >
+                  Send Invites Now
+                </button>
+              </div>
+            )}
+
             <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" />
-            <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" />
+            {!isCountdownActive && <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" />}
 
             {/* Status banner — show when invites are done */}
-            {isFull && tbd.length > 0 && (
+            {!isCountdownActive && isFull && tbd.length > 0 && (
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/10">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
@@ -341,7 +421,7 @@ export default function ActivityDetailPage() {
                 <span className="text-[12px] text-foreground/70">All spots filled — no more invites will be sent</span>
               </div>
             )}
-            {!isFull && tbd.length === 0 && waiting.length === 0 && confirmed.length > 1 && (
+            {!isCountdownActive && !isFull && tbd.length === 0 && waiting.length === 0 && confirmed.length > 1 && (
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/10">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
@@ -351,8 +431,42 @@ export default function ActivityDetailPage() {
               </div>
             )}
 
-            <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" />
-            <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" />
+            {/* On Deck — tappable during countdown */}
+            {isCountdownActive ? (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-[15px] font-bold text-foreground">On Deck ({tbd.length})</h3>
+                </div>
+                {tbd.length > 0 ? (
+                  <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
+                    {tbd.map((m, i) => (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedMember(m)}
+                        className={`flex items-center gap-3 px-4 py-3 w-full text-left active:bg-primary/5 transition-colors ${i < tbd.length - 1 ? 'border-b border-border/30' : ''}`}
+                      >
+                        <AvatarImg src={m.user?.avatar_url} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-semibold text-foreground truncate">
+                            {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
+                          </p>
+                          <p className="text-[11px] font-medium text-muted">Tap to mark in or remove</p>
+                        </div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border-b border-border/20 pb-3" />
+                )}
+              </div>
+            ) : (
+              <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" />
+            )}
+
+            {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" />}
             <StatusSection title="Out" count={out.length} members={out} statusKey="out" />
 
             {activity.is_creator && (
@@ -375,6 +489,50 @@ export default function ActivityDetailPage() {
           <ActivityChat activity={activity} />
         )}
       </div>
+
+      {/* Member Action Modal (countdown) */}
+      {selectedMember && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !memberActioning && setSelectedMember(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3">
+                <AvatarImg src={selectedMember.user?.avatar_url} size="xl" />
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">
+                {selectedMember.user ? `${selectedMember.user.first_name} ${selectedMember.user.last_name}` : 'Unknown'}
+              </h3>
+              <p className="text-[13px] text-muted mt-1">What would you like to do?</p>
+            </div>
+            <div className="space-y-2.5">
+              <button
+                onClick={() => handleConfirmMember(selectedMember)}
+                disabled={memberActioning}
+                className="w-full py-3 rounded-xl text-[14px] font-bold bg-[#00C853] text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {memberActioning ? 'Updating...' : 'Mark as In'}
+              </button>
+              <button
+                onClick={() => handleRemoveMember(selectedMember)}
+                disabled={memberActioning}
+                className="w-full py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {memberActioning ? 'Removing...' : 'Remove'}
+              </button>
+              <button
+                onClick={() => setSelectedMember(null)}
+                disabled={memberActioning}
+                className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-muted active:bg-surface transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (

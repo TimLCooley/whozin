@@ -77,14 +77,12 @@ export async function POST(req: NextRequest) {
     .update({ status: 'responded', response: isIn ? 'in' : 'out' })
     .eq('id', invite.id)
 
-  // Check if activity was full before this response
-  const { data: activityBefore } = await admin
+  // Get activity details for reply message and host notification
+  const { data: activityData } = await admin
     .from('whozin_activity')
-    .select('status, max_capacity, auto_emergency_fill, creator_id, activity_name')
+    .select('activity_name, creator_id')
     .eq('id', invite.activity_id)
     .single()
-
-  const wasFull = activityBefore?.status === 'full'
 
   // Update the activity member status (works even if they were 'missed' from expired timer)
   const newStatus = isIn ? 'confirmed' : 'out'
@@ -106,26 +104,25 @@ export async function POST(req: NextRequest) {
     .update({ capacity_current: confirmedCount ?? 0, status: 'open' })
     .eq('id', invite.activity_id)
 
-  const activityName = activityBefore?.activity_name ?? 'the activity'
+  const activityName = activityData?.activity_name ?? 'the activity'
 
-  // Handle emergency fill if someone dropped from a full activity
-  if (isOut && wasFull && activityBefore) {
-    const { data: dropout } = await admin
+  // Notify the host when someone confirms
+  if (isIn && activityData?.creator_id && activityData.creator_id !== whozinUser.id) {
+    const { data: responder } = await admin
       .from('whozin_users')
       .select('first_name, last_name')
       .eq('id', whozinUser.id)
       .single()
 
-    const dropoutName = dropout ? `${dropout.first_name} ${dropout.last_name}` : 'Someone'
-    const { sendEmergencyFill, notifyHostOfDropout } = await import('@/lib/emergency-fill')
-
-    if (activityBefore.auto_emergency_fill) {
-      await sendEmergencyFill(invite.activity_id)
-    } else {
-      await notifyHostOfDropout(invite.activity_id, dropoutName)
-    }
-
-    return twimlResponse(`Got it, you're out for ${activityName}. The host has been notified.`)
+    const responderName = responder ? `${responder.first_name} ${responder.last_name}`.trim() : 'Someone'
+    const { createAlert } = await import('@/lib/alerts')
+    await createAlert({
+      user_id: activityData.creator_id,
+      type: 'activity_invite',
+      title: `${responderName} is in!`,
+      body: `${responderName} confirmed for ${activityName}.`,
+      link: `/app/activities/${invite.activity_id}`,
+    })
   }
 
   // Normal queue processing
@@ -135,9 +132,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (isIn) {
-    return twimlResponse(`You're in for ${activityName}! See you there. Check whozin.io for details.`)
+    return twimlResponse(`Nice! You're on the list. Get the Whozin app to see all event details: https://whozin.io/dl`)
   } else {
-    return twimlResponse(`Got it, you're out for ${activityName}. Maybe next time!`)
+    return twimlResponse(`Got it, maybe next time! If your plans change, you can update your status in the Whozin app: https://whozin.io/dl`)
   }
 }
 

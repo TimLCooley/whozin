@@ -83,6 +83,7 @@ export default function CreateActivityPage() {
   const [chatEnabled, setChatEnabled] = useState(false)
   const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
   const [showTimerDropdown, setShowTimerDropdown] = useState(false)
+  const [showNoGroupsModal, setShowNoGroupsModal] = useState(false)
 
   // Load presets and groups
   useEffect(() => {
@@ -257,7 +258,7 @@ export default function CreateActivityPage() {
 
       const data = await res.json()
       if (res.ok && data.id) {
-        router.push('/app')
+        router.push(`/app/activities/${data.id}`)
       } else {
         alert(data.error || 'Failed to create activity')
       }
@@ -328,7 +329,7 @@ export default function CreateActivityPage() {
         <div className="flex-1 px-4 pt-6 space-y-4 animate-enter">
           {/* Fill a Spot card */}
           <button
-            onClick={() => { setMode('fill'); setResponseTimer(defaultTimerFill) }}
+            onClick={() => { if (groups.length === 0) { setShowNoGroupsModal(true); return } setMode('fill'); setResponseTimer(defaultTimerFill) }}
             className="w-full bg-background border-2 border-[#34c759]/30 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(52,199,89,0.12)] hover:border-[#34c759]/50"
           >
             <div className="flex items-center gap-4">
@@ -349,7 +350,7 @@ export default function CreateActivityPage() {
 
           {/* Build Group Activity card */}
           <button
-            onClick={() => { setMode('build'); setResponseTimer(defaultTimerGroup) }}
+            onClick={() => { if (groups.length === 0) { setShowNoGroupsModal(true); return } setMode('build'); setResponseTimer(defaultTimerGroup) }}
             className="w-full bg-background border-2 border-primary/20 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(66,133,244,0.12)] hover:border-primary/40"
           >
             <div className="flex items-center gap-4">
@@ -370,6 +371,43 @@ export default function CreateActivityPage() {
             </div>
           </button>
         </div>
+
+        {/* No groups modal */}
+        {showNoGroupsModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center px-4" onClick={() => setShowNoGroupsModal(false)}>
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <div
+              className="relative w-full max-w-sm overflow-hidden rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-primary to-[#3367D6] px-6 py-5 text-center">
+                <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-white/20 flex items-center justify-center">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="9" cy="7" r="3" />
+                    <circle cx="17" cy="9" r="2.5" />
+                    <path d="M2 21v-1a5 5 0 0110 0v1M14 21v-1a4 4 0 018 0v1" />
+                  </svg>
+                </div>
+                <h3 className="text-white text-lg font-bold">You need a crew first!</h3>
+                <p className="text-white/70 text-sm mt-1">Create a group and add your people, then come back to plan something.</p>
+              </div>
+              <div className="bg-white p-5 space-y-3">
+                <button
+                  onClick={() => router.push('/app/groups/create')}
+                  className="w-full py-3 rounded-xl bg-[#4285F4] text-white font-semibold text-[14px] active:opacity-80 transition-opacity"
+                >
+                  Create a Group
+                </button>
+                <button
+                  onClick={() => setShowNoGroupsModal(false)}
+                  className="w-full py-3 rounded-xl text-[14px] font-semibold border border-[#e5e7eb] text-[#6b7280] active:bg-[#f3f4f6] transition-colors"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

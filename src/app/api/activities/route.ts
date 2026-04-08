@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { alertGroupMembers } from '@/lib/alerts'
-import { sendActivityInvite } from '@/lib/sms'
-import { processActivityInvites } from '@/lib/invite-processor'
+import { sendActivityInvite, sendFillInvite } from '@/lib/sms'
 
 // GET activities for the current user (upcoming + past)
 export async function GET(req: NextRequest) {
@@ -243,8 +242,12 @@ export async function POST(req: NextRequest) {
     await admin.from('whozin_activity_member').insert(memberInserts)
 
     if (activity.priority_invite) {
-      // Priority mode: process first batch only
-      await processActivityInvites(activity.id)
+      // Build mode: set 2-minute countdown before invites go out
+      const inviteStartsAt = new Date(Date.now() + 2 * 60 * 1000).toISOString()
+      await admin
+        .from('whozin_activity')
+        .update({ invite_starts_at: inviteStartsAt })
+        .eq('id', activity.id)
     } else {
       // All-at-once mode: notify everyone immediately
       const { data: group } = await admin
@@ -287,9 +290,11 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      const spotsNeeded = finalMaxCapacity ? finalMaxCapacity - 1 : memberUsers?.length ?? 1 // -1 for creator already confirmed
+
       for (const member of (memberUsers ?? [])) {
         const phone = member.phone.startsWith('+') ? member.phone : `+${member.country_code}${member.phone}`
-        const result = await sendActivityInvite(phone, whozinUser.first_name, activity_name.trim(), dateTimeStr || 'TBD', activity.image_url || undefined)
+        const result = await sendFillInvite(phone, whozinUser.first_name, activity_name.trim(), dateTimeStr || 'TBD', spotsNeeded, activity.image_url || undefined)
         await admin.from('whozin_invite').insert({
           activity_id: activity.id,
           user_id: member.id,

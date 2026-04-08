@@ -1,6 +1,5 @@
 import { getAdminClient } from '@/lib/supabase/admin'
-import { sendSms } from '@/lib/sms'
-import { isTestNumber } from '@/lib/sms'
+import { sendSms, sendFillInvite, isTestNumber } from '@/lib/sms'
 import { createAlert } from '@/lib/alerts'
 
 const ADMIN_PHONE = '+16193019180'
@@ -73,17 +72,21 @@ export async function sendEmergencyFill(activityId: string) {
     }
   }
 
-  const spotsText = spotsOpen === 1 ? '1 SPOT JUST OPENED' : `${spotsOpen} SPOTS JUST OPENED`
+  // Get creator name for soft branding
+  const { data: creator } = await admin
+    .from('whozin_users')
+    .select('first_name')
+    .eq('id', activity.creator_id)
+    .single()
+
+  const creatorName = creator?.first_name || 'Someone'
+  const spotsText = spotsOpen === 1 ? '1 spot just opened' : `${spotsOpen} spots just opened`
 
   // Send emergency SMS to everyone
   for (const user of (users ?? [])) {
     const phone = user.phone.startsWith('+') ? user.phone : `+${user.country_code}${user.phone}`
-    const actualTo = isTestNumber(phone) ? ADMIN_PHONE : phone
-    const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
 
-    const message = `${spotsText} for ${activity.activity_name}${dateTimeStr ? ` on ${dateTimeStr}` : ''}! Reply IN to claim it — first come, first served!${testNote}`
-
-    const result = await sendSms(actualTo, message, activity.image_url || undefined)
+    const result = await sendFillInvite(phone, creatorName, activity.activity_name, dateTimeStr || 'TBD', spotsOpen, activity.image_url || undefined)
 
     // Create invite record for tracking
     await admin.from('whozin_invite').insert({
@@ -100,8 +103,8 @@ export async function sendEmergencyFill(activityId: string) {
     await createAlert({
       user_id: user.id,
       type: 'activity_invite',
-      title: `${spotsText} for ${activity.activity_name}!`,
-      body: 'Someone dropped out — reply IN to claim the spot!',
+      title: `${activity.activity_name}: ${spotsText}!`,
+      body: `${creatorName} is organizing — reply IN to claim it!`,
       link: `/app/activities/${activityId}`,
     })
   }

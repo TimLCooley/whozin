@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
-import { sendSmsInvite } from '@/lib/sms'
-import { createAlert, alertGroupMembers } from '@/lib/alerts'
+import { alertGroupMembers } from '@/lib/alerts'
 
 // POST add member to group
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -62,10 +61,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
 
       targetUserId = newUser.id
-
-      // Send SMS invite (test numbers with area code 999 route to admin phone)
-      const inviterName = `${whozinUser.first_name} ${whozinUser.last_name}`.trim() || 'Someone'
-      await sendSmsInvite(normalizedPhone, inviterName)
     }
   }
 
@@ -103,17 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data: groupData } = await admin.from('whozin_groups').select('name').eq('id', groupId).single()
   const { data: targetUser } = await admin.from('whozin_users').select('first_name, last_name').eq('id', targetUserId).single()
   const groupName = groupData?.name || 'a group'
-  const inviterName = `${whozinUser.first_name} ${whozinUser.last_name}`.trim() || 'Someone'
   const targetName = targetUser ? `${targetUser.first_name} ${targetUser.last_name}`.trim() : 'Someone'
-
-  // Alert the new member they were added to the group
-  await createAlert({
-    user_id: targetUserId,
-    type: 'group_invite',
-    title: `Added to ${groupName}`,
-    body: `${inviterName} added you to the group "${groupName}".`,
-    link: `/app/groups/${groupId}`,
-  })
 
   // Alert existing group members that someone joined
   await alertGroupMembers(groupId, whozinUser.id, {

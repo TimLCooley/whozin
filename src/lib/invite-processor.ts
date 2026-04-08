@@ -26,6 +26,11 @@ export async function processActivityInvites(activityId: string) {
   if (activity.status !== 'open') return { processed: false, reason: 'not_open' }
   if (!activity.priority_invite) return { processed: false, reason: 'not_priority' }
 
+  // Don't process during countdown period (Build workflow)
+  if (activity.invite_starts_at && new Date(activity.invite_starts_at) > new Date()) {
+    return { processed: false, reason: 'countdown_active' }
+  }
+
   const maxCapacity = activity.max_capacity
   if (!maxCapacity) return { processed: false, reason: 'no_capacity_limit' }
 
