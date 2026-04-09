@@ -153,12 +153,12 @@ export default function ActivityDetailPage() {
     await loadActivity()
   }
 
-  async function handleRemoveMember(member: MemberInfo) {
+  async function handleRemoveMember(member: MemberInfo, notify = false) {
     setMemberActioning(true)
     await fetch(`/api/activities/${id}/remove-member`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: member.user_id }),
+      body: JSON.stringify({ user_id: member.user_id, notify }),
     })
     setSelectedMember(null)
     setMemberActioning(false)
@@ -408,7 +408,7 @@ export default function ActivityDetailPage() {
               </div>
             )}
 
-            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" />
+            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />
             {!isCountdownActive && <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" />}
 
             {/* Status banner — show when invites are done */}
@@ -490,7 +490,7 @@ export default function ActivityDetailPage() {
         )}
       </div>
 
-      {/* Member Action Modal (countdown) */}
+      {/* Member Action Modal */}
       {selectedMember && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !memberActioning && setSelectedMember(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -508,13 +508,28 @@ export default function ActivityDetailPage() {
               <p className="text-[13px] text-muted mt-1">What would you like to do?</p>
             </div>
             <div className="space-y-2.5">
-              <button
-                onClick={() => handleConfirmMember(selectedMember)}
-                disabled={memberActioning}
-                className="w-full py-3 rounded-xl text-[14px] font-bold bg-[#00C853] text-white active:opacity-80 transition-opacity disabled:opacity-50"
-              >
-                {memberActioning ? 'Updating...' : 'Mark as In'}
-              </button>
+              {/* Mark as In — only for tbd members */}
+              {selectedMember.status === 'tbd' && (
+                <button
+                  onClick={() => handleConfirmMember(selectedMember)}
+                  disabled={memberActioning}
+                  className="w-full py-3 rounded-xl text-[14px] font-bold bg-[#00C853] text-white active:opacity-80 transition-opacity disabled:opacity-50"
+                >
+                  {memberActioning ? 'Updating...' : 'Mark as In'}
+                </button>
+              )}
+
+              {/* Remove & Notify — for confirmed members when activity is/was full */}
+              {selectedMember.status === 'confirmed' && isFull && (
+                <button
+                  onClick={() => handleRemoveMember(selectedMember, true)}
+                  disabled={memberActioning}
+                  className="w-full py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
+                >
+                  {memberActioning ? 'Removing...' : 'Remove & Notify Open Spot'}
+                </button>
+              )}
+
               <button
                 onClick={() => handleRemoveMember(selectedMember)}
                 disabled={memberActioning}
@@ -627,6 +642,7 @@ function StatusSection({
   badgeColor,
   members,
   statusKey,
+  onMemberTap,
 }: {
   title: string
   count: number
@@ -634,6 +650,7 @@ function StatusSection({
   badgeColor?: string
   members: MemberInfo[]
   statusKey: string
+  onMemberTap?: (member: MemberInfo) => void
 }) {
   const config = STATUS_CONFIG[statusKey]
   return (
@@ -653,21 +670,31 @@ function StatusSection({
       </div>
       {members.length > 0 ? (
         <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
-          {members.map((m, i) => (
-            <div
-              key={m.id}
-              className={`flex items-center gap-3 px-4 py-3 ${i < members.length - 1 ? 'border-b border-border/30' : ''}`}
-            >
-              <AvatarImg src={m.user?.avatar_url} />
-              <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-semibold text-foreground truncate">
-                  {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
-                </p>
-                <p className={`text-[11px] font-medium ${config.color}`}>{config.label}</p>
-              </div>
-              <StatusIcon status={statusKey} />
-            </div>
-          ))}
+          {members.map((m, i) => {
+            const Row = onMemberTap ? 'button' : 'div'
+            return (
+              <Row
+                key={m.id}
+                {...(onMemberTap ? { onClick: () => onMemberTap(m) } : {})}
+                className={`flex items-center gap-3 px-4 py-3 w-full text-left ${onMemberTap ? 'active:bg-primary/5 transition-colors' : ''} ${i < members.length - 1 ? 'border-b border-border/30' : ''}`}
+              >
+                <AvatarImg src={m.user?.avatar_url} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold text-foreground truncate">
+                    {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
+                  </p>
+                  <p className={`text-[11px] font-medium ${config.color}`}>{config.label}</p>
+                </div>
+                {onMemberTap ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                ) : (
+                  <StatusIcon status={statusKey} />
+                )}
+              </Row>
+            )
+          })}
         </div>
       ) : (
         <div className="border-b border-border/20 pb-3" />

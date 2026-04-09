@@ -97,7 +97,7 @@ export async function sendFillInvite(
   const spotsText = spotsNeeded === 1 ? '1 spot' : `${spotsNeeded} spots`
   const message =
     `${inviterName} is using Whozin to fill ${spotsText} for ${activityName} on ${dateTime}. ` +
-    `Are you in? Reply IN or OUT` +
+    `Are you in? Reply IN` +
     testNote
   return sendSms(actualTo, message, imageUrl)
 }
