@@ -1345,6 +1345,7 @@ export default function CreateActivityPage() {
           </button>
         )}
       </div>
+
     </div>
   )
 }

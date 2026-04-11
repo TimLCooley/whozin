@@ -1,20 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { rateLimit } from '@/lib/rate-limit'
 
 const BUCKET = 'branding'
 const MAX_BYTES = 5 * 1024 * 1024
+// Strict whitelist — no SVG (XSS risk via stored script tags) and no
+// unknown image types. Everything maps cleanly to a safe extension.
+const ALLOWED_TYPES: Record<string, 'webp' | 'png' | 'jpg'> = {
+  'image/webp': 'webp',
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const rl = rateLimit({ key: `avatar:${user.id}`, max: 10, windowMs: 60_000 })
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many uploads. Please wait a moment and try again.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    )
+  }
+
   const form = await req.formData()
   const file = form.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
   if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Too large' }, { status: 400 })
-  if (!file.type.startsWith('image/')) return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
+  const ext = ALLOWED_TYPES[file.type]
+  if (!ext) return NextResponse.json({ error: 'Only WebP, PNG, and JPEG are allowed' }, { status: 400 })
 
   const admin = getAdminClient()
 
@@ -26,7 +44,6 @@ export async function POST(req: NextRequest) {
   if (!me) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
   const buffer = Buffer.from(await file.arrayBuffer())
-  const ext = file.type === 'image/webp' ? 'webp' : file.type === 'image/png' ? 'png' : 'jpg'
   const path = `user-avatars/${me.id}.${ext}`
 
   const { error: uploadError } = await admin.storage

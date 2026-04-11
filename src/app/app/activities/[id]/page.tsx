@@ -141,11 +141,14 @@ export default function ActivityDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        setActivity((prev) => (prev ? { ...prev, ...payload } as ActivityDetail : prev))
+        // Prefer the server's normalized values (post-trim, null conversion)
+        // so the UI matches what's actually in the database.
+        const normalized = (data.updates as Record<string, unknown> | undefined) ?? payload
+        setActivity((prev) => (prev ? { ...prev, ...normalized } as ActivityDetail : prev))
         setEditField(null)
       } else {
-        const data = await res.json()
         alert(data.error || 'Failed to save')
       }
     } catch {

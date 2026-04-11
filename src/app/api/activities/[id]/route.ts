@@ -256,7 +256,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ success: true })
+  // Return the normalized field values so the client mirrors what's actually
+  // stored (post-trim, post-null-conversion) without needing a re-fetch.
+  return NextResponse.json({ success: true, updates })
 }
 
 // DELETE activity (creator only)

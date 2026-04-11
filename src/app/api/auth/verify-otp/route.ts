@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone, phoneToEmail } from '@/lib/auth'
+import { rateLimit } from '@/lib/rate-limit'
 import { randomUUID } from 'crypto'
 
 export async function POST(req: NextRequest) {
@@ -11,6 +12,17 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedPhone = normalizePhone(phone, country_code || '1')
+
+  // Per-phone rate limit: 10 verify attempts per 15 minutes. Makes
+  // brute-forcing the 6-digit OTP impractical.
+  const rl = rateLimit({ key: `otp-verify:${normalizedPhone}`, max: 10, windowMs: 15 * 60_000 })
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Too many attempts. Please wait a few minutes and try again.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    )
+  }
+
   const admin = getAdminClient()
 
   // Verify OTP

@@ -36,18 +36,28 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .eq('id', group.creator_id)
     .single()
 
+  const isOwner = group.creator_id === whozinUser.id
+  const membersVisible = group.members_visible ?? true
+
   const { data: members } = await admin
     .from('whozin_group_members')
     .select('id, user_id, priority_order, whozin_users(id, first_name, last_name, phone, avatar_url, status, show_phone, show_last_name)')
     .eq('group_id', id)
     .order('priority_order', { ascending: true })
 
+  // When members aren't visible and the requester isn't the owner, only
+  // return the requester's own membership so the client can still leave,
+  // but can't enumerate anyone else.
+  const visibleMembers = !isOwner && !membersVisible
+    ? (members ?? []).filter((m) => m.user_id === whozinUser.id)
+    : (members ?? [])
+
   return NextResponse.json({
     ...group,
-    is_owner: group.creator_id === whozinUser.id,
+    is_owner: isOwner,
     current_user_id: whozinUser.id,
     creator_is_pro: creator?.membership_tier === 'pro',
-    members: (members ?? []).map((m) => {
+    members: visibleMembers.map((m) => {
       const u = m.whozin_users as unknown as Record<string, unknown>
       const isSelf = m.user_id === whozinUser.id
       const lastName = u.last_name as string || ''

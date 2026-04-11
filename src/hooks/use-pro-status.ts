@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { showPaywall } from '@/components/ui/paywall-modal'
 
 type Membership = 'free' | 'pro'
 
@@ -54,19 +55,19 @@ export function useProStatus() {
   return { isPro: membership === 'pro', membership, isLoading, refresh }
 }
 
-export function openPaywall(router: ReturnType<typeof useRouter>, returnTo?: string) {
-  const path = returnTo || (typeof window !== 'undefined' ? window.location.pathname : '/app')
-  router.push(`/app/upgrade?returnTo=${encodeURIComponent(path)}`)
+// Deprecated — kept for backwards compat. Prefer `requirePro` from `usePaywall`.
+export function openPaywall(_router: ReturnType<typeof useRouter>, _returnTo?: string) {
+  showPaywall()
 }
 
 export function usePaywall() {
-  const router = useRouter()
-  const pathname = usePathname()
+  const _router = useRouter()
+  const _pathname = usePathname()
   const status = useProStatus()
 
-  function requirePro(returnTo?: string) {
+  function requirePro(_returnTo?: string) {
     if (status.isPro) return true
-    openPaywall(router, returnTo ?? pathname)
+    showPaywall()
     return false
   }
 

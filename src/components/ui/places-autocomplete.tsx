@@ -73,8 +73,9 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
 
     containerRef.current.appendChild(el)
 
-    // Listen on the custom element itself — `input` events from the inner
-    // <input> (even inside a shadow root) bubble and retarget to the host.
+    // Sync typed-but-not-selected text. The `input` event from the inner
+    // <input> bubbles up through the custom element (even across shadow DOM),
+    // so listening once on the host is enough.
     const onHostInput = (e: Event) => {
       const target = e.target as HTMLInputElement | null
       const composedPath = typeof (e as Event & { composedPath?: () => EventTarget[] }).composedPath === 'function'
@@ -87,35 +88,8 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
     }
     el.addEventListener('input', onHostInput)
 
-    // Also sync free-typed text that never gets "selected" from the dropdown.
-    // Without this, users who type a location and submit without clicking a
-    // suggestion lose the value. Listen on `input` (every keystroke) so the
-    // parent always has the live value by the time they click Save.
-    let innerInput: HTMLInputElement | null = null
-    const syncFromInput = () => {
-      if (innerInput) onChange(innerInput.value)
-    }
-    let tries = 0
-    const pollId = window.setInterval(() => {
-      innerInput = el.querySelector('input')
-      if (innerInput) {
-        innerInput.addEventListener('input', syncFromInput)
-        innerInput.addEventListener('change', syncFromInput)
-        innerInput.addEventListener('blur', syncFromInput)
-        window.clearInterval(pollId)
-      } else if (++tries > 30) {
-        window.clearInterval(pollId)
-      }
-    }, 100)
-
     return () => {
-      window.clearInterval(pollId)
       el.removeEventListener('input', onHostInput)
-      if (innerInput) {
-        innerInput.removeEventListener('input', syncFromInput)
-        innerInput.removeEventListener('change', syncFromInput)
-        innerInput.removeEventListener('blur', syncFromInput)
-      }
       if (el.parentNode) el.parentNode.removeChild(el)
       elementRef.current = null
     }

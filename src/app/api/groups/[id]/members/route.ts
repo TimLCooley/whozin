@@ -147,7 +147,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({ success: true })
 }
 
-// DELETE remove member
+// DELETE remove member — allowed when requester is the group creator OR is
+// removing their own membership (self-leave).
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: groupId } = await params
   const supabase = await createServerClient()
@@ -160,6 +161,36 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   if (!membershipId) {
     return NextResponse.json({ error: 'membership_id is required' }, { status: 400 })
+  }
+
+  const { data: whozinUser } = await admin
+    .from('whozin_users')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .single()
+  if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  const { data: membership } = await admin
+    .from('whozin_group_members')
+    .select('id, user_id, group_id')
+    .eq('id', membershipId)
+    .eq('group_id', groupId)
+    .single()
+  if (!membership) {
+    return NextResponse.json({ error: 'Membership not found' }, { status: 404 })
+  }
+
+  const { data: group } = await admin
+    .from('whozin_groups')
+    .select('creator_id')
+    .eq('id', groupId)
+    .single()
+  if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+
+  const isOwner = group.creator_id === whozinUser.id
+  const isSelf = membership.user_id === whozinUser.id
+  if (!isOwner && !isSelf) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
   const { error } = await admin

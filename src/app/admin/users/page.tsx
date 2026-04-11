@@ -43,10 +43,11 @@ export default function UsersPage() {
   }, [])
 
   const filtered = users.filter((u) => {
+    const q = search.toLowerCase()
     const matchesSearch =
-      `${u.first_name} ${u.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-      u.phone.includes(search) ||
-      (u.email && u.email.toLowerCase().includes(search.toLowerCase()))
+      `${u.first_name ?? ''} ${u.last_name ?? ''}`.toLowerCase().includes(q) ||
+      (u.phone?.includes(search) ?? false) ||
+      (u.email?.toLowerCase().includes(q) ?? false)
 
     if (filterMode === 'active') return matchesSearch && u.auth_user_id !== null
     if (filterMode === 'invited') return matchesSearch && u.auth_user_id === null

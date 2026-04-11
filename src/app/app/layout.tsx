@@ -9,6 +9,7 @@ import { usePushNotifications } from '@/lib/use-push-notifications'
 import { BottomNav } from '@/components/app/bottom-nav'
 import { PushPermissionGate } from '@/components/app/push-permission-gate'
 import { ForceUpdateGate } from '@/components/app/force-update-gate'
+import { PaywallModal } from '@/components/ui/paywall-modal'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -122,6 +123,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <BottomNav />
         </div>
       </div>
+      <PaywallModal />
     </ForceUpdateGate>
   )
 }
