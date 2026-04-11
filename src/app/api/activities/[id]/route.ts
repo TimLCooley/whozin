@@ -183,6 +183,82 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({ status: newStatus })
 }
 
+// PATCH activity fields (creator only)
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = getAdminClient()
+
+  const { data: whozinUser } = await admin
+    .from('whozin_users')
+    .select('id, membership_tier, phone')
+    .eq('auth_user_id', user.id)
+    .single()
+
+  if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  const { data: existing } = await admin
+    .from('whozin_activity')
+    .select('creator_id')
+    .eq('id', id)
+    .single()
+
+  if (!existing || existing.creator_id !== whozinUser.id) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  const body = await req.json()
+  const isPro = whozinUser.membership_tier === 'pro'
+  const isTestUser = whozinUser.phone?.includes('999')
+
+  const updates: Record<string, unknown> = {}
+
+  if (body.activity_type !== undefined) updates.activity_type = body.activity_type
+  if (body.activity_name !== undefined) {
+    if (!body.activity_name?.trim()) {
+      return NextResponse.json({ error: 'Activity name is required' }, { status: 400 })
+    }
+    updates.activity_name = body.activity_name.trim()
+  }
+  if (body.activity_date !== undefined) updates.activity_date = body.activity_date || null
+  if (body.activity_time !== undefined) updates.activity_time = body.activity_time || null
+  if (body.location !== undefined) updates.location = body.location?.trim() || null
+  if (body.note !== undefined) updates.note = body.note?.trim() || null
+  if (body.cost_type !== undefined) {
+    updates.cost_type = body.cost_type
+    updates.cost = body.cost_type !== 'free' ? (body.cost ?? null) : null
+  } else if (body.cost !== undefined) {
+    updates.cost = body.cost
+  }
+  if (body.max_capacity !== undefined) {
+    updates.max_capacity = body.max_capacity === 'all' ? null : body.max_capacity
+  }
+  if (body.response_timer_minutes !== undefined) {
+    updates.response_timer_minutes = (isPro || isTestUser) ? body.response_timer_minutes : 5
+  }
+  if (body.priority_invite !== undefined) updates.priority_invite = body.priority_invite
+  if (body.chat_enabled !== undefined) updates.chat_enabled = isPro ? body.chat_enabled : false
+  if (body.reminder_enabled !== undefined) updates.reminder_enabled = isPro ? body.reminder_enabled : false
+  if (body.image_url !== undefined) updates.image_url = body.image_url || null
+  if (body.auto_emergency_fill !== undefined) updates.auto_emergency_fill = body.auto_emergency_fill
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+  }
+
+  const { error } = await admin
+    .from('whozin_activity')
+    .update(updates)
+    .eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ success: true })
+}
+
 // DELETE activity (creator only)
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

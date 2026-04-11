@@ -117,6 +117,14 @@ export default function GroupDetailPage() {
   // Remove member confirm
   const [removingMember, setRemovingMember] = useState<Member | null>(null)
 
+  // Added-member confirmation toast
+  const [addedConfirm, setAddedConfirm] = useState<string | null>(null)
+
+  function showAddedConfirm(firstName: string) {
+    setModal(null)
+    setAddedConfirm(firstName || 'Member')
+  }
+
   const loadGroup = useCallback(async () => {
     const res = await fetch(`/api/groups/${groupId}`)
     if (res.ok) {
@@ -168,7 +176,13 @@ export default function GroupDetailPage() {
 
   async function handleChatToggle(enabled: boolean) {
     setChatEnabled(enabled)
-    saveGroupSettings({ chat_enabled: enabled })
+    // Enabling chat forces members_visible on — members in a chat can see each other anyway.
+    if (enabled && !membersVisible) {
+      setMembersVisible(true)
+      saveGroupSettings({ chat_enabled: enabled, members_visible: true })
+    } else {
+      saveGroupSettings({ chat_enabled: enabled })
+    }
   }
 
   async function handleMembersVisibleToggle(visible: boolean) {
@@ -207,11 +221,12 @@ export default function GroupDetailPage() {
       }),
     })
     if (res.ok) {
-      setModal(null)
+      const addedName = newFirstName
       setPhoneRaw('')
       setNewFirstName('')
       setNewLastName('')
       loadGroup()
+      showAddedConfirm(addedName)
     } else {
       const data = await res.json()
       alert(data.error || 'Failed to add member')
@@ -220,6 +235,7 @@ export default function GroupDetailPage() {
   }
 
   async function handleAddFromGroups(userId: string) {
+    const picked = contacts.find((c) => c.id === userId)
     const res = await fetch(`/api/groups/${groupId}/members`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -227,6 +243,7 @@ export default function GroupDetailPage() {
     })
     if (res.ok) {
       loadGroup()
+      showAddedConfirm(picked?.first_name || 'Member')
     } else {
       const data = await res.json()
       alert(data.error || 'Failed to add member')
@@ -363,18 +380,20 @@ export default function GroupDetailPage() {
       phone = phone.slice(-10)
     }
 
+    const firstName = contact.first_name || contact.name.split(' ')[0] || ''
     const res = await fetch(`/api/groups/${groupId}/members`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phone,
         country_code: countryCodeVal,
-        first_name: contact.first_name || contact.name.split(' ')[0] || '',
+        first_name: firstName,
         last_name: contact.last_name || contact.name.split(' ').slice(1).join(' ') || '',
       }),
     })
     if (res.ok) {
       loadGroup()
+      showAddedConfirm(firstName)
     } else {
       const data = await res.json()
       alert(data.error || 'Failed to add member')
@@ -397,22 +416,35 @@ export default function GroupDetailPage() {
       phone = phone.slice(-10)
     }
 
+    const firstName = contact.first_name || contact.name.split(' ')[0] || ''
     const res = await fetch(`/api/groups/${groupId}/members`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phone,
         country_code: countryCodeVal,
-        first_name: contact.first_name || contact.name.split(' ')[0] || '',
+        first_name: firstName,
         last_name: contact.last_name || contact.name.split(' ').slice(1).join(' ') || '',
       }),
     })
     if (res.ok) {
       loadGroup()
+      showAddedConfirm(firstName)
     } else {
       const data = await res.json()
       alert(data.error || 'Failed to add member')
     }
+  }
+
+  async function handleLeaveGroup() {
+    if (!group) return
+    if (!confirm(`Leave "${group.name}"?`)) return
+    const myMembership = group.members.find((m) => m.user_id === group.current_user_id)
+    if (!myMembership) return
+    await fetch(`/api/groups/${groupId}/members?membership_id=${myMembership.membership_id}`, {
+      method: 'DELETE',
+    })
+    router.replace('/app/groups')
   }
 
   async function handleDeleteGroup() {
@@ -463,6 +495,44 @@ export default function GroupDetailPage() {
         <AppHeader showBack />
         <div className="flex-1 flex items-center justify-center px-4">
           <p className="text-muted">Group not found.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Restricted view: non-owner visiting a group where members_visible is off.
+  // Hide the whole details/chat/members UI and only offer to leave.
+  if (!group.is_owner && !group.members_visible) {
+    return (
+      <div className="h-full flex flex-col bg-surface">
+        <AppHeader showBack />
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="max-w-sm mx-auto">
+            <div className="bg-background border border-border/50 rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="7" r="3" />
+                  <circle cx="17" cy="9" r="2.5" />
+                  <path d="M2 21v-1a5 5 0 0110 0v1M14 21v-1a4 4 0 018 0v1" />
+                </svg>
+              </div>
+              <h1 className="text-[17px] font-bold text-foreground text-center">{group.name}</h1>
+              <p className="text-[12px] text-muted text-center mt-1 mb-5">
+                The host has set this group to private. You can&apos;t see other members.
+              </p>
+
+              <button
+                onClick={handleLeaveGroup}
+                className="w-full py-3 rounded-xl bg-danger/10 text-danger text-[14px] font-semibold active:opacity-80 transition-opacity"
+              >
+                Leave Group
+              </button>
+
+              <p className="text-[11px] text-muted text-center mt-4 leading-snug">
+                Note: the group creator won&apos;t be notified when you leave.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -609,14 +679,18 @@ export default function GroupDetailPage() {
               </div>
 
               <div className="flex items-center justify-between mt-3">
-                <span className="text-[13px] text-foreground">Allow members to see who&apos;s in the group</span>
+                <span className={`text-[13px] ${chatEnabled ? 'text-muted' : 'text-foreground'}`}>
+                  See other members
+                  {chatEnabled && <span className="block text-[11px] text-muted mt-0.5">Required while chat is on</span>}
+                </span>
                 <button
                   role="switch"
                   aria-checked={membersVisible}
-                  onClick={() => handleMembersVisibleToggle(!membersVisible)}
+                  disabled={chatEnabled}
+                  onClick={() => !chatEnabled && handleMembersVisibleToggle(!membersVisible)}
                   className={`relative w-[46px] h-[28px] rounded-full transition-colors duration-200 flex-shrink-0 ${
                     membersVisible ? 'bg-primary' : 'bg-[#d5d9e2]'
-                  }`}
+                  } ${chatEnabled ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
                     membersVisible ? 'translate-x-[18px]' : ''
@@ -765,6 +839,31 @@ export default function GroupDetailPage() {
       )}
 
       {/* Remove Member Confirm Modal */}
+      {addedConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop bg-black/40" onClick={() => setAddedConfirm(null)}>
+          <div
+            className="modal-panel bg-background rounded-2xl p-6 w-full max-w-xs shadow-2xl mx-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <h3 className="text-[16px] font-bold text-foreground mb-1">Member added</h3>
+            <p className="text-[13px] text-muted mb-5">
+              <span className="font-semibold text-foreground">{addedConfirm}</span> was added to <span className="font-semibold text-foreground">{groupName}</span>.
+            </p>
+            <button
+              onClick={() => setAddedConfirm(null)}
+              className="w-full py-2.5 rounded-xl bg-primary text-white text-[14px] font-semibold active:opacity-80 transition-opacity"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
       {removingMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop bg-black/40" onClick={() => setRemovingMember(null)}>
           <div

@@ -233,14 +233,14 @@ export default function PublicProfilePage() {
               </p>
 
               {/* Name fields */}
-              <div className="flex gap-2 mb-3">
+              <div className="flex gap-2 mb-3 w-full">
                 <input
                   type="text"
                   value={joinFirstName}
                   onChange={(e) => setJoinFirstName(e.target.value)}
                   placeholder="First name"
                   autoFocus
-                  className="flex-1 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
+                  className="flex-1 min-w-0 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
                              placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30
                              focus:border-primary"
                 />
@@ -249,15 +249,15 @@ export default function PublicProfilePage() {
                   value={joinLastName}
                   onChange={(e) => setJoinLastName(e.target.value)}
                   placeholder="Last name"
-                  className="flex-1 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
+                  className="flex-1 min-w-0 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
                              placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30
                              focus:border-primary"
                 />
               </div>
 
               {/* Phone field */}
-              <div className="flex gap-2">
-                <div className="flex items-center px-3 rounded-xl border border-border bg-background text-[14px] text-muted">
+              <div className="flex gap-2 w-full">
+                <div className="flex items-center px-3 rounded-xl border border-border bg-background text-[14px] text-muted flex-shrink-0">
                   +1
                 </div>
                 <input
@@ -265,7 +265,7 @@ export default function PublicProfilePage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(555) 123-4567"
-                  className="flex-1 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
+                  className="flex-1 min-w-0 h-12 px-4 rounded-xl border border-border bg-background text-[15px]
                              placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30
                              focus:border-primary"
                 />

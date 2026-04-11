@@ -11,6 +11,7 @@ interface GroupItem {
   name: string
   creator_id: string
   chat_enabled: boolean
+  members_visible: boolean
   member_count: number
   is_owner: boolean
   has_unread_chat: boolean

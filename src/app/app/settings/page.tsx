@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { AppHeader } from '@/components/app/header'
+import { AvatarCropModal } from '@/components/ui/avatar-crop-modal'
 
 type SectionKey = 'personal' | 'membership' | 'notifications' | 'privacy' | 'blocked'
 
@@ -28,6 +29,9 @@ export default function SettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [cropFile, setCropFile] = useState<File | null>(null)
+  const [avatarSaving, setAvatarSaving] = useState(false)
+  const [avatarError, setAvatarError] = useState<string | null>(null)
   const [showEmailUpdate, setShowEmailUpdate] = useState(false)
   const [newEmail, setNewEmail] = useState('')
   const [emailStep, setEmailStep] = useState<'enter' | 'verify'>('enter')
@@ -103,15 +107,46 @@ export default function SettingsPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
-      // TODO: upload to Supabase Storage and update user metadata
-      const url = URL.createObjectURL(file)
-      setAvatarUrl(url)
+      setAvatarError(null)
+      setCropFile(file)
+      // Reset so selecting the same file again re-opens the crop modal.
+      e.target.value = ''
     }
   }
 
-  function handleRemovePhoto() {
-    setAvatarUrl(null)
-    // TODO: remove from Supabase Storage and update user metadata
+  async function handleCropConfirm(blob: Blob) {
+    setAvatarSaving(true)
+    setAvatarError(null)
+    try {
+      const form = new FormData()
+      form.append('file', blob, 'avatar.webp')
+      const res = await fetch('/api/user/avatar', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Upload failed')
+      setAvatarUrl(data.url)
+      setCropFile(null)
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setAvatarSaving(false)
+    }
+  }
+
+  async function handleRemovePhoto() {
+    setAvatarSaving(true)
+    setAvatarError(null)
+    try {
+      const res = await fetch('/api/user/avatar', { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Remove failed')
+      }
+      setAvatarUrl(null)
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : 'Remove failed')
+    } finally {
+      setAvatarSaving(false)
+    }
   }
 
   return (
@@ -201,8 +236,12 @@ export default function SettingsPage() {
                     )}
                   </div>
                   {avatarUrl && (
-                    <button onClick={handleRemovePhoto} className="text-[11px] text-primary font-semibold">
-                      Remove Picture
+                    <button
+                      onClick={handleRemovePhoto}
+                      disabled={avatarSaving}
+                      className="text-[11px] text-primary font-semibold disabled:opacity-60"
+                    >
+                      {avatarSaving ? 'Working…' : 'Remove Picture'}
                     </button>
                   )}
                 </div>
@@ -244,6 +283,9 @@ export default function SettingsPage() {
                     </svg>
                     Choose from Library
                   </button>
+                  {avatarError && (
+                    <p className="text-[11px] text-red-500">{avatarError}</p>
+                  )}
                 </div>
               </div>
             </Field>
@@ -546,6 +588,14 @@ export default function SettingsPage() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {cropFile && (
+        <AvatarCropModal
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onConfirm={handleCropConfirm}
+        />
       )}
     </div>
   )

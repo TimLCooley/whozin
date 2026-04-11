@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import CodeGrab from "@/components/dev/code-grab";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -99,13 +100,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {process.env.NODE_ENV === "development" && (
-          <Script
-            src="//unpkg.com/react-grab/dist/index.global.js"
-            crossOrigin="anonymous"
-            strategy="beforeInteractive"
-          />
-        )}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -170,8 +164,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${jakarta.variable} antialiased`}>
+      <body className={`${jakarta.variable} antialiased`} suppressHydrationWarning>
         {children}
+        {process.env.NODE_ENV === "development" && <CodeGrab />}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-N82VPQFJHG"
           strategy="afterInteractive"

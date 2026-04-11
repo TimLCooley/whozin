@@ -46,6 +46,12 @@ export async function POST(req: NextRequest) {
 
   // ── RETURNING USER — already has auth account ──
   if (existingUser?.auth_user_id) {
+    // Look up the actual auth email — it may be the user's real email
+    // (Google/Apple OAuth) or the synthetic phone email. Using the wrong one
+    // here fails signInWithPassword with "Invalid login credentials".
+    const { data: authUserRes } = await admin.auth.admin.getUserById(existingUser.auth_user_id)
+    const authEmail = authUserRes?.user?.email || syntheticEmail
+
     await admin.auth.admin.updateUserById(existingUser.auth_user_id, {
       password: sessionPassword,
     })
@@ -54,7 +60,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       action: 'sign_in',
-      email: syntheticEmail,
+      email: authEmail,
       token: sessionPassword,
     })
   }

@@ -61,3 +61,6 @@ next-env.d.ts
 /android/local.properties
 /android/app/whozin-keystore.jks
 .gstack/
+
+# dev code-grab
+.grab-selection.json

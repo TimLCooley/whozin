@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { AvatarImg } from '@/components/ui/avatar-img'
+import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
 import { createClient } from '@/lib/supabase/client'
 
 interface MemberInfo {
@@ -92,6 +93,66 @@ export default function ActivityDetailPage() {
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editField, setEditField] = useState<'location' | 'datetime' | 'cost' | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editLocation, setEditLocation] = useState('')
+  const locationWrapRef = useRef<HTMLDivElement>(null)
+  const [editDate, setEditDate] = useState('')
+  const [editTime, setEditTime] = useState('')
+  const [editCostType, setEditCostType] = useState<'free' | 'pay_me' | 'pay_at_location'>('free')
+  const [editCostAmount, setEditCostAmount] = useState('')
+
+  function openEdit(field: 'location' | 'datetime' | 'cost') {
+    if (!activity) return
+    if (field === 'location') setEditLocation(activity.location ?? '')
+    if (field === 'datetime') {
+      setEditDate(activity.activity_date ?? '')
+      setEditTime(activity.activity_time ?? '')
+    }
+    if (field === 'cost') {
+      setEditCostType((activity.cost_type as 'free' | 'pay_me' | 'pay_at_location') ?? 'free')
+      setEditCostAmount(activity.cost != null ? String(activity.cost) : '')
+    }
+    setEditField(field)
+  }
+
+  async function saveEdit() {
+    if (!activity || !editField) return
+    setEditSaving(true)
+    const payload: Record<string, unknown> = {}
+    if (editField === 'location') {
+      // PlacesAutocomplete's Google element only syncs state on blur; read the
+      // live DOM value in case the user clicks Save without blurring first.
+      const domVal = locationWrapRef.current?.querySelector('input')?.value ?? ''
+      const effective = (domVal || editLocation).trim()
+      payload.location = effective || null
+    }
+    if (editField === 'datetime') {
+      payload.activity_date = editDate || null
+      payload.activity_time = editTime || null
+    }
+    if (editField === 'cost') {
+      payload.cost_type = editCostType
+      payload.cost = editCostType === 'free' ? null : (parseFloat(editCostAmount) || null)
+    }
+    try {
+      const res = await fetch(`/api/activities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        setActivity((prev) => (prev ? { ...prev, ...payload } as ActivityDetail : prev))
+        setEditField(null)
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to save')
+      }
+    } catch {
+      alert('Failed to save')
+    }
+    setEditSaving(false)
+  }
   const [countdownSeconds, setCountdownSeconds] = useState(0)
   const [selectedMember, setSelectedMember] = useState<MemberInfo | null>(null)
   const [memberActioning, setMemberActioning] = useState(false)
@@ -254,16 +315,18 @@ export default function ActivityDetailPage() {
             <p className="text-[12px] text-muted mt-0.5">{activity.group_name}</p>
           )}
         </div>
-        <button
-          onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
-          className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" />
-            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-          </svg>
-          Clone
-        </button>
+        {activity.is_creator && (
+          <button
+            onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
+            className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+            Clone
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -310,9 +373,9 @@ export default function ActivityDetailPage() {
                    activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
                 </div>
 
-                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} trailing={<AddToCalendarButton activity={activity} />} />
-                {activity.location && <InfoRow icon="pin" label="Location" value={activity.location} link />}
-                <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
+                <InfoRow icon="pin" label="Location" value={activity.location || "Not specified"} link={!!activity.location} onEdit={activity.is_creator ? () => openEdit('location') : undefined} />
+                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} trailing={<AddToCalendarButton activity={activity} />} onEdit={activity.is_creator ? () => openEdit('datetime') : undefined} />
+                <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} onEdit={activity.is_creator ? () => openEdit('cost') : undefined} />
                 <InfoRow icon="people" label="Spots" value={
                   activity.max_capacity
                     ? `${confirmed.length} / ${activity.max_capacity} ${confirmed.length >= activity.max_capacity ? 'filled' : 'open'}`
@@ -349,8 +412,8 @@ export default function ActivityDetailPage() {
             {/* Invitee view — just the essentials */}
             {!activity.is_creator && (
               <>
+                <InfoRow icon="pin" label="Location" value={activity.location || "Not specified"} link={!!activity.location} />
                 <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} trailing={<AddToCalendarButton activity={activity} />} />
-                {activity.location && <InfoRow icon="pin" label="Location" value={activity.location} link />}
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
 
                 {/* Response buttons */}
@@ -624,6 +687,92 @@ export default function ActivityDetailPage() {
                 className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-muted border border-border/50 active:opacity-80 transition-opacity"
               >
                 Drop Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inline field edit modal */}
+      {editField && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !editSaving && setEditField(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[16px] font-bold text-foreground mb-4">
+              {editField === 'location' && 'Edit Location'}
+              {editField === 'datetime' && 'Edit Date & Time'}
+              {editField === 'cost' && 'Edit Cost'}
+            </h3>
+
+            {editField === 'location' && (
+              <div ref={locationWrapRef}>
+                <PlacesAutocomplete
+                  value={editLocation}
+                  onChange={setEditLocation}
+                  placeholder="Search for a location..."
+                />
+              </div>
+            )}
+
+            {editField === 'datetime' && (
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="flex-1 min-w-0 h-12 px-3 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+                <input
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  className="flex-1 min-w-0 h-12 px-3 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+            )}
+
+            {editField === 'cost' && (
+              <div className="space-y-3">
+                <select
+                  value={editCostType}
+                  onChange={(e) => setEditCostType(e.target.value as 'free' | 'pay_me' | 'pay_at_location')}
+                  className="w-full h-12 px-3 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                >
+                  <option value="free">Free</option>
+                  <option value="pay_me">Pay Host</option>
+                  <option value="pay_at_location">Pay at Location</option>
+                </select>
+                {editCostType !== 'free' && (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    value={editCostAmount}
+                    onChange={(e) => setEditCostAmount(e.target.value)}
+                    placeholder="Amount (USD)"
+                    className="w-full h-12 px-4 rounded-xl border border-border bg-background text-[15px] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setEditField(null)}
+                disabled={editSaving}
+                className="flex-1 py-2.5 rounded-xl border border-border text-[14px] font-semibold text-muted disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={editSaving}
+                className="flex-1 btn-primary py-2.5 text-[14px] disabled:opacity-60"
+              >
+                {editSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
@@ -1075,7 +1224,7 @@ function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
   )
 }
 
-function InfoRow({ icon, label, value, link, trailing }: { icon: string; label: string; value: string; link?: boolean; trailing?: React.ReactNode }) {
+function InfoRow({ icon, label, value, link, trailing, onEdit }: { icon: string; label: string; value: string; link?: boolean; trailing?: React.ReactNode; onEdit?: () => void }) {
   return (
     <div className="bg-background border border-border/50 rounded-xl px-4 py-3 flex items-start gap-3">
       <div className="mt-0.5 flex-shrink-0">
@@ -1114,6 +1263,19 @@ function InfoRow({ icon, label, value, link, trailing }: { icon: string; label: 
         <p className="text-[11px] font-medium text-muted uppercase tracking-wider">{label}</p>
         <p className={`text-[14px] font-medium mt-0.5 ${link ? 'text-primary' : 'text-foreground'}`}>{value}</p>
       </div>
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="flex-shrink-0 p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+          aria-label={`Edit ${label}`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+        </button>
+      )}
       {trailing}
     </div>
   )

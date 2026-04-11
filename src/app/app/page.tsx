@@ -76,9 +76,18 @@ export default function AppHome() {
     // Optimistic update
     setActivities((prev) =>
       sortActivities(
-        prev.map((a) =>
-          a.id === activityId ? { ...a, my_status: response === 'in' ? 'confirmed' : 'out' } : a
-        )
+        prev.map((a) => {
+          if (a.id !== activityId) return a
+          const wasConfirmed = a.my_status === 'confirmed'
+          const nextStatus = response === 'in' ? 'confirmed' : 'out'
+          const willBeConfirmed = nextStatus === 'confirmed'
+          const delta = willBeConfirmed === wasConfirmed ? 0 : willBeConfirmed ? 1 : -1
+          return {
+            ...a,
+            my_status: nextStatus,
+            confirmed_count: Math.max(0, a.confirmed_count + delta),
+          }
+        })
       )
     )
 
