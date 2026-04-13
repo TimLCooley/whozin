@@ -162,12 +162,30 @@ export default function ActivityDetailPage() {
   const [memberActioning, setMemberActioning] = useState(false)
 
   // Add member to activity
-  const [showAddPhone, setShowAddPhone] = useState(false)
+  type AddModal = null | 'add-menu' | 'add-phone' | 'add-friends' | 'add-google' | 'add-device'
+  const [addModal, setAddModal] = useState<AddModal>(null)
+  const [lastAddModal, setLastAddModal] = useState<AddModal>(null)
   const [addPhoneRaw, setAddPhoneRaw] = useState('')
   const [addFirstName, setAddFirstName] = useState('')
   const [addLastName, setAddLastName] = useState('')
   const [addSaving, setAddSaving] = useState(false)
   const [addedConfirm, setAddedConfirm] = useState<{ firstName: string; userId: string } | null>(null)
+  // Friends
+  const [addFriends, setAddFriends] = useState<{ id: string; first_name: string; last_name: string; phone: string; avatar_url: string | null }[]>([])
+  const [addFriendSearch, setAddFriendSearch] = useState('')
+  const [loadingFriends, setLoadingFriends] = useState(false)
+  // Google contacts
+  const [addGoogleContacts, setAddGoogleContacts] = useState<{ name: string; first_name: string; last_name: string; phone: string; email: string; photo: string }[]>([])
+  const [addGoogleSearch, setAddGoogleSearch] = useState('')
+  const [loadingGoogle, setLoadingGoogle] = useState(false)
+  const [addGoogleError, setAddGoogleError] = useState('')
+  const googleSearchTimeout = useRef<ReturnType<typeof setTimeout>>(null)
+  // Device contacts
+  const [addDeviceContacts, setAddDeviceContacts] = useState<{ name: string; first_name: string; last_name: string; phone: string; email: string }[]>([])
+  const [allDeviceContacts, setAllDeviceContacts] = useState<{ name: string; first_name: string; last_name: string; phone: string; email: string }[]>([])
+  const [addDeviceSearch, setAddDeviceSearch] = useState('')
+  const [loadingDevice, setLoadingDevice] = useState(false)
+  const [addDeviceError, setAddDeviceError] = useState('')
 
   const loadActivity = useCallback(async () => {
     const res = await fetch(`/api/activities/${id}`)
@@ -253,39 +271,166 @@ export default function ActivityDetailPage() {
 
   function formatAddPhone(value: string): string {
     const digits = value.replace(/\D/g, '').slice(0, 10)
-    if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)} - ${digits.slice(6)}`
     if (digits.length >= 7) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)} - ${digits.slice(6)}`
     if (digits.length >= 4) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
     return digits
   }
 
-  async function handleAddMember() {
-    const digits = addPhoneRaw.replace(/\D/g, '')
-    if (digits.length !== 10 || !addFirstName.trim()) return
-    setAddSaving(true)
+  function showAddConfirm(firstName: string, userId: string) {
+    setLastAddModal(addModal)
+    setAddModal(null)
+    setAddedConfirm({ firstName, userId })
+  }
+
+  async function addMemberToActivity(payload: Record<string, unknown>) {
     const res = await fetch(`/api/activities/${id}/add-member`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        phone: digits,
-        country_code: '1',
-        first_name: addFirstName.trim(),
-        last_name: addLastName.trim(),
-      }),
+      body: JSON.stringify(payload),
     })
     if (res.ok) {
       const data = await res.json()
-      setShowAddPhone(false)
-      setAddPhoneRaw('')
-      setAddFirstName('')
-      setAddLastName('')
-      setAddedConfirm({ firstName: data.first_name, userId: data.user_id })
       await loadActivity()
+      return data
     } else {
       const data = await res.json()
       alert(data.error || 'Failed to add member')
+      return null
+    }
+  }
+
+  async function handleAddByPhone() {
+    const digits = addPhoneRaw.replace(/\D/g, '')
+    if (digits.length !== 10 || !addFirstName.trim()) return
+    setAddSaving(true)
+    const data = await addMemberToActivity({
+      phone: digits,
+      country_code: '1',
+      first_name: addFirstName.trim(),
+      last_name: addLastName.trim(),
+    })
+    if (data) {
+      setAddPhoneRaw('')
+      setAddFirstName('')
+      setAddLastName('')
+      showAddConfirm(data.first_name, data.user_id)
     }
     setAddSaving(false)
+  }
+
+  async function handleAddFriend(friend: { id: string; first_name: string }) {
+    const data = await addMemberToActivity({ user_id: friend.id })
+    if (data) showAddConfirm(friend.first_name || 'Member', data.user_id)
+  }
+
+  async function handleAddGoogleContact(contact: { name: string; first_name: string; last_name: string; phone: string }) {
+    if (!contact.phone) { alert('This contact has no phone number.'); return }
+    let phone = contact.phone.replace(/\D/g, '')
+    let cc = '1'
+    if (phone.startsWith('1') && phone.length === 11) phone = phone.slice(1)
+    else if (phone.length > 10) { cc = phone.slice(0, phone.length - 10); phone = phone.slice(-10) }
+    const data = await addMemberToActivity({
+      phone, country_code: cc,
+      first_name: contact.first_name || contact.name.split(' ')[0] || '',
+      last_name: contact.last_name || contact.name.split(' ').slice(1).join(' ') || '',
+    })
+    if (data) showAddConfirm(contact.first_name || contact.name.split(' ')[0] || 'Member', data.user_id)
+  }
+
+  async function handleAddDeviceContact(contact: { name: string; first_name: string; last_name: string; phone: string }) {
+    if (!contact.phone) { alert('This contact has no phone number.'); return }
+    let phone = contact.phone.replace(/\D/g, '')
+    let cc = '1'
+    if (phone.startsWith('1') && phone.length === 11) phone = phone.slice(1)
+    else if (phone.length > 10) { cc = phone.slice(0, phone.length - 10); phone = phone.slice(-10) }
+    const data = await addMemberToActivity({
+      phone, country_code: cc,
+      first_name: contact.first_name || contact.name.split(' ')[0] || '',
+      last_name: contact.last_name || contact.name.split(' ').slice(1).join(' ') || '',
+    })
+    if (data) showAddConfirm(contact.first_name || contact.name.split(' ')[0] || 'Member', data.user_id)
+  }
+
+  async function openAddFriends() {
+    setAddModal('add-friends')
+    setAddFriendSearch('')
+    setLoadingFriends(true)
+    const res = await fetch('/api/friends')
+    if (res.ok) setAddFriends(await res.json())
+    setLoadingFriends(false)
+  }
+
+  async function openAddGoogle() {
+    setAddModal('add-google')
+    setAddGoogleSearch('')
+    setAddGoogleError('')
+    setLoadingGoogle(true)
+    try {
+      const res = await fetch('/api/google/contacts')
+      if (!res.ok) {
+        const data = await res.json()
+        setAddGoogleError(data.error === 'no_google_token' ? 'Sign in with Google to search your contacts.' : 'Failed to load contacts.')
+        setLoadingGoogle(false)
+        return
+      }
+      setAddGoogleContacts(await res.json())
+    } catch { setAddGoogleError('Failed to load contacts.') }
+    setLoadingGoogle(false)
+  }
+
+  async function searchAddGoogle(query: string) {
+    setAddGoogleSearch(query)
+    if (googleSearchTimeout.current) clearTimeout(googleSearchTimeout.current)
+    if (!query.trim()) { openAddGoogle(); return }
+    googleSearchTimeout.current = setTimeout(async () => {
+      setLoadingGoogle(true)
+      try {
+        const res = await fetch(`/api/google/contacts?q=${encodeURIComponent(query)}`)
+        if (res.ok) setAddGoogleContacts(await res.json())
+      } catch {}
+      setLoadingGoogle(false)
+    }, 400)
+  }
+
+  async function openAddDevice() {
+    setAddModal('add-device')
+    setAddDeviceSearch('')
+    setAddDeviceError('')
+    setLoadingDevice(true)
+    try {
+      const { Contacts } = await import('@capacitor-community/contacts')
+      const permission = await Contacts.requestPermissions()
+      if (permission.contacts !== 'granted') {
+        setAddDeviceError('Contacts permission denied. Please allow access in your device settings.')
+        setLoadingDevice(false)
+        return
+      }
+      const result = await Contacts.getContacts({ projection: { name: true, phones: true, emails: true } })
+      const mapped = (result.contacts || [])
+        .map((c) => ({
+          name: c.name?.display || '',
+          first_name: c.name?.given || '',
+          last_name: c.name?.family || '',
+          phone: c.phones?.[0]?.number?.replace(/[\s\-().]/g, '') || '',
+          email: c.emails?.[0]?.address || '',
+        }))
+        .filter((c) => c.name && c.phone)
+        .sort((a, b) => a.name.localeCompare(b.name))
+      setAllDeviceContacts(mapped)
+      setAddDeviceContacts(mapped)
+    } catch (err) {
+      setAddDeviceError(`Contacts error: ${err instanceof Error ? err.message : String(err)}`)
+    }
+    setLoadingDevice(false)
+  }
+
+  function searchAddDevice(query: string) {
+    setAddDeviceSearch(query)
+    if (!query.trim()) { setAddDeviceContacts(allDeviceContacts); return }
+    const q = query.toLowerCase()
+    setAddDeviceContacts(allDeviceContacts.filter((c) =>
+      c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.email.toLowerCase().includes(q)
+    ))
   }
 
   async function handleAddToGroup(userId: string) {
@@ -297,6 +442,12 @@ export default function ActivityDetailPage() {
     })
     setAddedConfirm(null)
   }
+
+  const filteredAddFriends = addFriends.filter((f) => {
+    if (!addFriendSearch) return true
+    const q = addFriendSearch.toLowerCase()
+    return `${f.first_name} ${f.last_name}`.toLowerCase().includes(q) || f.phone.includes(q)
+  })
 
   async function handleResponse(response: 'in' | 'out') {
     if (!activity) return
@@ -377,7 +528,7 @@ export default function ActivityDetailPage() {
         {activity.is_creator && (
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => setShowAddPhone(true)}
+              onClick={() => setAddModal('add-menu')}
               className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
@@ -726,58 +877,269 @@ export default function ActivityDetailPage() {
       )}
 
       {/* OUT Confirmation Modal */}
-      {/* Add Member by Phone Modal */}
-      {showAddPhone && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !addSaving && setShowAddPhone(false)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      {/* Add Member Menu */}
+      {addModal === 'add-menu' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setAddModal(null)}>
           <div
-            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl animate-enter"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-[17px] font-bold text-foreground text-center mb-4">Add to Activity</h3>
-            <p className="text-[12px] text-muted text-center mb-4">They&apos;ll be added to the bottom of On Deck.</p>
-            <div className="space-y-3">
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-5">Add to Activity</h3>
+            <p className="text-[12px] text-muted text-center mb-5">They&apos;ll be added to the bottom of On Deck.</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => setAddModal('add-phone')}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+                  </svg>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground">Phone Number</span>
+              </button>
+              <button
+                onClick={() => { setAddModal(null); setTimeout(() => openAddFriends(), 100) }}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v-2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M22 21v-2a4 4 0 00-3-3.87" />
+                    <path d="M16 3.13a4 4 0 010 7.75" />
+                  </svg>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground">My Friends</span>
+              </button>
+              <button
+                onClick={() => { setAddModal(null); setTimeout(() => openAddDevice(), 100) }}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors col-span-2"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16v16H4z" />
+                    <path d="M9 9h1M14 9h1M9 14h6" />
+                  </svg>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground">Search Contacts</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add by Phone */}
+      {addModal === 'add-phone' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => !addSaving && setAddModal(null)}>
+          <div
+            className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-5">Add by Phone Number</h3>
+            <div className="mb-4">
+              <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Phone</label>
               <input
-                type="tel"
-                inputMode="numeric"
-                placeholder="Phone number"
-                value={addPhoneRaw}
-                onChange={(e) => setAddPhoneRaw(formatAddPhone(e.target.value))}
-                className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                type="text"
+                inputMode="tel"
+                value={formatAddPhone(addPhoneRaw)}
+                onChange={(e) => setAddPhoneRaw(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="(###) ### - ####"
+                className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border"
+                autoFocus
               />
-              <div className="flex gap-2">
+            </div>
+            <div className="flex gap-3 mb-5">
+              <div className="flex-1 min-w-0">
+                <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">First Name</label>
                 <input
                   type="text"
-                  placeholder="First name"
                   value={addFirstName}
                   onChange={(e) => setAddFirstName(e.target.value)}
-                  className="flex-1 px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder="Type here..."
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border"
                 />
+              </div>
+              <div className="flex-1 min-w-0">
+                <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Last Name</label>
                 <input
                   type="text"
-                  placeholder="Last name"
                   value={addLastName}
                   onChange={(e) => setAddLastName(e.target.value)}
-                  className="flex-1 px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder="Type here..."
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border"
                 />
               </div>
             </div>
-            <div className="flex gap-2 mt-5">
-              <button
-                onClick={() => setShowAddPhone(false)}
-                disabled={addSaving}
-                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddMember}
-                disabled={addSaving || addPhoneRaw.replace(/\D/g, '').length !== 10 || !addFirstName.trim()}
-                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
-              >
-                {addSaving ? 'Adding...' : 'Add'}
-              </button>
-            </div>
+            <button
+              onClick={handleAddByPhone}
+              disabled={addSaving || addPhoneRaw.replace(/\D/g, '').length !== 10 || !addFirstName.trim()}
+              className="btn-primary w-full py-3 text-[14px] disabled:opacity-50"
+            >
+              {addSaving ? 'Adding...' : 'Add Member'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add from Friends */}
+      {addModal === 'add-friends' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setAddModal(null)}>
+          <div
+            className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Add from Friends</h3>
+            <input
+              type="text"
+              value={addFriendSearch}
+              onChange={(e) => setAddFriendSearch(e.target.value)}
+              placeholder="Search by name or phone..."
+              className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4 box-border"
+              autoFocus
+            />
+            {loadingFriends ? (
+              <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+            ) : filteredAddFriends.length === 0 ? (
+              <p className="text-[13px] text-muted text-center py-8">{addFriends.length === 0 ? 'No friends yet.' : 'No matching friends.'}</p>
+            ) : (
+              <div className="space-y-2 max-h-[50dvh] overflow-y-auto">
+                {filteredAddFriends.map((f) => (
+                  <div key={f.id} className="bg-background border border-border/50 rounded-xl p-3 flex items-center gap-3">
+                    <AvatarImg src={f.avatar_url} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-foreground truncate">{f.first_name} {f.last_name}</p>
+                      <p className="text-[11px] text-muted truncate">{f.phone}</p>
+                    </div>
+                    <button
+                      onClick={() => handleAddFriend(f)}
+                      className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 active:bg-primary-dark transition-colors"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add from Google Contacts */}
+      {addModal === 'add-google' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setAddModal(null)}>
+          <div
+            className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Search Google Contacts</h3>
+            {addGoogleError ? (
+              <div className="text-center py-8"><p className="text-[13px] text-muted">{addGoogleError}</p></div>
+            ) : (
+              <>
+                <div className="relative mb-4">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={addGoogleSearch}
+                    onChange={(e) => searchAddGoogle(e.target.value)}
+                    placeholder="Search by name..."
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border"
+                    autoFocus
+                  />
+                </div>
+                {loadingGoogle ? (
+                  <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+                ) : addGoogleContacts.length === 0 ? (
+                  <p className="text-[13px] text-muted text-center py-8">{addGoogleSearch ? 'No contacts found.' : 'No contacts available.'}</p>
+                ) : (
+                  <div className="space-y-2 max-h-[50dvh] overflow-y-auto">
+                    {addGoogleContacts.map((c, i) => (
+                      <div key={`${c.phone || c.email}-${i}`} className="bg-background border border-border/50 rounded-xl p-3 flex items-center gap-3">
+                        {c.photo ? (
+                          <img src={c.photo} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <span className="text-[14px] font-bold text-primary">{(c.first_name || c.name || '?')[0]?.toUpperCase()}</span>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-foreground truncate">{c.name}</p>
+                          <p className="text-[11px] text-muted truncate">{c.phone || c.email || 'No phone'}</p>
+                        </div>
+                        {c.phone ? (
+                          <button onClick={() => handleAddGoogleContact(c)} className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 active:bg-primary-dark transition-colors">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-muted/50 flex-shrink-0">No phone</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add from Device Contacts */}
+      {addModal === 'add-device' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setAddModal(null)}>
+          <div
+            className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Search Phone Contacts</h3>
+            {addDeviceError ? (
+              <div className="text-center py-8"><p className="text-[13px] text-muted">{addDeviceError}</p></div>
+            ) : (
+              <>
+                <div className="relative mb-4">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={addDeviceSearch}
+                    onChange={(e) => searchAddDevice(e.target.value)}
+                    placeholder="Search by name..."
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border"
+                    autoFocus
+                  />
+                </div>
+                {loadingDevice ? (
+                  <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+                ) : addDeviceContacts.length === 0 ? (
+                  <p className="text-[13px] text-muted text-center py-8">{addDeviceSearch ? 'No contacts found.' : 'No contacts available.'}</p>
+                ) : (
+                  <div className="space-y-2 max-h-[50dvh] overflow-y-auto">
+                    {addDeviceContacts.map((c, i) => (
+                      <div key={`${c.phone}-${i}`} className="bg-background border border-border/50 rounded-xl p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-[14px] font-bold text-primary">{(c.first_name || c.name || '?')[0]?.toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-foreground truncate">{c.name}</p>
+                          <p className="text-[11px] text-muted truncate">{c.phone || c.email || 'No phone'}</p>
+                        </div>
+                        <button onClick={() => handleAddDeviceContact(c)} className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0 active:bg-primary-dark transition-colors">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -803,15 +1165,13 @@ export default function ActivityDetailPage() {
             </div>
             <div className="space-y-2.5">
               <button
-                onClick={() => {
-                  handleAddToGroup(addedConfirm.userId)
-                }}
+                onClick={() => handleAddToGroup(addedConfirm.userId)}
                 className="w-full py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity"
               >
                 Also Add to {activity.group_name}
               </button>
               <button
-                onClick={() => { setAddedConfirm(null); setShowAddPhone(true) }}
+                onClick={() => { setAddedConfirm(null); setAddModal(lastAddModal || 'add-menu') }}
                 className="w-full py-2.5 rounded-xl text-[14px] font-semibold text-primary bg-primary/10 active:bg-primary/20 transition-colors"
               >
                 Add Another
