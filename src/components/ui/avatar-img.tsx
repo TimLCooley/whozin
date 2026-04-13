@@ -22,17 +22,14 @@ function getLogoUrl(): Promise<string | null> {
 }
 
 const DIMS = { sm: 'w-7 h-7', md: 'w-9 h-9', lg: 'w-10 h-10', xl: 'w-16 h-16' } as const
-const PAW_SIZE = { sm: 14, md: 16, lg: 20, xl: 32 } as const
+const ICON_SIZE = { sm: 14, md: 16, lg: 20, xl: 32 } as const
 const IMG_SIZE = { sm: 16, md: 20, lg: 24, xl: 36 } as const
 
-function PawSvg({ size }: { size: number }) {
+function UserIcon({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="7.5" cy="6.5" rx="2.2" ry="2.5" fill="#4285F4" opacity="0.7" />
-      <ellipse cx="16.5" cy="6.5" rx="2.2" ry="2.5" fill="#4285F4" opacity="0.7" />
-      <circle cx="4" cy="13" r="1.8" fill="#4285F4" opacity="0.7" />
-      <circle cx="20" cy="13" r="1.8" fill="#4285F4" opacity="0.7" />
-      <ellipse cx="12" cy="16.5" rx="5.5" ry="4.2" fill="#4285F4" opacity="0.85" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
     </svg>
   )
 }
@@ -54,7 +51,7 @@ export function AvatarImg({ size = 'md', src }: { size?: 'sm' | 'md' | 'lg' | 'x
     )
   }
 
-  // Use branding icon logo if available, otherwise fall back to paw SVG
+  // Use branding icon logo if available, otherwise fall back to user icon
   if (logoUrl) {
     return (
       <div className={`${DIMS[size]} rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden`}>
@@ -65,7 +62,7 @@ export function AvatarImg({ size = 'md', src }: { size?: 'sm' | 'md' | 'lg' | 'x
 
   return (
     <div className={`${DIMS[size]} rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0`}>
-      <PawSvg size={PAW_SIZE[size]} />
+      <UserIcon size={ICON_SIZE[size]} />
     </div>
   )
 }
