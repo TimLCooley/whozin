@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { processActivityInvites } from '@/lib/invite-processor'
 
 // POST — host marks an On Deck member as confirmed
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify they're the creator
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id')
+    .select('creator_id, max_capacity, priority_invite')
     .eq('id', id)
     .single()
 
@@ -49,17 +50,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .update({ status: 'confirmed', responded_at: new Date().toISOString() })
     .eq('id', member.id)
 
-  // Update capacity count
+  // Update capacity count and check if full
   const { count } = await admin
     .from('whozin_activity_member')
     .select('id', { count: 'exact', head: true })
     .eq('activity_id', id)
     .eq('status', 'confirmed')
 
+  const confirmed = count ?? 0
+  const isFull = activity.max_capacity ? confirmed >= activity.max_capacity : false
+
   await admin
     .from('whozin_activity')
-    .update({ capacity_current: count ?? 0 })
+    .update({
+      capacity_current: confirmed,
+      ...(isFull ? { status: 'full' } : {}),
+    })
     .eq('id', id)
+
+  // If not full and priority invites are active, process the queue
+  // (confirming a waiting member frees a slot for the next tbd member)
+  if (!isFull && activity.priority_invite) {
+    await processActivityInvites(id)
+  }
 
   return NextResponse.json({ success: true })
 }

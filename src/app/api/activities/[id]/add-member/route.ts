@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
+import { processActivityInvites } from '@/lib/invite-processor'
 
 // POST — host adds a new member to the activity (on deck) and optionally to the group
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify they're the creator
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, group_id')
+    .select('creator_id, group_id, status, priority_invite, max_capacity')
     .eq('id', id)
     .single()
 
@@ -140,6 +141,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { onConflict: 'user_id,friend_id' }
     ),
   ])
+
+  // If the activity is actively running invites, trigger the processor
+  // so this new member gets picked up if there are open spots
+  if (activity.status === 'open' && activity.priority_invite) {
+    await processActivityInvites(id)
+  }
 
   // Get the added user's name for the confirmation
   const { data: addedUser } = await admin

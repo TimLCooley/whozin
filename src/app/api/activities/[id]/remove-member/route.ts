@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendEmergencyFill } from '@/lib/emergency-fill'
+import { processActivityInvites } from '@/lib/invite-processor'
 
 // POST — host removes a member from the activity
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify they're the creator
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, status, max_capacity')
+    .select('creator_id, status, max_capacity, priority_invite')
     .eq('id', id)
     .single()
 
@@ -75,6 +76,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Send emergency fill if requested and the activity was full
     if (notify && wasFull) {
       await sendEmergencyFill(id)
+    } else if (activity.priority_invite) {
+      // Otherwise advance the invite queue to fill the opened spot
+      await processActivityInvites(id)
     }
   }
 
