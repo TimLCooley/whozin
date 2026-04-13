@@ -32,12 +32,12 @@ export async function sendEmergencyFill(activityId: string) {
 
   if (spotsOpen <= 0) return { success: false, reason: 'already_full' }
 
-  // Get all members who can be contacted (missed, tbd, out — anyone not confirmed)
+  // Get all members who can be contacted (missed, tbd — NOT out)
   const { data: eligibleMembers } = await admin
     .from('whozin_activity_member')
     .select('id, user_id')
     .eq('activity_id', activityId)
-    .in('status', ['missed', 'tbd', 'out'])
+    .in('status', ['missed', 'tbd'])
 
   if (!eligibleMembers || eligibleMembers.length === 0) {
     return { success: false, reason: 'no_eligible_members' }

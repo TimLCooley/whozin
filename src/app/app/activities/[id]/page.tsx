@@ -94,6 +94,10 @@ export default function ActivityDetailPage() {
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false)
+  const [emergencyDelay, setEmergencyDelay] = useState(30) // minutes
+  const [emergencyAutoSend, setEmergencyAutoSend] = useState(true)
+  const [emergencySending, setEmergencySending] = useState(false)
   const [editField, setEditField] = useState<'location' | 'datetime' | 'cost' | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [editLocation, setEditLocation] = useState('')
@@ -262,11 +266,14 @@ export default function ActivityDetailPage() {
   }
 
   async function handleEmergencyFill() {
+    setEmergencySending(true)
     const res = await fetch(`/api/activities/${id}/emergency-fill`, { method: 'POST' })
     const data = await res.json()
     if (data.success) {
+      setShowEmergencyModal(false)
       await loadActivity()
     }
+    setEmergencySending(false)
   }
 
   function formatAddPhone(value: string): string {
@@ -611,9 +618,9 @@ export default function ActivityDetailPage() {
                 )}
 
                 {/* Emergency Fill button */}
-                {activity.status === 'open' && activity.max_capacity && confirmed.length < activity.max_capacity && (missed.length > 0 || tbd.length > 0 || out.length > 0) && (
+                {activity.status === 'open' && activity.max_capacity && confirmed.length < activity.max_capacity && (missed.length > 0 || tbd.length > 0) && (
                   <button
-                    onClick={handleEmergencyFill}
+                    onClick={() => setShowEmergencyModal(true)}
                     className="w-full bg-danger/5 border border-danger/30 rounded-xl px-4 py-3 flex items-center gap-3 active:bg-danger/10 transition-colors"
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -1160,6 +1167,111 @@ export default function ActivityDetailPage() {
                 className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-muted active:bg-surface transition-colors"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Emergency Fill Confirmation Modal */}
+      {showEmergencyModal && activity && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !emergencySending && setShowEmergencyModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-danger/10 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">Emergency Fill</h3>
+              <p className="text-[13px] text-muted mt-2 leading-relaxed">
+                Send a notification to fill {activity.max_capacity ? activity.max_capacity - confirmed.length : 1} open spot{(activity.max_capacity ? activity.max_capacity - confirmed.length : 1) !== 1 ? 's' : ''}.
+              </p>
+            </div>
+
+            {/* Who gets notified */}
+            <div className="bg-surface rounded-xl p-3.5 mb-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00C853" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span className="text-[13px] text-foreground"><span className="font-semibold">Missed</span> ({missed.length}) — will be notified</span>
+              </div>
+              {tbd.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00C853" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span className="text-[13px] text-foreground"><span className="font-semibold">On Deck</span> ({tbd.length}) — will be notified</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                <span className="text-[13px] text-muted"><span className="font-semibold">Out</span> ({out.length}) — will NOT be notified</span>
+              </div>
+            </div>
+
+            {/* Auto-send timer */}
+            <div className="bg-surface rounded-xl p-3.5 mb-5">
+              <label className="flex items-center justify-between cursor-pointer mb-3">
+                <span className="text-[13px] font-semibold text-foreground">Auto-send after missed timer</span>
+                <button
+                  onClick={() => setEmergencyAutoSend(!emergencyAutoSend)}
+                  className={`w-11 h-6 rounded-full transition-colors relative ${emergencyAutoSend ? 'bg-primary' : 'bg-border'}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${emergencyAutoSend ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </button>
+              </label>
+              {emergencyAutoSend && (
+                <>
+                  <p className="text-[11px] text-muted mb-2.5">Wait this long after the response timer expires, then auto-send:</p>
+                  <div className="flex gap-2">
+                    {[
+                      { value: 30, label: '30 min' },
+                      { value: 60, label: '1 hr' },
+                      { value: 720, label: '12 hr' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setEmergencyDelay(opt.value)}
+                        className={`flex-1 py-2 rounded-lg text-[13px] font-semibold transition-colors ${
+                          emergencyDelay === opt.value
+                            ? 'bg-primary text-white'
+                            : 'bg-background border border-border/50 text-foreground active:bg-primary/5'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {!emergencyAutoSend && (
+                <p className="text-[11px] text-muted">You&apos;ll need to manually trigger Emergency Fill each time.</p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEmergencyModal(false)}
+                disabled={emergencySending}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEmergencyFill}
+                disabled={emergencySending}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-danger text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {emergencySending ? 'Sending...' : 'Confirm & Send'}
               </button>
             </div>
           </div>
