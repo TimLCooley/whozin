@@ -89,15 +89,21 @@ export async function processActivityInvites(activityId: string) {
     return { processed: true, reason: 'full' }
   }
 
-  // Step 3: Check if there are still people waiting (active timers)
+  // Step 3: Check how many people are still waiting (active timers)
   const { count: stillWaiting } = await admin
     .from('whozin_activity_member')
     .select('id', { count: 'exact', head: true })
     .eq('activity_id', activityId)
     .eq('status', 'waiting')
 
-  // If people are still actively waiting, don't send the next batch yet
-  if ((stillWaiting ?? 0) > 0) {
+  const waiting = stillWaiting ?? 0
+
+  // Calculate how many new invites we need:
+  // If confirmed + waiting already covers all spots, no need to invite more
+  const coveredSpots = confirmed + waiting
+  const spotsToFill = maxCapacity - coveredSpots
+
+  if (spotsToFill <= 0) {
     await admin
       .from('whozin_activity')
       .update({ capacity_current: confirmed })
@@ -105,14 +111,14 @@ export async function processActivityInvites(activityId: string) {
     return { processed: true, reason: 'waiting_in_progress' }
   }
 
-  // Step 4: Get next batch of TBD members
+  // Step 4: Get next batch of TBD members to fill the gap
   const { data: nextBatch } = await admin
     .from('whozin_activity_member')
     .select('id, user_id')
     .eq('activity_id', activityId)
     .eq('status', 'tbd')
     .order('priority_order', { ascending: true })
-    .limit(remainingSpots)
+    .limit(spotsToFill)
 
   if (!nextBatch || nextBatch.length === 0) {
     // No more people to invite — update capacity
