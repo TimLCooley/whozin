@@ -238,7 +238,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     updates.max_capacity = body.max_capacity === 'all' ? null : body.max_capacity
   }
   if (body.response_timer_minutes !== undefined) {
-    updates.response_timer_minutes = (isPro || isTestUser) ? body.response_timer_minutes : 5
+    updates.response_timer_minutes = body.response_timer_minutes
   }
   if (body.priority_invite !== undefined) updates.priority_invite = body.priority_invite
   if (body.chat_enabled !== undefined) updates.chat_enabled = isPro ? body.chat_enabled : false
