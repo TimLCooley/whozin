@@ -641,7 +641,7 @@ export default function ActivityDetailPage() {
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} onEdit={activity.is_creator ? () => openEdit('cost') : undefined} />
                 <InfoRow icon="people" label="Spots" value={
                   activity.max_capacity
-                    ? `${confirmed.length} / ${activity.max_capacity} filled`
+                    ? `${confirmed.length} / ${activity.max_capacity} in`
                     : `${confirmed.length} in`
                 } />
                 {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
