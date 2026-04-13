@@ -42,6 +42,7 @@ interface ActivityDetail {
   is_creator: boolean
   current_user_id: string
   my_status: string | null
+  group_id: string
   group_name: string
   creator_name: string
   confirmed_count: number
@@ -160,6 +161,14 @@ export default function ActivityDetailPage() {
   const [selectedMember, setSelectedMember] = useState<MemberInfo | null>(null)
   const [memberActioning, setMemberActioning] = useState(false)
 
+  // Add member to activity
+  const [showAddPhone, setShowAddPhone] = useState(false)
+  const [addPhoneRaw, setAddPhoneRaw] = useState('')
+  const [addFirstName, setAddFirstName] = useState('')
+  const [addLastName, setAddLastName] = useState('')
+  const [addSaving, setAddSaving] = useState(false)
+  const [addedConfirm, setAddedConfirm] = useState<{ firstName: string; userId: string } | null>(null)
+
   const loadActivity = useCallback(async () => {
     const res = await fetch(`/api/activities/${id}`)
     if (res.ok) {
@@ -242,6 +251,53 @@ export default function ActivityDetailPage() {
     }
   }
 
+  function formatAddPhone(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 10)
+    if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)} - ${digits.slice(6)}`
+    if (digits.length >= 7) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)} - ${digits.slice(6)}`
+    if (digits.length >= 4) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+    return digits
+  }
+
+  async function handleAddMember() {
+    const digits = addPhoneRaw.replace(/\D/g, '')
+    if (digits.length !== 10 || !addFirstName.trim()) return
+    setAddSaving(true)
+    const res = await fetch(`/api/activities/${id}/add-member`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: digits,
+        country_code: '1',
+        first_name: addFirstName.trim(),
+        last_name: addLastName.trim(),
+      }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setShowAddPhone(false)
+      setAddPhoneRaw('')
+      setAddFirstName('')
+      setAddLastName('')
+      setAddedConfirm({ firstName: data.first_name, userId: data.user_id })
+      await loadActivity()
+    } else {
+      const data = await res.json()
+      alert(data.error || 'Failed to add member')
+    }
+    setAddSaving(false)
+  }
+
+  async function handleAddToGroup(userId: string) {
+    if (!activity?.group_id) return
+    await fetch(`/api/groups/${activity.group_id}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    })
+    setAddedConfirm(null)
+  }
+
   async function handleResponse(response: 'in' | 'out') {
     if (!activity) return
     if (response === 'out' && activity.my_status === 'confirmed') {
@@ -319,16 +375,30 @@ export default function ActivityDetailPage() {
           )}
         </div>
         {activity.is_creator && (
-          <button
-            onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
-            className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors shrink-0"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
-            Clone
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowAddPhone(true)}
+              className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v-2" />
+                <circle cx="9" cy="7" r="4" />
+                <line x1="19" y1="8" x2="19" y2="14" />
+                <line x1="22" y1="11" x2="16" y2="11" />
+              </svg>
+              Add
+            </button>
+            <button
+              onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
+              className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+              Clone
+            </button>
+          </div>
         )}
       </div>
 
@@ -656,6 +726,107 @@ export default function ActivityDetailPage() {
       )}
 
       {/* OUT Confirmation Modal */}
+      {/* Add Member by Phone Modal */}
+      {showAddPhone && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !addSaving && setShowAddPhone(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[17px] font-bold text-foreground text-center mb-4">Add to Activity</h3>
+            <p className="text-[12px] text-muted text-center mb-4">They&apos;ll be added to the bottom of On Deck.</p>
+            <div className="space-y-3">
+              <input
+                type="tel"
+                inputMode="numeric"
+                placeholder="Phone number"
+                value={addPhoneRaw}
+                onChange={(e) => setAddPhoneRaw(formatAddPhone(e.target.value))}
+                className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="First name"
+                  value={addFirstName}
+                  onChange={(e) => setAddFirstName(e.target.value)}
+                  className="flex-1 px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <input
+                  type="text"
+                  placeholder="Last name"
+                  value={addLastName}
+                  onChange={(e) => setAddLastName(e.target.value)}
+                  className="flex-1 px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setShowAddPhone(false)}
+                disabled={addSaving}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddMember}
+                disabled={addSaving || addPhoneRaw.replace(/\D/g, '').length !== 10 || !addFirstName.trim()}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {addSaving ? 'Adding...' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Added Confirmation + Add to Group Prompt */}
+      {addedConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setAddedConfirm(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <h3 className="text-[16px] font-bold text-foreground mb-1">Added to On Deck</h3>
+              <p className="text-[13px] text-muted">
+                <span className="font-semibold text-foreground">{addedConfirm.firstName}</span> was added to the bottom of On Deck. They&apos;ll be invited when it&apos;s their turn.
+              </p>
+            </div>
+            <div className="space-y-2.5">
+              <button
+                onClick={() => {
+                  handleAddToGroup(addedConfirm.userId)
+                }}
+                className="w-full py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity"
+              >
+                Also Add to {activity.group_name}
+              </button>
+              <button
+                onClick={() => { setAddedConfirm(null); setShowAddPhone(true) }}
+                className="w-full py-2.5 rounded-xl text-[14px] font-semibold text-primary bg-primary/10 active:bg-primary/20 transition-colors"
+              >
+                Add Another
+              </button>
+              <button
+                onClick={() => setAddedConfirm(null)}
+                className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-muted active:bg-surface transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showOutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setShowOutModal(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />

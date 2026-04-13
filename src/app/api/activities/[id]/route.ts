@@ -81,6 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   return NextResponse.json({
     ...activityData,
+    group_id: activityData.group_id,
     group_name: group?.name ?? 'Unknown',
     creator_name: creator ? `${creator.first_name} ${creator.last_name}` : 'Unknown',
     is_creator: activityData.creator_id === whozinUser.id,
