@@ -653,6 +653,39 @@ export default function ActivityDetailPage() {
                   } onEdit={() => openTimerEdit()} />
                 )}
 
+                {/* Batch expired banner — missed people + open spots + more tbd to invite */}
+                {activity.status === 'open' && activity.priority_invite && missed.length > 0 && waiting.length === 0 && tbd.length > 0 && activity.max_capacity && confirmed.length < activity.max_capacity && (
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                      <span className="text-[14px] font-bold text-orange-800">Timer expired</span>
+                    </div>
+                    <p className="text-[13px] text-orange-700 mb-3">
+                      {missed.length} {missed.length === 1 ? 'person' : 'people'} didn&apos;t respond. {activity.max_capacity - confirmed.length} spot{activity.max_capacity - confirmed.length !== 1 ? 's' : ''} still open with {tbd.length} on deck.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          await fetch(`/api/activities/${id}/start-invites`, { method: 'POST' })
+                          await loadActivity()
+                        }}
+                        className="flex-1 py-2.5 rounded-xl text-[13px] font-bold bg-primary text-white active:opacity-80 transition-opacity"
+                      >
+                        Send Next Batch
+                      </button>
+                      <button
+                        onClick={() => openTimerEdit()}
+                        className="flex-1 py-2.5 rounded-xl text-[13px] font-bold bg-white text-orange-700 border border-orange-200 active:opacity-80 transition-opacity"
+                      >
+                        Change Timer
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Emergency Fill button */}
                 {activity.status === 'open' && activity.max_capacity && confirmed.length < activity.max_capacity && (missed.length > 0 || tbd.length > 0) && (
                   <button
