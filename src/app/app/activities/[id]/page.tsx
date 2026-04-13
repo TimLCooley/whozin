@@ -677,6 +677,17 @@ export default function ActivityDetailPage() {
 
         {tab === 'group' && (
           <div className="px-4 pt-4 space-y-5 animate-enter">
+            {/* Host override note */}
+            {activity.is_creator && !isCountdownActive && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/10">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 16v-4M12 8h.01" />
+                </svg>
+                <span className="text-[12px] text-foreground/70">Tap any member to mark them <span className="font-semibold text-green-600">In</span> or <span className="font-semibold text-red-500">remove</span> them. Marking someone In will override the max capacity.</span>
+              </div>
+            )}
+
             {/* Countdown banner */}
             {isCountdownActive && (
               <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-4 text-center space-y-2">
@@ -696,7 +707,7 @@ export default function ActivityDetailPage() {
             )}
 
             <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />
-            {!isCountdownActive && <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" />}
+            {!isCountdownActive && <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />}
 
             {/* Status banner — show when invites are done */}
             {!isCountdownActive && isFull && tbd.length > 0 && (
@@ -718,43 +729,11 @@ export default function ActivityDetailPage() {
               </div>
             )}
 
-            {/* On Deck — tappable during countdown */}
-            {isCountdownActive ? (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-[15px] font-bold text-foreground">On Deck ({tbd.length})</h3>
-                </div>
-                {tbd.length > 0 ? (
-                  <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
-                    {tbd.map((m, i) => (
-                      <button
-                        key={m.id}
-                        onClick={() => setSelectedMember(m)}
-                        className={`flex items-center gap-3 px-4 py-3 w-full text-left active:bg-primary/5 transition-colors ${i < tbd.length - 1 ? 'border-b border-border/30' : ''}`}
-                      >
-                        <AvatarImg src={m.user?.avatar_url} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[14px] font-semibold text-foreground truncate">
-                            {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
-                          </p>
-                          <p className="text-[11px] font-medium text-muted">Tap to mark in or remove</p>
-                        </div>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-                          <path d="M9 18l6-6-6-6" />
-                        </svg>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="border-b border-border/20 pb-3" />
-                )}
-              </div>
-            ) : (
-              <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" />
-            )}
+            {/* On Deck — always tappable for host */}
+            <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />
 
-            {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" />}
-            <StatusSection title="Out" count={out.length} members={out} statusKey="out" />
+            {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />}
+            <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />
 
             {activity.is_creator && (
               <div className="pt-4 space-y-3">
@@ -795,8 +774,8 @@ export default function ActivityDetailPage() {
               <p className="text-[13px] text-muted mt-1">What would you like to do?</p>
             </div>
             <div className="space-y-2.5">
-              {/* Mark as In — only for tbd members */}
-              {selectedMember.status === 'tbd' && (
+              {/* Mark as In — for any non-confirmed member */}
+              {selectedMember.status !== 'confirmed' && (
                 <button
                   onClick={() => handleConfirmMember(selectedMember)}
                   disabled={memberActioning}

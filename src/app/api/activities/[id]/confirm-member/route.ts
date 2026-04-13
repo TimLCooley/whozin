@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { user_id: targetUserId } = await req.json()
   if (!targetUserId) return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
 
-  // Only allow confirming 'tbd' members
+  // Allow confirming any non-confirmed member (host override)
   const { data: member } = await admin
     .from('whozin_activity_member')
     .select('id, status')
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single()
 
   if (!member) return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-  if (member.status !== 'tbd') return NextResponse.json({ error: 'Member is not on deck' }, { status: 400 })
+  if (member.status === 'confirmed') return NextResponse.json({ error: 'Already confirmed' }, { status: 400 })
 
   await admin
     .from('whozin_activity_member')
