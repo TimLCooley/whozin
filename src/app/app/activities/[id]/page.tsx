@@ -106,6 +106,9 @@ export default function ActivityDetailPage() {
   const [editTime, setEditTime] = useState('')
   const [editCostType, setEditCostType] = useState<'free' | 'pay_me' | 'pay_at_location'>('free')
   const [editCostAmount, setEditCostAmount] = useState('')
+  const [showTimerEdit, setShowTimerEdit] = useState(false)
+  const [editTimerValue, setEditTimerValue] = useState(5)
+  const [timerSaving, setTimerSaving] = useState(false)
 
   function openEdit(field: 'location' | 'datetime' | 'cost') {
     if (!activity) return
@@ -161,6 +164,33 @@ export default function ActivityDetailPage() {
     }
     setEditSaving(false)
   }
+
+  function openTimerEdit() {
+    if (!activity) return
+    setEditTimerValue(activity.response_timer_minutes)
+    setShowTimerEdit(true)
+  }
+
+  async function saveTimer(stopCurrent: boolean) {
+    setTimerSaving(true)
+    const res = await fetch(`/api/activities/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        response_timer_minutes: editTimerValue,
+        ...(stopCurrent ? { stop_current_batch: true } : {}),
+      }),
+    })
+    if (res.ok) {
+      setShowTimerEdit(false)
+      await loadActivity()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error || 'Failed to save')
+    }
+    setTimerSaving(false)
+  }
+
   const [countdownSeconds, setCountdownSeconds] = useState(0)
   const [selectedMember, setSelectedMember] = useState<MemberInfo | null>(null)
   const [memberActioning, setMemberActioning] = useState(false)
@@ -616,7 +646,11 @@ export default function ActivityDetailPage() {
                 } />
                 {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
                 {activity.priority_invite && (
-                  <InfoRow icon="timer" label="Response Timer" value={`${activity.response_timer_minutes} min per batch`} />
+                  <InfoRow icon="timer" label="Response Timer" value={
+                    activity.response_timer_minutes >= 60
+                      ? `${activity.response_timer_minutes / 60} hr per batch`
+                      : `${activity.response_timer_minutes} min per batch`
+                  } onEdit={() => openTimerEdit()} />
                 )}
 
                 {/* Emergency Fill button */}
@@ -1182,6 +1216,113 @@ export default function ActivityDetailPage() {
               >
                 Done
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Response Timer Edit Modal */}
+      {showTimerEdit && activity && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !timerSaving && setShowTimerEdit(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-[17px] font-bold text-foreground text-center mb-4">Response Timer</h3>
+            <p className="text-[13px] text-muted text-center mb-5">How long each batch has to respond before the next group is invited.</p>
+
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {[
+                { value: 5, label: '5 min' },
+                { value: 15, label: '15 min' },
+                { value: 30, label: '30 min' },
+                { value: 60, label: '1 hr' },
+                { value: 720, label: '12 hr' },
+                { value: 1440, label: '24 hr' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setEditTimerValue(opt.value)}
+                  className={`py-2.5 rounded-xl text-[13px] font-semibold transition-colors ${
+                    editTimerValue === opt.value
+                      ? 'bg-primary text-white'
+                      : 'bg-surface border border-border/50 text-foreground active:bg-primary/5'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {editTimerValue !== activity.response_timer_minutes && waiting.length > 0 && (
+              <div className="bg-surface rounded-xl p-3.5 mt-4 mb-1">
+                <p className="text-[12px] text-foreground/70 leading-relaxed">
+                  <span className="font-semibold">{waiting.length} {waiting.length === 1 ? 'person is' : 'people are'}</span> currently waiting to respond. You can:
+                </p>
+                <ul className="text-[12px] text-foreground/70 mt-2 space-y-1.5">
+                  <li className="flex items-start gap-2">
+                    <span className="text-primary font-bold mt-px">1.</span>
+                    <span><span className="font-semibold">Apply to next batch</span> — current waiters keep their timer</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-danger font-bold mt-px">2.</span>
+                    <span><span className="font-semibold">Stop &amp; restart</span> — mark current waiters as missed and start the next batch now</span>
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            <div className="mt-5 space-y-2.5">
+              {editTimerValue === activity.response_timer_minutes ? (
+                <button
+                  onClick={() => setShowTimerEdit(false)}
+                  className="w-full py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity"
+                >
+                  Cancel
+                </button>
+              ) : waiting.length > 0 ? (
+                <>
+                  <button
+                    onClick={() => saveTimer(false)}
+                    disabled={timerSaving}
+                    className="w-full py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
+                  >
+                    {timerSaving ? 'Saving...' : 'Apply to Next Batch'}
+                  </button>
+                  <button
+                    onClick={() => saveTimer(true)}
+                    disabled={timerSaving}
+                    className="w-full py-3 rounded-xl text-[14px] font-bold bg-danger text-white active:opacity-80 transition-opacity disabled:opacity-50"
+                  >
+                    {timerSaving ? 'Saving...' : 'Stop Current & Restart'}
+                  </button>
+                  <button
+                    onClick={() => setShowTimerEdit(false)}
+                    disabled={timerSaving}
+                    className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-muted active:bg-surface transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => saveTimer(false)}
+                    disabled={timerSaving}
+                    className="w-full py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
+                  >
+                    {timerSaving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => setShowTimerEdit(false)}
+                    disabled={timerSaving}
+                    className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-muted active:bg-surface transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -246,16 +246,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.image_url !== undefined) updates.image_url = body.image_url || null
   if (body.auto_emergency_fill !== undefined) updates.auto_emergency_fill = body.auto_emergency_fill
 
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length === 0 && !body.stop_current_batch) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
-  const { error } = await admin
-    .from('whozin_activity')
-    .update(updates)
-    .eq('id', id)
+  if (Object.keys(updates).length > 0) {
+    const { error } = await admin
+      .from('whozin_activity')
+      .update(updates)
+      .eq('id', id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // If requested, stop current batch: expire all waiting members and their invites,
+  // then process the queue so the next batch goes out with the new timer
+  if (body.stop_current_batch) {
+    await admin
+      .from('whozin_activity_member')
+      .update({ status: 'missed' })
+      .eq('activity_id', id)
+      .eq('status', 'waiting')
+
+    await admin
+      .from('whozin_invite')
+      .update({ status: 'expired' })
+      .eq('activity_id', id)
+      .eq('status', 'pending')
+
+    const { processActivityInvites } = await import('@/lib/invite-processor')
+    await processActivityInvites(id)
+  }
 
   // Return the normalized field values so the client mirrors what's actually
   // stored (post-trim, post-null-conversion) without needing a re-fetch.
