@@ -375,7 +375,7 @@ export default function AppHome() {
                     </svg>
                     <span className="text-[12px] font-medium">
                       {activity.max_capacity
-                        ? `${activity.confirmed_count} / ${activity.max_capacity} ${activity.confirmed_count >= activity.max_capacity ? 'filled' : 'open'}`
+                        ? `${activity.confirmed_count} / ${activity.max_capacity} filled`
                         : `${activity.confirmed_count} in`}
                     </span>
                   </div>
@@ -441,7 +441,7 @@ export default function AppHome() {
                         </svg>
                         <span className="text-[12px] font-medium">
                           {activity.max_capacity
-                            ? `${activity.confirmed_count} / ${activity.max_capacity} ${activity.confirmed_count >= activity.max_capacity ? 'filled' : 'open'}`
+                            ? `${activity.confirmed_count} / ${activity.max_capacity} filled`
                             : `${activity.confirmed_count} in`}
                         </span>
                       </div>
