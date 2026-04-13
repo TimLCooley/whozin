@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { isNative } from '@/lib/capacitor'
 import AuthForm from '@/components/auth/auth-form'
@@ -121,9 +122,9 @@ export function MarketingShell({
       <footer className="bg-[#0a0f1e] text-white/50 py-10">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mb-6 text-sm">
-            {!isHome && <a href="/" className="hover:text-white transition-colors">Home</a>}
+            {!isHome && <Link href="/" className="hover:text-white transition-colors">Home</Link>}
             {ALL_FOOTER_LINKS.map((l) => (
-              <a key={l.href} href={l.href} className="hover:text-white transition-colors">{l.label}</a>
+              <Link key={l.href} href={l.href} className="hover:text-white transition-colors">{l.label}</Link>
             ))}
           </div>
 
@@ -131,8 +132,8 @@ export function MarketingShell({
             <BrandedFullLogo className="h-8" />
 
             <div className="flex gap-6 text-xs">
-              <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
-              <a href="/terms" className="hover:text-white transition-colors">Terms</a>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
               <button onClick={() => setShowContact(true)} className="hover:text-white transition-colors">Contact</button>
             </div>
 
@@ -146,7 +147,7 @@ export function MarketingShell({
 }
 
 /* ── Hero Nav Bar with dropdown ── */
-export function HeroNav({ onSignIn }: { onSignIn: () => void }) {
+export function HeroNav({ onSignIn, isHome }: { onSignIn: () => void; isHome?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -164,7 +165,11 @@ export function HeroNav({ onSignIn }: { onSignIn: () => void }) {
 
   return (
     <nav className="flex items-center justify-between mb-16 md:mb-24 relative">
-      <a href="/"><BrandedFullLogo className="h-9" /></a>
+      {isHome ? (
+        <BrandedFullLogo className="h-9" />
+      ) : (
+        <Link href="/"><BrandedFullLogo className="h-9" /></Link>
+      )}
 
       {/* Desktop nav */}
       <div className="hidden md:flex items-center gap-6">
@@ -182,23 +187,23 @@ export function HeroNav({ onSignIn }: { onSignIn: () => void }) {
 
           {dropdownOpen && (
             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-56 bg-[#0a0f1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2 z-50 shadow-[0_16px_48px_rgba(0,0,0,0.4)]">
-              <a
+              <Link
                 href="/how-it-works"
                 className="block px-4 py-2.5 rounded-xl text-white/70 hover:text-white hover:bg-white/5 transition-all text-sm font-medium"
               >
                 Overview
                 <span className="block text-[11px] text-white/30 font-normal mt-0.5">The full flow, start to finish</span>
-              </a>
+              </Link>
               <div className="h-px bg-white/5 mx-2 my-1" />
               {DROPDOWN_ITEMS.map((item) => (
-                <a
+                <Link
                   key={item.href}
                   href={item.href}
                   className="block px-4 py-2.5 rounded-xl text-white/70 hover:text-white hover:bg-white/5 transition-all text-sm font-medium"
                 >
                   {item.label}
                   <span className="block text-[11px] text-white/30 font-normal mt-0.5">{item.desc}</span>
-                </a>
+                </Link>
               ))}
             </div>
           )}
@@ -227,14 +232,14 @@ export function HeroNav({ onSignIn }: { onSignIn: () => void }) {
       {menuOpen && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-[#0a0f1e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex flex-col gap-1 md:hidden z-50">
           <p className="text-white/30 text-[11px] font-semibold uppercase tracking-wider px-3 pt-1 pb-2">How It Works</p>
-          <a href="/how-it-works" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Overview</a>
-          <a href="/build" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Build</a>
-          <a href="/groups" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Groups</a>
-          <a href="/fill" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Fill</a>
+          <Link href="/how-it-works" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Overview</Link>
+          <Link href="/build" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Build</Link>
+          <Link href="/groups" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Groups</Link>
+          <Link href="/fill" className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">Fill</Link>
           <div className="h-px bg-white/10 mx-2 my-2" />
           <p className="text-white/30 text-[11px] font-semibold uppercase tracking-wider px-3 pt-1 pb-2">Sports</p>
           {SPORT_LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">{l.label}</a>
+            <Link key={l.href} href={l.href} className="text-white/70 hover:text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-white/5 transition-all">{l.label}</Link>
           ))}
           <div className="h-px bg-white/10 mx-2 my-2" />
           <button

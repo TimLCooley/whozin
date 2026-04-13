@@ -78,7 +78,7 @@ export default function HomePage() {
             }} />
 
             <div className="relative max-w-6xl mx-auto px-6 pt-8 pb-16 md:pb-24">
-              <HeroNav onSignIn={onSignIn} />
+              <HeroNav onSignIn={onSignIn} isHome />
 
               <div className="md:flex md:items-center md:gap-16">
                 {/* Left: Copy */}

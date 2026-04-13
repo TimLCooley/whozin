@@ -119,8 +119,10 @@ export default function GroupDetailPage() {
 
   // Added-member confirmation toast
   const [addedConfirm, setAddedConfirm] = useState<string | null>(null)
+  const [lastAddModal, setLastAddModal] = useState<Modal>(null)
 
   function showAddedConfirm(firstName: string) {
+    setLastAddModal(modal)
     setModal(null)
     setAddedConfirm(firstName || 'Member')
   }
@@ -617,7 +619,7 @@ export default function GroupDetailPage() {
           <div className="px-4 pt-4">
             <p className="text-[12px] text-muted mb-3">{group.members.length} member{group.members.length !== 1 ? 's' : ''}</p>
             <div className="space-y-2">
-              {group.members.map((member) => {
+              {[...group.members].sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`)).map((member) => {
                 const isCurrentUser = member.user_id === group.current_user_id
                 return (
                   <div key={member.membership_id} className="bg-background border border-border/50 rounded-xl p-3.5 flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
@@ -855,10 +857,19 @@ export default function GroupDetailPage() {
               <span className="font-semibold text-foreground">{addedConfirm}</span> was added to <span className="font-semibold text-foreground">{groupName}</span>.
             </p>
             <button
-              onClick={() => setAddedConfirm(null)}
+              onClick={() => {
+                setAddedConfirm(null)
+                setModal(lastAddModal || 'add-menu')
+              }}
               className="w-full py-2.5 rounded-xl bg-primary text-white text-[14px] font-semibold active:opacity-80 transition-opacity"
             >
-              OK
+              Add More
+            </button>
+            <button
+              onClick={() => setAddedConfirm(null)}
+              className="w-full py-2.5 rounded-xl text-[14px] font-semibold text-muted active:bg-surface transition-colors mt-2"
+            >
+              Done
             </button>
           </div>
         </div>

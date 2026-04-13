@@ -175,7 +175,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-dvh flex flex-col bg-surface">
       {/* Mobile header */}
-      <header className="flex items-center justify-between px-4 py-3 bg-gradient-to-b from-primary to-primary-dark border-b border-primary-dark lg:hidden">
+      <header className="flex items-center justify-between px-4 pb-3 bg-gradient-to-b from-primary to-primary-dark border-b border-primary-dark lg:hidden" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0.75rem))' }}>
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1 text-white">
           <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
