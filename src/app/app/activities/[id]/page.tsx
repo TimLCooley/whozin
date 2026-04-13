@@ -514,9 +514,11 @@ export default function ActivityDetailPage() {
 
   const isFull = activity.max_capacity ? confirmed.length >= activity.max_capacity : false
 
+  const showGroupTab = activity.is_creator || activity.my_status === 'confirmed'
+
   const tabs: { key: Tab; label: string; pro?: boolean }[] = [
     { key: 'details', label: 'Activity Details' },
-    ...(activity.is_creator ? [{ key: 'group' as Tab, label: 'Group' }] : []),
+    ...(showGroupTab ? [{ key: 'group' as Tab, label: 'Group' }] : []),
     ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
   ]
 
@@ -682,10 +684,10 @@ export default function ActivityDetailPage() {
           </div>
         )}
 
-        {tab === 'group' && (
+        {tab === 'group' && activity.is_creator && (
           <div className="px-4 pt-4 space-y-5 animate-enter">
             {/* Host override note */}
-            {activity.is_creator && !isCountdownActive && (
+            {!isCountdownActive && (
               <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-primary/5 border border-primary/10">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
                   <circle cx="12" cy="12" r="10" />
@@ -713,8 +715,8 @@ export default function ActivityDetailPage() {
               </div>
             )}
 
-            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />
-            {!isCountdownActive && <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />}
+            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={setSelectedMember} />
+            {!isCountdownActive && <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
 
             {/* Status banner — show when invites are done */}
             {!isCountdownActive && isFull && tbd.length > 0 && (
@@ -737,24 +739,36 @@ export default function ActivityDetailPage() {
             )}
 
             {/* On Deck — always tappable for host */}
-            <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />
+            <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" onMemberTap={setSelectedMember} />
 
-            {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />}
-            <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={activity.is_creator ? setSelectedMember : undefined} />
+            {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" onMemberTap={setSelectedMember} />}
+            <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={setSelectedMember} />
 
-            {activity.is_creator && (
-              <div className="pt-4 space-y-3">
-                <button className="btn-primary w-full py-3.5 text-[14px]">
-                  Save
-                </button>
-                <button
-                  onClick={() => setShowDeleteModal(true)}
-                  className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
-                >
-                  Delete Activity
-                </button>
-              </div>
-            )}
+            <div className="pt-4 space-y-3">
+              <button className="btn-primary w-full py-3.5 text-[14px]">
+                Save
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
+              >
+                Delete Activity
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Participant Group view — confirmed members only see who's In */}
+        {tab === 'group' && !activity.is_creator && (
+          <div className="px-4 pt-4 space-y-5 animate-enter">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-[12px] text-muted">
+                {activity.max_capacity
+                  ? `${confirmed.length} / ${activity.max_capacity} confirmed`
+                  : `${confirmed.length} confirmed`}
+              </p>
+            </div>
+            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" />
           </div>
         )}
 
