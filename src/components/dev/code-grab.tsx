@@ -14,8 +14,89 @@ type Selection = {
   column: number | null;
   tag: string;
   text: string;
+  placeholder: string | null;
+  nameAttr: string | null;
+  ariaLabel: string | null;
+  idAttr: string | null;
+  classList: string | null;
+  role: string | null;
+  href: string | null;
+  type: string | null;
+  nearestLabel: string | null;
+  nearestHeading: string | null;
+  selector: string;
   componentStack: string[];
 };
+
+function buildSelector(el: HTMLElement): string {
+  const parts: string[] = [];
+  let current: HTMLElement | null = el;
+  let depth = 0;
+  while (current && current.tagName && depth < 5) {
+    let seg = current.tagName.toLowerCase();
+    if (current.id) {
+      seg += `#${current.id}`;
+      parts.unshift(seg);
+      break;
+    }
+    const cls = (current.getAttribute("class") || "")
+      .split(/\s+/)
+      .filter((c) => c && !c.startsWith("hover:") && !c.startsWith("focus:"))
+      .slice(0, 2)
+      .join(".");
+    if (cls) seg += `.${cls}`;
+    const parentEl: HTMLElement | null = current.parentElement;
+    const cur: HTMLElement = current;
+    if (parentEl) {
+      const sameTag = Array.from(parentEl.children).filter(
+        (c) => (c as HTMLElement).tagName === cur.tagName,
+      );
+      if (sameTag.length > 1) {
+        const idx = sameTag.indexOf(cur) + 1;
+        seg += `:nth-of-type(${idx})`;
+      }
+    }
+    parts.unshift(seg);
+    current = parentEl;
+    depth += 1;
+  }
+  return parts.join(" > ");
+}
+
+function findNearestLabel(el: HTMLElement): string | null {
+  // <label for="id"> association
+  const id = el.getAttribute("id");
+  if (id) {
+    const byFor = document.querySelector(`label[for="${id}"]`);
+    if (byFor?.textContent) return byFor.textContent.trim().slice(0, 80);
+  }
+  // Ancestor <label>
+  const ancestor = el.closest("label");
+  if (ancestor?.textContent) return ancestor.textContent.trim().slice(0, 80);
+  // Preceding sibling label within parent
+  const parent = el.parentElement;
+  if (parent) {
+    const label = parent.querySelector("label");
+    if (label?.textContent) return label.textContent.trim().slice(0, 80);
+  }
+  return null;
+}
+
+function findNearestHeading(el: HTMLElement): string | null {
+  let current: HTMLElement | null = el;
+  while (current) {
+    // Check preceding siblings of current for a heading
+    let sibling = current.previousElementSibling as HTMLElement | null;
+    while (sibling) {
+      if (/^h[1-6]$/i.test(sibling.tagName)) return sibling.textContent?.trim().slice(0, 80) || null;
+      const h = sibling.querySelector?.("h1,h2,h3,h4,h5,h6");
+      if (h?.textContent) return h.textContent.trim().slice(0, 80);
+      sibling = sibling.previousElementSibling as HTMLElement | null;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
 
 function findFiber(el: HTMLElement): unknown {
   const key = Object.keys(el).find((k) => k.startsWith("__reactFiber"));
@@ -85,7 +166,18 @@ export default function CodeGrab() {
         line: source?.lineNumber ?? null,
         column: source?.columnNumber ?? null,
         tag: el.tagName.toLowerCase(),
-        text: (el.textContent || "").trim().slice(0, 120),
+        text: (el.textContent || "").trim().slice(0, 160),
+        placeholder: el.getAttribute("placeholder"),
+        nameAttr: el.getAttribute("name"),
+        ariaLabel: el.getAttribute("aria-label"),
+        idAttr: el.getAttribute("id"),
+        classList: el.getAttribute("class")?.slice(0, 200) ?? null,
+        role: el.getAttribute("role"),
+        href: el.getAttribute("href"),
+        type: el.getAttribute("type"),
+        nearestLabel: findNearestLabel(el),
+        nearestHeading: findNearestHeading(el),
+        selector: buildSelector(el),
         componentStack: stack,
       };
 
@@ -97,11 +189,15 @@ export default function CodeGrab() {
         });
       } catch {}
 
+      const descriptor =
+        selection.nearestLabel ||
+        selection.placeholder ||
+        selection.ariaLabel ||
+        selection.text ||
+        selection.selector;
       const label = source
         ? `${source.fileName}:${source.lineNumber}`
-        : stack[0]
-          ? `<${stack[0]}> (no source)`
-          : "no source info";
+        : `<${stack[0] || selection.tag}> ${descriptor.slice(0, 60)}`;
 
       try {
         await navigator.clipboard?.writeText(label);

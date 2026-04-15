@@ -82,6 +82,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    label: 'Marketing',
+    href: '/admin/marketing',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 11l18-8v18l-18-8v-2z" />
+        <path d="M11 19l2 3" />
+      </svg>
+    ),
+  },
+  {
     label: 'System Templates',
     href: '/admin/templates',
     icon: (
