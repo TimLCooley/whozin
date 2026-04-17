@@ -29,7 +29,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }
       // Check if user has a phone number (required for app access)
       const res = await fetch('/api/user/profile')
-      if (res.ok) {
+
+      if (!res.ok) {
+        // Session expired server-side or profile missing — try refreshing
+        if (res.status === 401) {
+          const { error } = await supabase.auth.refreshSession()
+          if (error) {
+            // Refresh failed — session is truly dead, send to landing
+            router.replace('/')
+            return
+          }
+          // Retry once after refresh
+          const retry = await fetch('/api/user/profile')
+          if (!retry.ok) {
+            router.replace('/')
+            return
+          }
+          const profile = await retry.json()
+          if (!profile.phone) {
+            router.replace('/auth/complete-profile')
+            return
+          }
+        } else {
+          // Server error — redirect to landing rather than showing broken state
+          router.replace('/')
+          return
+        }
+      } else {
         const profile = await res.json()
         if (!profile.phone) {
           router.replace('/auth/complete-profile')
