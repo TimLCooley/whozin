@@ -52,9 +52,21 @@ export function usePushNotifications() {
         })
 
         PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-          const link = action.notification.data?.link
+          const data = action.notification.data
+          // iOS puts custom APNs keys at the root of data alongside aps;
+          // Android puts them inside data directly. Check both shapes.
+          const link = data?.link ?? data?.data?.link
+          log(`Tap: link=${link} keys=${Object.keys(data || {}).join(',')}`)
           if (link && typeof window !== 'undefined') {
-            window.location.href = link
+            // Navigate after WebView is ready (handles iOS cold start)
+            const go = () => { window.location.href = link }
+            if (document.readyState === 'complete') {
+              go()
+            } else {
+              // Store for the app layout to pick up if listener fires too early
+              sessionStorage.setItem('push_deep_link', link)
+              window.addEventListener('load', go, { once: true })
+            }
           }
         })
 

@@ -85,14 +85,20 @@ async function sendApns(deviceToken: string, title: string, body: string, link?:
     { algorithm: 'ES256', keyid: keyId }
   )
 
+  const customData = {
+    ...data,
+    ...(link ? { link } : {}),
+  }
+
   const payload = JSON.stringify({
     aps: {
       alert: { title, body },
       sound: 'default',
       badge: 1,
     },
-    ...(link ? { link } : {}),
-    ...data,
+    // Root-level for direct access + nested under "data" for Capacitor compatibility
+    ...customData,
+    ...(Object.keys(customData).length ? { data: customData } : {}),
   })
 
   return new Promise<boolean>((resolve, reject) => {

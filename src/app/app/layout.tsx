@@ -67,6 +67,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           }
         }
       }
+      // Check for a pending push notification deep link (cold start on iOS)
+      const pendingLink = sessionStorage.getItem('push_deep_link')
+      if (pendingLink) {
+        sessionStorage.removeItem('push_deep_link')
+        window.location.href = pendingLink
+        return
+      }
+
       setReady(true)
     })
 
