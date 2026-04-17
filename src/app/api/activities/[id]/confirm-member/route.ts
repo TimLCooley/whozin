@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { processActivityInvites } from '@/lib/invite-processor'
+import { createAlert } from '@/lib/alerts'
+import { sendSms } from '@/lib/sms'
 
 // POST — host marks an On Deck member as confirmed
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify they're the creator
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, max_capacity, priority_invite')
+    .select('creator_id, max_capacity, priority_invite, activity_name')
     .eq('id', id)
     .single()
 
@@ -67,6 +69,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ...(isFull ? { status: 'full' } : {}),
     })
     .eq('id', id)
+
+  // Notify the confirmed member (fire and forget)
+  const [{ data: targetUser }, { data: host }] = await Promise.all([
+    admin
+      .from('whozin_users')
+      .select('push_token, phone, text_notifications_enabled')
+      .eq('id', targetUserId)
+      .single(),
+    admin
+      .from('whozin_users')
+      .select('first_name')
+      .eq('id', whozinUser.id)
+      .single(),
+  ])
+
+  const hostName = host?.first_name || 'The host'
+  const activityName = activity.activity_name || 'the activity'
+
+  // In-app alert + push notification
+  createAlert({
+    user_id: targetUserId,
+    type: 'activity_invite',
+    title: "You're in!",
+    body: `${hostName} confirmed you for ${activityName}.`,
+    link: `/app/activities/${id}`,
+  }).catch(() => {})
+
+  // SMS for users without the app (no push token)
+  if (!targetUser?.push_token && targetUser?.phone && targetUser.text_notifications_enabled !== false) {
+    sendSms(
+      targetUser.phone,
+      `You're in for ${activityName}! See details & group chat in the app: https://whozin.io/dl`
+    ).catch(() => {})
+  }
 
   // If not full and priority invites are active, process the queue
   // (confirming a waiting member frees a slot for the next tbd member)

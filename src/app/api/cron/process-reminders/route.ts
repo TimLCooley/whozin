@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendPush } from '@/lib/push'
 
+/** Convert activity date + time in a given IANA timezone to a UTC Date */
+function parseActivityTime(dateStr: string, timeStr: string, timezone?: string | null): Date {
+  if (!timezone) {
+    // No timezone stored — treat as UTC (legacy activities)
+    return new Date(`${dateStr}T${timeStr}:00Z`)
+  }
+
+  // Interpret the date/time as UTC, then figure out the timezone offset
+  const asUtc = new Date(`${dateStr}T${timeStr}:00Z`)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(asUtc)
+
+  const p = (t: string) => parts.find((x) => x.type === t)?.value ?? '00'
+  const localAtUtc = new Date(`${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}Z`)
+  const offsetMs = localAtUtc.getTime() - asUtc.getTime()
+
+  // Actual UTC = naive UTC - offset
+  return new Date(asUtc.getTime() - offsetMs)
+}
+
 // Reminder windows: how far before the event to send each reminder
 const REMINDER_WINDOWS = [
   { minutes: 24 * 60, label: '24 hours' },
@@ -25,9 +49,9 @@ export async function GET(req: NextRequest) {
   // Get all activities with reminders enabled that have a date and time
   const { data: activities } = await admin
     .from('whozin_activity')
-    .select('id, name, activity_date, activity_time, group_id')
+    .select('id, activity_name, activity_date, activity_time, group_id, timezone')
     .eq('reminder_enabled', true)
-    .eq('status', 'open')
+    .in('status', ['open', 'full'])
     .not('activity_date', 'is', null)
     .not('activity_time', 'is', null)
 
@@ -36,8 +60,12 @@ export async function GET(req: NextRequest) {
   }
 
   for (const activity of activities) {
-    // Parse activity datetime
-    const activityDateTime = new Date(`${activity.activity_date}T${activity.activity_time}`)
+    // Parse activity datetime in the creator's timezone (falls back to UTC)
+    const activityDateTime = parseActivityTime(
+      activity.activity_date,
+      activity.activity_time,
+      activity.timezone
+    )
     if (isNaN(activityDateTime.getTime())) continue
 
     const minutesUntil = (activityDateTime.getTime() - now.getTime()) / (1000 * 60)
@@ -63,7 +91,7 @@ export async function GET(req: NextRequest) {
 
         // Get confirmed members for this activity
         const { data: members } = await admin
-          .from('whozin_activity_members')
+          .from('whozin_activity_member')
           .select('user_id')
           .eq('activity_id', activity.id)
           .eq('status', 'confirmed')
@@ -75,7 +103,7 @@ export async function GET(req: NextRequest) {
           await admin.from('whozin_alerts').insert({
             user_id: member.user_id,
             type: 'system',
-            title: `Reminder: ${activity.name}`,
+            title: `Reminder: ${activity.activity_name}`,
             body: `Starting in ${window.label}!`,
             link: `/app/activities/${activity.id}`,
             meta: { reminder_key: reminderKey },
@@ -83,7 +111,7 @@ export async function GET(req: NextRequest) {
 
           sendPush({
             userId: member.user_id,
-            title: `Reminder: ${activity.name}`,
+            title: `Reminder: ${activity.activity_name}`,
             body: `Starting in ${window.label}!`,
             link: `/app/activities/${activity.id}`,
           }).catch(() => {})

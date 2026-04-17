@@ -253,6 +253,7 @@ export default function CreateActivityPage() {
           reminder_enabled: reminderEnabled,
           auto_emergency_fill: autoEmergencyFill,
           image_url: imageUrl || null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       })
 
@@ -297,6 +298,7 @@ export default function CreateActivityPage() {
           reminder_enabled: false,
           auto_emergency_fill: true,
           image_url: imageUrl || null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
       })
 
