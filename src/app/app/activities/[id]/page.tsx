@@ -505,6 +505,9 @@ export default function ActivityDetailPage() {
     })
     if (res.ok) {
       await loadActivity()
+    } else if (res.status === 409) {
+      alert('This activity is full. The host can add you if a spot opens up.')
+      await loadActivity()
     }
     setResponding(false)
   }

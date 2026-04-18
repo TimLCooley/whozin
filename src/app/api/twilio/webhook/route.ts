@@ -80,9 +80,16 @@ export async function POST(req: NextRequest) {
   // Get activity details for reply message and host notification
   const { data: activityData } = await admin
     .from('whozin_activity')
-    .select('activity_name, creator_id')
+    .select('activity_name, creator_id, status, max_capacity')
     .eq('id', invite.activity_id)
     .single()
+
+  // Block non-host users from confirming when activity is full
+  if (isIn && activityData?.status === 'full' && activityData.creator_id !== whozinUser.id) {
+    return twimlResponse(
+      `Sorry, this activity is already full! The host can still add you if a spot opens up. Get the Whozin app for updates: https://whozin.io/dl`
+    )
+  }
 
   // Update the activity member status (works even if they were 'missed' from expired timer)
   const newStatus = isIn ? 'confirmed' : 'out'
@@ -92,16 +99,22 @@ export async function POST(req: NextRequest) {
     .eq('activity_id', invite.activity_id)
     .eq('user_id', whozinUser.id)
 
-  // Update capacity count
+  // Update capacity count and determine correct status
   const { count: confirmedCount } = await admin
     .from('whozin_activity_member')
     .select('id', { count: 'exact', head: true })
     .eq('activity_id', invite.activity_id)
     .eq('status', 'confirmed')
 
+  const confirmed = confirmedCount ?? 0
+  const nowFull = activityData?.max_capacity ? confirmed >= activityData.max_capacity : false
+
   await admin
     .from('whozin_activity')
-    .update({ capacity_current: confirmedCount ?? 0, status: 'open' })
+    .update({
+      capacity_current: confirmed,
+      status: nowFull ? 'full' : 'open',
+    })
     .eq('id', invite.activity_id)
 
   const activityName = activityData?.activity_name ?? 'the activity'

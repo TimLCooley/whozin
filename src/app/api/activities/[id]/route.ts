@@ -127,6 +127,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const wasFull = activityBefore?.status === 'full'
 
+  // Block non-host users from confirming when activity is full
+  if (response === 'in' && wasFull && activityBefore?.creator_id !== whozinUser.id) {
+    return NextResponse.json({ error: 'Activity is full' }, { status: 409 })
+  }
+
   const { error } = await admin
     .from('whozin_activity_member')
     .update({ status: newStatus, responded_at: new Date().toISOString() })
@@ -150,9 +155,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .eq('activity_id', id)
     .eq('status', 'confirmed')
 
+  const confirmed = confirmedCount ?? 0
+  const nowFull = activityBefore?.max_capacity ? confirmed >= activityBefore.max_capacity : false
+
   await admin
     .from('whozin_activity')
-    .update({ capacity_current: confirmedCount ?? 0, status: 'open' })
+    .update({
+      capacity_current: confirmed,
+      status: nowFull ? 'full' : 'open',
+    })
     .eq('id', id)
 
   // Emergency fill: someone dropped out of a FULL activity
