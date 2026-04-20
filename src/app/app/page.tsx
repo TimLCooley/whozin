@@ -17,6 +17,8 @@ interface ActivityCard {
   member_count: number
   status: string
   chat_enabled: boolean
+  reminder_enabled: boolean
+  timezone: string | null
   image_url: string | null
   is_creator: boolean
   my_status: string | null
@@ -35,6 +37,19 @@ function formatDate(date: string | null, time: string | null) {
   const ampm = hour >= 12 ? 'pm' : 'am'
   const h12 = hour % 12 || 12
   return `${dateStr} at ${h12}:${m} ${ampm}`
+}
+
+/** Next reminder fires at T-24h, T-1h, T-10m before the event. Returns the label of the next one still upcoming. */
+function getNextReminderLabel(date: string | null, time: string | null): '24h' | '1h' | '10m' | null {
+  if (!date || !time) return null
+  const timeStr = time.length === 5 ? `${time}:00` : time
+  const event = new Date(`${date}T${timeStr}`)
+  if (isNaN(event.getTime())) return null
+  const minutesUntil = (event.getTime() - Date.now()) / 60000
+  if (minutesUntil > 1440) return '24h'
+  if (minutesUntil > 60) return '1h'
+  if (minutesUntil > 10) return '10m'
+  return null
 }
 
 function formatCost(costType: string, cost: number | null) {
@@ -180,6 +195,8 @@ export default function AppHome() {
           <div className="space-y-3">
             {activities.map((activity, i) => {
               const needsResponse = activity.my_status === 'tbd' || activity.my_status === 'waiting'
+              const showReminder = activity.reminder_enabled && activity.my_status === 'confirmed'
+              const nextReminder = showReminder ? getNextReminderLabel(activity.activity_date, activity.activity_time) : null
               return (
                 <div
                   key={activity.id}
@@ -212,11 +229,28 @@ export default function AppHome() {
                         ) : (
                           <div />
                         )}
-                        {activity.chat_enabled && (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm">
-                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                          </svg>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {nextReminder && (
+                            <div className="flex items-center gap-1 bg-black/35 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              <span className="text-[10px] font-bold text-white">{nextReminder}</span>
+                            </div>
+                          )}
+                          {activity.reminder_enabled && activity.is_creator && !nextReminder && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm">
+                              <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                              <path d="M13.73 21a2 2 0 01-3.46 0" />
+                            </svg>
+                          )}
+                          {activity.chat_enabled && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm">
+                              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                            </svg>
+                          )}
+                        </div>
                       </div>
 
                       {/* Spacer */}
@@ -336,12 +370,29 @@ export default function AppHome() {
                       </div>
                     </div>
 
-                    {/* Chat icon */}
-                    {activity.chat_enabled && (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
-                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                      </svg>
-                    )}
+                    {/* Top-right icons: reminder countdown / host bell / chat */}
+                    <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                      {nextReminder && (
+                        <div className="flex items-center gap-1 text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          <span className="text-[10px] font-bold">{nextReminder}</span>
+                        </div>
+                      )}
+                      {activity.reminder_enabled && activity.is_creator && !nextReminder && (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                          <path d="M13.73 21a2 2 0 01-3.46 0" />
+                        </svg>
+                      )}
+                      {activity.chat_enabled && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                        </svg>
+                      )}
+                    </div>
                   </div>
 
                   {/* Location */}

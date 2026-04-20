@@ -120,6 +120,8 @@ export async function GET(req: NextRequest) {
       member_count: a.whozin_activity_member?.[0]?.count ?? 0,
       status: a.status,
       chat_enabled: a.chat_enabled,
+      reminder_enabled: a.reminder_enabled,
+      timezone: a.timezone,
       image_url: a.image_url,
       note: a.note,
       creator_id: a.creator_id,
