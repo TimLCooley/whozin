@@ -76,7 +76,8 @@ export default function CreateActivityPage() {
   // Group Details
   const [groups, setGroups] = useState<GroupOption[]>([])
   const [selectedGroup, setSelectedGroup] = useState<string>('')
-  const [maxCapacity, setMaxCapacity] = useState<number | 'custom' | 'all'>(2)
+  const [maxCapacity, setMaxCapacity] = useState<number | 'custom'>(2)
+  const [customMode, setCustomMode] = useState<'number' | 'all' | 'any'>('number')
   const [customCapacity, setCustomCapacity] = useState('')
   const [priorityInvite, setPriorityInvite] = useState(true)
   const [responseTimer, setResponseTimer] = useState(5)
@@ -148,15 +149,18 @@ export default function CreateActivityPage() {
         setPriorityInvite(data.priority_invite ?? true)
         setResponseTimer(data.response_timer_minutes ?? 5)
         if (data.image_url) setImageUrl(data.image_url)
-        if (data.max_capacity) {
-          if ([2, 3, 4].includes(data.max_capacity)) {
-            setMaxCapacity(data.max_capacity)
-          } else {
-            setMaxCapacity('custom')
-            setCustomCapacity(String(data.max_capacity))
-          }
+        if (data.max_capacity === 999) {
+          setMaxCapacity('custom')
+          setCustomMode('any')
+        } else if (data.max_capacity && [2, 3, 4].includes(data.max_capacity)) {
+          setMaxCapacity(data.max_capacity)
+        } else if (data.max_capacity) {
+          setMaxCapacity('custom')
+          setCustomMode('number')
+          setCustomCapacity(String(data.max_capacity))
         } else {
-          setMaxCapacity('all')
+          setMaxCapacity('custom')
+          setCustomMode('all')
         }
         if (data.group_id) setSelectedGroup(data.group_id)
         // Set date to today, keep same time
@@ -221,9 +225,14 @@ export default function CreateActivityPage() {
     setGeneratingImage(false)
   }
 
+  const isAllMode = maxCapacity === 'custom' && customMode === 'all'
+
   function getEffectiveMaxCapacity(): number | null {
-    if (maxCapacity === 'all') return null
-    if (maxCapacity === 'custom') return parseInt(customCapacity) || null
+    if (maxCapacity === 'custom') {
+      if (customMode === 'all') return null
+      if (customMode === 'any') return 999
+      return parseInt(customCapacity) || null
+    }
     return maxCapacity
   }
 
@@ -1194,31 +1203,62 @@ export default function CreateActivityPage() {
                   Custom
                   {!isPro && <ProBadge small />}
                 </button>
-                <button
-                  onClick={() => setMaxCapacity('all')}
-                  className={`px-4 h-10 rounded-full text-[13px] font-semibold transition-colors ${
-                    maxCapacity === 'all'
-                      ? 'bg-primary text-white'
-                      : 'bg-surface text-muted border border-border/50'
-                  }`}
-                >
-                  All
-                </button>
               </div>
               {maxCapacity === 'custom' && (
-                <input
-                  type="number"
-                  value={customCapacity}
-                  onChange={(e) => setCustomCapacity(e.target.value)}
-                  placeholder="Enter number..."
-                  min="2"
-                  className="input-field mt-3 animate-enter"
-                />
+                <div className="mt-3 animate-enter">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCustomMode('number')}
+                      className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                        customMode === 'number'
+                          ? 'bg-primary text-white'
+                          : 'bg-surface text-muted border border-border/50'
+                      }`}
+                    >
+                      Number
+                    </button>
+                    <button
+                      onClick={() => setCustomMode('all')}
+                      className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                        customMode === 'all'
+                          ? 'bg-primary text-white'
+                          : 'bg-surface text-muted border border-border/50'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setCustomMode('any')}
+                      className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                        customMode === 'any'
+                          ? 'bg-primary text-white'
+                          : 'bg-surface text-muted border border-border/50'
+                      }`}
+                    >
+                      Any
+                    </button>
+                  </div>
+                  {customMode === 'number' && (
+                    <input
+                      type="number"
+                      value={customCapacity}
+                      onChange={(e) => setCustomCapacity(e.target.value)}
+                      placeholder="Enter number..."
+                      min="2"
+                      className="input-field mt-3 animate-enter"
+                    />
+                  )}
+                  <p className="text-[12px] text-muted mt-2 leading-relaxed">
+                    {customMode === 'all' && 'Everyone in the group is invited — no cap, all invited at once.'}
+                    {customMode === 'any' && 'Up to 999 spots — invites sent in priority order.'}
+                    {customMode === 'number' && 'Set a specific cap for this activity.'}
+                  </p>
+                </div>
               )}
             </FieldCard>
 
             {/* Priority Order Toggle — hidden when "All" selected */}
-            {maxCapacity !== 'all' && (
+            {!isAllMode && (
               <FieldCard>
                 <div className="flex items-center justify-between">
                   <span className="text-[14px] font-semibold text-foreground">Priority Order</span>
@@ -1233,7 +1273,7 @@ export default function CreateActivityPage() {
             )}
 
             {/* Response Timer — hidden when "All" selected */}
-            {maxCapacity !== 'all' && (
+            {!isAllMode && (
               <FieldCard>
                 <FieldLabel>Response Time Per Invite</FieldLabel>
                 <div className="relative">
@@ -1310,7 +1350,7 @@ export default function CreateActivityPage() {
             </FieldCard>
 
             {/* Auto Emergency Fill */}
-            {maxCapacity !== 'all' && (
+            {!isAllMode && (
               <FieldCard>
                 <div className="flex items-center justify-between">
                   <span className="text-[14px] font-semibold text-foreground">Auto-Fill Dropouts</span>
