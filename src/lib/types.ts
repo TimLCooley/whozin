@@ -58,6 +58,7 @@ export interface Activity {
   activity_name: string
   activity_date: string | null
   activity_time: string | null
+  duration_hours: number | null
   location: string | null
   cost: number | null
   max_capacity: number | null

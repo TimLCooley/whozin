@@ -61,6 +61,7 @@ export default function CreateActivityPage() {
   const [activityName, setActivityName] = useState('')
   const [activityDate, setActivityDate] = useState('')
   const [activityTime, setActivityTime] = useState('')
+  const [durationHours, setDurationHours] = useState<number>(2)
   const [location, setLocation] = useState('')
   const [note, setNote] = useState('')
   const [reminderEnabled, setReminderEnabled] = useState(false)
@@ -253,6 +254,7 @@ export default function CreateActivityPage() {
           activity_name: activityName.trim(),
           activity_date: activityDate || null,
           activity_time: activityTime || null,
+          duration_hours: activityTime ? durationHours : null,
           location: location.trim() || null,
           note: note.trim() || null,
           cost_type: costType,
@@ -298,6 +300,7 @@ export default function CreateActivityPage() {
           activity_name: activityName.trim(),
           activity_date: activityDate || null,
           activity_time: activityTime || null,
+          duration_hours: activityTime ? durationHours : null,
           location: null,
           note: null,
           cost_type: 'free',
@@ -752,6 +755,27 @@ export default function CreateActivityPage() {
                   </select>
                 </div>
               </div>
+              {activityTime && (
+                <div className="mt-3">
+                  <p className="text-[12px] font-medium text-muted mb-1.5">Duration</p>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4].map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setDurationHours(h)}
+                        className={`flex-1 h-10 rounded-xl text-[13px] font-semibold transition-colors ${
+                          durationHours === h
+                            ? 'bg-primary text-white'
+                            : 'bg-surface text-muted border border-border/50 active:bg-background'
+                        }`}
+                      >
+                        {h === 4 ? '4+ hr' : `${h} hr`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </FieldCard>
 
             {/* Chat Toggle */}
@@ -980,6 +1004,27 @@ export default function CreateActivityPage() {
                   className="input-field flex-1"
                 />
               </div>
+              {activityTime && (
+                <div className="mt-3">
+                  <p className="text-[12px] font-medium text-muted mb-1.5">Duration</p>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4].map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setDurationHours(h)}
+                        className={`flex-1 h-10 rounded-xl text-[13px] font-semibold transition-colors ${
+                          durationHours === h
+                            ? 'bg-primary text-white'
+                            : 'bg-surface text-muted border border-border/50 active:bg-background'
+                        }`}
+                      >
+                        {h === 4 ? '4+ hr' : `${h} hr`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </FieldCard>
 
             {/* Location */}

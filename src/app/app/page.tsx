@@ -10,6 +10,7 @@ interface ActivityCard {
   activity_name: string
   activity_date: string | null
   activity_time: string | null
+  duration_hours: number | null
   location: string | null
   cost: number | null
   cost_type: string
@@ -27,7 +28,7 @@ interface ActivityCard {
   confirmed_count: number
 }
 
-function formatDate(date: string | null, time: string | null) {
+function formatDate(date: string | null, time: string | null, duration?: number | null) {
   if (!date) return 'No date set'
   const d = new Date(date + 'T00:00:00')
   const dateStr = d.toLocaleDateString('en-US', { month: 'numeric', day: '2-digit', year: '2-digit' })
@@ -36,7 +37,8 @@ function formatDate(date: string | null, time: string | null) {
   const hour = parseInt(h)
   const ampm = hour >= 12 ? 'pm' : 'am'
   const h12 = hour % 12 || 12
-  return `${dateStr} at ${h12}:${m} ${ampm}`
+  const durLabel = duration ? (duration >= 4 ? '4+ hr' : `${duration} hr`) : ''
+  return `${dateStr} at ${h12}:${m} ${ampm}${durLabel ? ` · ${durLabel}` : ''}`
 }
 
 /** Next reminder fires at T-24h, T-1h, T-10m before the event. Returns the label of the next one still upcoming. */
@@ -266,7 +268,7 @@ export default function AppHome() {
                               <rect x="3" y="4" width="18" height="18" rx="2" />
                               <path d="M3 10h18M8 2v4M16 2v4" />
                             </svg>
-                            <span className="text-[11px] text-white/90">{formatDate(activity.activity_date, activity.activity_time)}</span>
+                            <span className="text-[11px] text-white/90">{formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)}</span>
                           </div>
                           {activity.location && (
                             <button
@@ -373,7 +375,7 @@ export default function AppHome() {
                           <rect x="3" y="4" width="18" height="18" rx="2" />
                           <path d="M3 10h18M8 2v4M16 2v4" />
                         </svg>
-                        <span className="text-[12px]">{formatDate(activity.activity_date, activity.activity_time)}</span>
+                        <span className="text-[12px]">{formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)}</span>
                       </div>
                     </div>
 

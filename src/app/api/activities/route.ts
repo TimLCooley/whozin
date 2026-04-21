@@ -73,6 +73,18 @@ export async function GET(req: NextRequest) {
 
   const statusMap = new Map((myStatuses ?? []).map((s) => [s.activity_id, s.status]))
 
+  // 'waiting' and 'missed' users never locked in a spot. Once the activity
+  // is full or its date has passed, there's nothing they can do with it — hide
+  // the card. Past tab is always hidden for both statuses.
+  const visibleActivities = (activities ?? []).filter((a) => {
+    const myStatus = statusMap.get(a.id)
+    if (myStatus !== 'waiting' && myStatus !== 'missed') return true
+    if (tab === 'past') return false
+    if (a.status === 'full') return false
+    if (a.activity_date && a.activity_date < today) return false
+    return true
+  })
+
   // Get confirmed counts per activity
   const { data: allMemberStatuses } = await admin
     .from('whozin_activity_member')
@@ -87,7 +99,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Get creator names
-  const creatorIds = [...new Set((activities ?? []).map((a) => a.creator_id))]
+  const creatorIds = [...new Set(visibleActivities.map((a) => a.creator_id))]
   const { data: creators } = await admin
     .from('whozin_users')
     .select('id, first_name, last_name')
@@ -96,7 +108,7 @@ export async function GET(req: NextRequest) {
   const creatorMap = new Map((creators ?? []).map((c) => [c.id, c]))
 
   // Get group names
-  const groupIds = [...new Set((activities ?? []).map((a) => a.group_id))]
+  const groupIds = [...new Set(visibleActivities.map((a) => a.group_id))]
   const { data: groups } = await admin
     .from('whozin_groups')
     .select('id, name')
@@ -104,7 +116,7 @@ export async function GET(req: NextRequest) {
 
   const groupMap = new Map((groups ?? []).map((g) => [g.id, g]))
 
-  const result = (activities ?? []).map((a) => {
+  const result = visibleActivities.map((a) => {
     const creator = creatorMap.get(a.creator_id)
     const group = groupMap.get(a.group_id)
     return {
@@ -113,6 +125,7 @@ export async function GET(req: NextRequest) {
       activity_name: a.activity_name,
       activity_date: a.activity_date,
       activity_time: a.activity_time,
+      duration_hours: a.duration_hours,
       location: a.location,
       cost: a.cost,
       cost_type: a.cost_type ?? 'free',
@@ -161,6 +174,7 @@ export async function POST(req: NextRequest) {
     activity_name,
     activity_date,
     activity_time,
+    duration_hours,
     location,
     note,
     cost_type,
@@ -199,6 +213,7 @@ export async function POST(req: NextRequest) {
       activity_name: activity_name.trim(),
       activity_date: activity_date || null,
       activity_time: activity_time || null,
+      duration_hours: activity_time ? (duration_hours ?? 2) : null,
       location: location?.trim() || null,
       note: note?.trim() || null,
       cost_type: cost_type ?? 'free',

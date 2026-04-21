@@ -8,6 +8,8 @@ import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
 import { createClient } from '@/lib/supabase/client'
 import { ensureImage } from '@/lib/pdf-to-image'
 import { isNative } from '@/lib/capacitor'
+import { usePaywall } from '@/hooks/use-pro-status'
+import ProBadge from '@/components/ui/pro-badge'
 
 interface MemberInfo {
   id: string
@@ -29,6 +31,7 @@ interface ActivityDetail {
   activity_name: string
   activity_date: string | null
   activity_time: string | null
+  duration_hours: number | null
   location: string | null
   cost: number | null
   cost_type: string
@@ -62,7 +65,13 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string
   out: { label: 'Out', color: 'text-red-500', icon: 'x' },
 }
 
-function formatDate(date: string | null, time: string | null) {
+function formatDuration(hours: number | null | undefined) {
+  if (!hours) return ''
+  if (hours >= 4) return '4+ hr'
+  return `${hours} hr`
+}
+
+function formatDate(date: string | null, time: string | null, duration?: number | null) {
   if (!date) return 'No date set'
   const d = new Date(date + 'T00:00:00')
   const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
@@ -71,7 +80,8 @@ function formatDate(date: string | null, time: string | null) {
   const hour = parseInt(h)
   const ampm = hour >= 12 ? 'pm' : 'am'
   const h12 = hour % 12 || 12
-  return `${dateStr} at ${h12}:${m} ${ampm}`
+  const durLabel = formatDuration(duration)
+  return `${dateStr} at ${h12}:${m} ${ampm}${durLabel ? ` · ${durLabel}` : ''}`
 }
 
 function formatCost(costType: string, cost: number | null) {
@@ -100,11 +110,13 @@ export default function ActivityDetailPage() {
   const [emergencyDelay, setEmergencyDelay] = useState(30) // minutes
   const [emergencyAutoSend, setEmergencyAutoSend] = useState(true)
   const [emergencySending, setEmergencySending] = useState(false)
-  const [editField, setEditField] = useState<'location' | 'datetime' | 'cost' | null>(null)
+  const [editField, setEditField] = useState<'name' | 'location' | 'datetime' | 'cost' | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [editLocation, setEditLocation] = useState('')
+  const [editName, setEditName] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
+  const [editDuration, setEditDuration] = useState<number | null>(2)
   const [editCostType, setEditCostType] = useState<'free' | 'pay_me' | 'pay_at_location'>('free')
   const [editCostAmount, setEditCostAmount] = useState('')
   const [showTimerEdit, setShowTimerEdit] = useState(false)
@@ -112,7 +124,11 @@ export default function ActivityDetailPage() {
   const [timerSaving, setTimerSaving] = useState(false)
   const [imageExpanded, setImageExpanded] = useState(false)
   const [imageUploading, setImageUploading] = useState(false)
+  const [imageModal, setImageModal] = useState<null | 'menu' | 'generate'>(null)
+  const [imagePrompt, setImagePrompt] = useState('')
+  const [imageGenerating, setImageGenerating] = useState(false)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const { isPro, requirePro } = usePaywall()
 
   async function handleImageReplace(file: File) {
     setImageUploading(true)
@@ -141,12 +157,48 @@ export default function ActivityDetailPage() {
     }
   }
 
-  function openEdit(field: 'location' | 'datetime' | 'cost') {
+  async function handleGenerateImage() {
     if (!activity) return
+    const prompt = imagePrompt.trim() || `A vibrant, inviting image for a group activity: ${activity.activity_name || 'fun event'}`
+    setImageGenerating(true)
+    try {
+      const gen = await fetch('/api/activities/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+      const genData = await gen.json()
+      if (!gen.ok || !genData.url) {
+        alert(genData.error || 'Generation failed')
+        return
+      }
+      const res = await fetch(`/api/activities/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: genData.url }),
+      })
+      if (res.ok) {
+        await loadActivity()
+        setImageModal(null)
+        setImagePrompt('')
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(err.error || 'Failed to update activity')
+      }
+    } catch {
+      alert('Generation failed')
+    }
+    setImageGenerating(false)
+  }
+
+  function openEdit(field: 'name' | 'location' | 'datetime' | 'cost') {
+    if (!activity) return
+    if (field === 'name') setEditName(activity.activity_name ?? '')
     if (field === 'location') setEditLocation(activity.location ?? '')
     if (field === 'datetime') {
       setEditDate(activity.activity_date ?? '')
       setEditTime(activity.activity_time ?? '')
+      setEditDuration(activity.duration_hours ?? 2)
     }
     if (field === 'cost') {
       setEditCostType((activity.cost_type as 'free' | 'pay_me' | 'pay_at_location') ?? 'free')
@@ -159,12 +211,21 @@ export default function ActivityDetailPage() {
     if (!activity || !editField) return
     setEditSaving(true)
     const payload: Record<string, unknown> = {}
+    if (editField === 'name') {
+      if (!editName.trim()) {
+        setEditSaving(false)
+        alert('Activity name is required')
+        return
+      }
+      payload.activity_name = editName.trim()
+    }
     if (editField === 'location') {
       payload.location = editLocation.trim() || null
     }
     if (editField === 'datetime') {
       payload.activity_date = editDate || null
       payload.activity_time = editTime || null
+      payload.duration_hours = editTime ? editDuration : null
     }
     if (editField === 'cost') {
       payload.cost_type = editCostType
@@ -588,8 +649,23 @@ export default function ActivityDetailPage() {
 
       {/* Activity Title Bar */}
       <div className="bg-background border-b border-border/40 px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-[17px] font-bold text-foreground">{activity.activity_name}</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h1 className="text-[17px] font-bold text-foreground truncate">{activity.activity_name}</h1>
+            {activity.is_creator && (
+              <button
+                type="button"
+                onClick={() => openEdit('name')}
+                className="flex-shrink-0 p-1 rounded-md text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                aria-label="Edit activity name"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 013 3L7.5 20.5 2 22l1.5-5.5L16.5 3.5z" />
+                </svg>
+              </button>
+            )}
+          </div>
           {activity.is_creator && (
             <p className="text-[12px] text-muted mt-0.5">{activity.group_name}</p>
           )}
@@ -663,7 +739,7 @@ export default function ActivityDetailPage() {
                 />
                 {activity.is_creator && (
                   <button
-                    onClick={() => imageInputRef.current?.click()}
+                    onClick={() => setImageModal('menu')}
                     disabled={imageUploading}
                     className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center active:bg-black/80 transition-colors shadow-lg"
                     aria-label="Edit image"
@@ -732,7 +808,7 @@ export default function ActivityDetailPage() {
                 </div>
 
                 <InfoRow icon="pin" label="Location" value={activity.location || "Not specified"} link={!!activity.location} onEdit={activity.is_creator ? () => openEdit('location') : undefined} />
-                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} trailing={<AddToCalendarButton activity={activity} />} onEdit={activity.is_creator ? () => openEdit('datetime') : undefined} />
+                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)} trailing={<AddToCalendarButton activity={activity} />} onEdit={activity.is_creator ? () => openEdit('datetime') : undefined} />
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} onEdit={activity.is_creator ? () => openEdit('cost') : undefined} />
                 <InfoRow icon="people" label="Spots" value={
                   activity.max_capacity
@@ -808,7 +884,7 @@ export default function ActivityDetailPage() {
             {!activity.is_creator && (
               <>
                 <InfoRow icon="pin" label="Location" value={activity.location || "Not specified"} link={!!activity.location} />
-                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time)} trailing={<AddToCalendarButton activity={activity} />} />
+                <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)} trailing={<AddToCalendarButton activity={activity} />} />
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
 
                 {/* Response buttons */}
@@ -1064,6 +1140,87 @@ export default function ActivityDetailPage() {
       )}
 
       {/* OUT Confirmation Modal */}
+      {/* Image Change Menu */}
+      {imageModal === 'menu' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setImageModal(null)}>
+          <div
+            className="bg-background rounded-t-2xl p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] w-full max-w-lg shadow-2xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-5">Change Image</h3>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => { setImageModal(null); imageInputRef.current?.click() }}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground">Upload</span>
+              </button>
+              <button
+                onClick={() => { if (!requirePro()) return; setImageModal('generate') }}
+                className="relative flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                  </svg>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
+                  Generate
+                  {!isPro && <ProBadge small />}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Generate Prompt */}
+      {imageModal === 'generate' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => !imageGenerating && setImageModal(null)}>
+          <div
+            className="bg-background rounded-t-2xl p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] w-full max-w-lg shadow-2xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-4">Generate Image</h3>
+            <textarea
+              value={imagePrompt}
+              onChange={(e) => setImagePrompt(e.target.value)}
+              placeholder={`Describe the image, e.g. "Friends playing ${activity.activity_name || 'sports'} at sunset"`}
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none box-border"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => { setImageModal(null); setImagePrompt('') }}
+                disabled={imageGenerating}
+                className="flex-1 py-2.5 rounded-xl border border-border/50 text-[13px] font-semibold text-muted active:bg-surface transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateImage}
+                disabled={imageGenerating}
+                className="flex-1 py-2.5 rounded-xl bg-primary text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-60"
+              >
+                {imageGenerating ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Member Menu */}
       {addModal === 'add-menu' && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setAddModal(null)}>
@@ -1637,10 +1794,22 @@ export default function ActivityDetailPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-[16px] font-bold text-foreground mb-4">
+              {editField === 'name' && 'Edit Activity Name'}
               {editField === 'location' && 'Edit Location'}
               {editField === 'datetime' && 'Edit Date & Time'}
               {editField === 'cost' && 'Edit Cost'}
             </h3>
+
+            {editField === 'name' && (
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Activity name"
+                autoFocus
+                className="w-full h-12 px-4 rounded-xl border border-border bg-background text-[15px] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              />
+            )}
 
             {editField === 'location' && (
               <PlacesAutocomplete
@@ -1651,19 +1820,42 @@ export default function ActivityDetailPage() {
             )}
 
             {editField === 'datetime' && (
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={editDate}
-                  onChange={(e) => setEditDate(e.target.value)}
-                  className="flex-1 min-w-0 h-12 px-3 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                />
-                <input
-                  type="time"
-                  value={editTime}
-                  onChange={(e) => setEditTime(e.target.value)}
-                  className="flex-1 min-w-0 h-12 px-3 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                />
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="flex-1 min-w-0 h-12 px-3 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                  <input
+                    type="time"
+                    value={editTime}
+                    onChange={(e) => setEditTime(e.target.value)}
+                    className="flex-1 min-w-0 h-12 px-3 rounded-xl border border-border bg-background text-[15px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                </div>
+                {editTime && (
+                  <div>
+                    <p className="text-[12px] font-medium text-muted mb-1.5">Duration</p>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4].map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => setEditDuration(h)}
+                          className={`flex-1 h-10 rounded-xl text-[13px] font-semibold transition-colors ${
+                            editDuration === h
+                              ? 'bg-primary text-white'
+                              : 'bg-surface text-muted border border-border/50 active:bg-background'
+                          }`}
+                        >
+                          {h === 4 ? '4+ hr' : `${h} hr`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2133,7 +2325,8 @@ function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
       const time = activity.activity_time ? activity.activity_time.replace(/:/g, '') + '00' : '120000'
       startDate = `${date}T${time}`
       const start = new Date(`${activity.activity_date}T${activity.activity_time ?? '12:00'}`)
-      const end = new Date(start.getTime() + 2 * 60 * 60 * 1000)
+      const durMs = (activity.duration_hours ?? 2) * 60 * 60 * 1000
+      const end = new Date(start.getTime() + durMs)
       const endD = end.toISOString().split('T')[0].replace(/-/g, '')
       const endT = String(end.getHours()).padStart(2, '0') + String(end.getMinutes()).padStart(2, '0') + '00'
       endDate = `${endD}T${endT}`
