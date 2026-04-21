@@ -102,7 +102,6 @@ export default function ActivityDetailPage() {
   const [editField, setEditField] = useState<'location' | 'datetime' | 'cost' | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [editLocation, setEditLocation] = useState('')
-  const locationWrapRef = useRef<HTMLDivElement>(null)
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
   const [editCostType, setEditCostType] = useState<'free' | 'pay_me' | 'pay_at_location'>('free')
@@ -160,11 +159,7 @@ export default function ActivityDetailPage() {
     setEditSaving(true)
     const payload: Record<string, unknown> = {}
     if (editField === 'location') {
-      // PlacesAutocomplete's Google element only syncs state on blur; read the
-      // live DOM value in case the user clicks Save without blurring first.
-      const domVal = locationWrapRef.current?.querySelector('input')?.value ?? ''
-      const effective = (domVal || editLocation).trim()
-      payload.location = effective || null
+      payload.location = editLocation.trim() || null
     }
     if (editField === 'datetime') {
       payload.activity_date = editDate || null
@@ -1645,13 +1640,11 @@ export default function ActivityDetailPage() {
             </h3>
 
             {editField === 'location' && (
-              <div ref={locationWrapRef}>
-                <PlacesAutocomplete
-                  value={editLocation}
-                  onChange={setEditLocation}
-                  placeholder="Search for a location..."
-                />
-              </div>
+              <PlacesAutocomplete
+                value={editLocation}
+                onChange={setEditLocation}
+                placeholder="Search for a location..."
+              />
             )}
 
             {editField === 'datetime' && (
