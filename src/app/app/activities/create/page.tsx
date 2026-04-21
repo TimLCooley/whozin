@@ -465,10 +465,10 @@ export default function CreateActivityPage() {
 
             {/* Preset Picker Modal (shared) */}
             {showPresetPicker && (
-              <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16" onClick={() => setShowPresetPicker(false)}>
+              <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[max(1rem,env(safe-area-inset-top))]" onClick={() => setShowPresetPicker(false)}>
                 <div className="absolute inset-0 bg-black/40" />
                 <div
-                  className="relative w-full max-w-md max-h-[75dvh] bg-background rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-enter"
+                  className="relative w-full max-w-md max-h-[92dvh] bg-background rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-enter"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="px-4 pt-4 pb-3 border-b border-border/40">
@@ -856,10 +856,10 @@ export default function CreateActivityPage() {
 
             {/* Preset Picker Modal */}
             {showPresetPicker && (
-              <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-16" onClick={() => setShowPresetPicker(false)}>
+              <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[max(1rem,env(safe-area-inset-top))]" onClick={() => setShowPresetPicker(false)}>
                 <div className="absolute inset-0 bg-black/40" />
                 <div
-                  className="relative w-full max-w-md max-h-[75dvh] bg-background rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-enter"
+                  className="relative w-full max-w-md max-h-[92dvh] bg-background rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-enter"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Search header */}
