@@ -213,7 +213,7 @@ export default function AppHome() {
                   {activity.image_url ? (
                     /* ── Full-bleed image card ── */
                     <div
-                      className="relative bg-cover bg-center min-h-[260px] flex flex-col"
+                      className="relative bg-cover bg-top min-h-[260px] flex flex-col"
                       style={{ backgroundImage: `url(${activity.image_url})` }}
                     >
                       {/* Full overlay gradient */}

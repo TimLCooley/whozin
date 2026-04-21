@@ -661,7 +661,7 @@ export default function ActivityDetailPage() {
                 <button
                   type="button"
                   onClick={() => setImageExpanded(true)}
-                  className="block w-full min-h-[260px] bg-cover bg-center bg-surface active:opacity-95 transition-opacity"
+                  className="block w-full min-h-[260px] bg-cover bg-top bg-surface active:opacity-95 transition-opacity"
                   style={{ backgroundImage: `url(${activity.image_url})` }}
                   aria-label="Expand image"
                 />
