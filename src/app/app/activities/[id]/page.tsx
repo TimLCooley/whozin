@@ -1068,7 +1068,7 @@ export default function ActivityDetailPage() {
       {addModal === 'add-menu' && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setAddModal(null)}>
           <div
-            className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl animate-enter"
+            className="bg-background rounded-t-2xl p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] w-full max-w-lg shadow-2xl animate-enter"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
