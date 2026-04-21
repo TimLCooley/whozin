@@ -1630,7 +1630,7 @@ export default function ActivityDetailPage() {
         <div className="fixed inset-0 z-[100] flex items-start justify-center px-6 pt-[max(1rem,env(safe-area-inset-top))]" onClick={() => !editSaving && setEditField(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div
-            className="relative bg-background rounded-2xl p-6 w-full max-w-sm max-h-[92dvh] overflow-y-auto shadow-xl animate-enter"
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-[16px] font-bold text-foreground mb-4">
