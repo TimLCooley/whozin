@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { AvatarImg } from '@/components/ui/avatar-img'
 import CountryCodeSelect from '@/components/auth/country-code-select'
 import { QRModal } from '@/components/app/qr-modal'
+import { isNative } from '@/lib/capacitor'
 
 interface Member {
   membership_id: string
@@ -1169,18 +1170,20 @@ export default function GroupDetailPage() {
               <span className="text-[13px] font-semibold text-foreground">My Friends</span>
             </button>
 
-            <button
-              onClick={() => { setModal(null); setTimeout(() => openDeviceContacts(), 100) }}
-              className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors col-span-2"
-            >
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16v16H4z" />
-                  <path d="M9 9h1M14 9h1M9 14h6" />
-                </svg>
-              </div>
-              <span className="text-[13px] font-semibold text-foreground">Search Contacts</span>
-            </button>
+            {isNative() && (
+              <button
+                onClick={() => { setModal(null); setTimeout(() => openDeviceContacts(), 100) }}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors col-span-2"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16v16H4z" />
+                    <path d="M9 9h1M14 9h1M9 14h6" />
+                  </svg>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground">Search Contacts</span>
+              </button>
+            )}
           </div>
         </BottomSheet>
       )}
