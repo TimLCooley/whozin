@@ -15,7 +15,7 @@ function loadGoogleMaps(): Promise<void> {
 
   googleScriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&loading=async&v=weekly`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&v=weekly`
     script.async = true
     script.onload = () => resolve()
     script.onerror = () => reject(new Error('Failed to load Google Maps'))
@@ -52,19 +52,20 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
   useEffect(() => {
     loadGoogleMaps()
       .then(async () => {
-        try {
-          // The async loader exposes importLibrary; the places namespace may be
-          // unavailable until this resolves on fresh loads.
-          await window.google?.maps?.importLibrary?.('places')
-        } catch {
-          // Non-fatal — legacy global may already expose the API
+        // importLibrary is safe to call on the sync loader too — resolves
+        // immediately if places is already populated, and hydrates it otherwise.
+        if (window.google?.maps?.importLibrary) {
+          try { await window.google.maps.importLibrary('places') } catch (e) { console.error('importLibrary(places) failed', e) }
         }
         const places = window.google?.maps?.places
-        if (!places?.AutocompleteSessionToken) return
+        if (!places?.AutocompleteSessionToken) {
+          console.error('Google Places API not available', { places })
+          return
+        }
         sessionTokenRef.current = new places.AutocompleteSessionToken()
         setReady(true)
       })
-      .catch(() => {})
+      .catch((e) => console.error('Google Maps load failed', e))
   }, [])
 
   useEffect(() => {
@@ -110,7 +111,8 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
 
       setSuggestions(next)
       setOpen(next.length > 0)
-    } catch {
+    } catch (e) {
+      console.error('fetchAutocompleteSuggestions failed', e)
       setSuggestions([])
       setOpen(false)
     } finally {
@@ -121,7 +123,6 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
   function handleChange(text: string) {
     onChange(text)
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!ready) return
     debounceRef.current = setTimeout(() => fetchSuggestions(text), 250)
   }
 
