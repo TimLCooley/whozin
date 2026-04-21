@@ -125,12 +125,15 @@ export default function ActivityDetailPage() {
         return
       }
       const res = await fetch(`/api/activities/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url: upData.url }),
       })
       if (res.ok) await loadActivity()
-      else alert('Failed to update activity')
+      else {
+        const err = await res.json().catch(() => ({}))
+        alert(err.error || 'Failed to update activity')
+      }
     } finally {
       setImageUploading(false)
     }
