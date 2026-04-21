@@ -15,7 +15,7 @@ function loadGoogleMaps(): Promise<void> {
 
   googleScriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&loading=async&v=weekly`
     script.async = true
     script.onload = () => resolve()
     script.onerror = () => reject(new Error('Failed to load Google Maps'))
@@ -33,34 +33,9 @@ interface PlacesAutocompleteProps {
 }
 
 interface Suggestion {
-  placeId: string
   primary: string
   secondary: string
-}
-
-type AutocompleteService = {
-  getPlacePredictions(
-    req: { input: string; sessionToken?: unknown },
-    cb: (predictions: PlacePrediction[] | null, status: string) => void
-  ): void
-}
-
-type PlacesService = {
-  getDetails(
-    req: { placeId: string; fields: string[]; sessionToken?: unknown },
-    cb: (place: PlaceDetails | null, status: string) => void
-  ): void
-}
-
-interface PlacePrediction {
-  place_id: string
-  description: string
-  structured_formatting?: { main_text?: string; secondary_text?: string }
-}
-
-interface PlaceDetails {
-  name?: string
-  formatted_address?: string
+  prediction: google.maps.places.PlacePrediction
 }
 
 export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for a location...', className }: PlacesAutocompleteProps) {
@@ -69,27 +44,29 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const serviceRef = useRef<AutocompleteService | null>(null)
-  const detailsRef = useRef<PlacesService | null>(null)
-  const sessionTokenRef = useRef<unknown>(null)
+  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const seqRef = useRef(0)
 
   useEffect(() => {
     loadGoogleMaps()
-      .then(() => {
+      .then(async () => {
+        try {
+          // The async loader exposes importLibrary; the places namespace may be
+          // unavailable until this resolves on fresh loads.
+          await window.google?.maps?.importLibrary?.('places')
+        } catch {
+          // Non-fatal — legacy global may already expose the API
+        }
         const places = window.google?.maps?.places
-        if (!places) return
-        serviceRef.current = new places.AutocompleteService() as unknown as AutocompleteService
-        // PlacesService needs a DOM node for attribution
-        detailsRef.current = new places.PlacesService(document.createElement('div')) as unknown as PlacesService
+        if (!places?.AutocompleteSessionToken) return
         sessionTokenRef.current = new places.AutocompleteSessionToken()
         setReady(true)
       })
       .catch(() => {})
   }, [])
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
@@ -101,32 +78,44 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const fetchSuggestions = useCallback((text: string) => {
-    if (!serviceRef.current || !text.trim()) {
+  const fetchSuggestions = useCallback(async (text: string) => {
+    const places = window.google?.maps?.places
+    if (!places?.AutocompleteSuggestion || !text.trim()) {
       setSuggestions([])
       setOpen(false)
       return
     }
+    const mySeq = ++seqRef.current
     setLoading(true)
-    serviceRef.current.getPlacePredictions(
-      { input: text, sessionToken: sessionTokenRef.current },
-      (predictions, status) => {
-        setLoading(false)
-        if (status !== 'OK' || !predictions) {
-          setSuggestions([])
-          setOpen(false)
-          return
-        }
-        setSuggestions(
-          predictions.slice(0, 5).map((p) => ({
-            placeId: p.place_id,
-            primary: p.structured_formatting?.main_text || p.description,
-            secondary: p.structured_formatting?.secondary_text || '',
-          }))
-        )
-        setOpen(true)
+    try {
+      const { suggestions: results } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        input: text,
+        sessionToken: sessionTokenRef.current ?? undefined,
+      })
+      if (mySeq !== seqRef.current) return
+
+      const next: Suggestion[] = []
+      for (const r of results ?? []) {
+        const pred = r.placePrediction
+        if (!pred) continue
+        const primary = pred.mainText?.text || pred.text?.text || ''
+        if (!primary) continue
+        next.push({
+          primary,
+          secondary: pred.secondaryText?.text || '',
+          prediction: pred,
+        })
+        if (next.length >= 5) break
       }
-    )
+
+      setSuggestions(next)
+      setOpen(next.length > 0)
+    } catch {
+      setSuggestions([])
+      setOpen(false)
+    } finally {
+      if (mySeq === seqRef.current) setLoading(false)
+    }
   }, [])
 
   function handleChange(text: string) {
@@ -136,26 +125,23 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
     debounceRef.current = setTimeout(() => fetchSuggestions(text), 250)
   }
 
-  function handleSelect(s: Suggestion) {
-    if (!detailsRef.current) {
-      onChange(s.secondary ? `${s.primary}, ${s.secondary}` : s.primary)
-      setOpen(false)
-      return
-    }
-    detailsRef.current.getDetails(
-      { placeId: s.placeId, fields: ['name', 'formatted_address'], sessionToken: sessionTokenRef.current },
-      (place, status) => {
-        const name = (status === 'OK' ? place?.name : '') || s.primary
-        const addr = (status === 'OK' ? place?.formatted_address : '') || s.secondary
-        const display = addr && !addr.startsWith(name) ? `${name}, ${addr}` : addr || name
-        onChange(display)
-        // New session after a selection
-        const places = window.google?.maps?.places
-        if (places) sessionTokenRef.current = new places.AutocompleteSessionToken()
-      }
-    )
+  async function handleSelect(s: Suggestion) {
     setOpen(false)
     setSuggestions([])
+    try {
+      const place = s.prediction.toPlace()
+      await place.fetchFields({ fields: ['displayName', 'formattedAddress'] })
+      const name = place.displayName || s.primary
+      const addr = place.formattedAddress || s.secondary
+      const display = addr && !addr.startsWith(name) ? `${name}, ${addr}` : addr || name
+      onChange(display)
+    } catch {
+      onChange(s.secondary ? `${s.primary}, ${s.secondary}` : s.primary)
+    }
+    const places = window.google?.maps?.places
+    if (places?.AutocompleteSessionToken) {
+      sessionTokenRef.current = new places.AutocompleteSessionToken()
+    }
   }
 
   return (
@@ -171,9 +157,9 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
       />
       {open && suggestions.length > 0 && (
         <div className="absolute left-0 right-0 top-full mt-1 bg-background border border-border/60 rounded-xl shadow-lg z-20 overflow-hidden">
-          {suggestions.map((s) => (
+          {suggestions.map((s, i) => (
             <button
-              key={s.placeId}
+              key={`${s.primary}-${i}`}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => handleSelect(s)}
