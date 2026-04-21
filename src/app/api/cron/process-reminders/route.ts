@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendPush } from '@/lib/push'
+import { sendReminderSms } from '@/lib/sms'
 
 /** Convert activity date + time in a given IANA timezone to a UTC Date */
 function parseActivityTime(dateStr: string, timeStr: string, timezone?: string | null): Date {
+  // Postgres `time` columns serialize as "HH:MM:SS"; inputs may also be "HH:MM".
+  // Normalize to "HH:MM:SS" before composing an ISO string.
+  const hm = timeStr.slice(0, 5)
+  const normalizedTime = `${hm}:00`
+
   if (!timezone) {
     // No timezone stored — treat as UTC (legacy activities)
-    return new Date(`${dateStr}T${timeStr}:00Z`)
+    return new Date(`${dateStr}T${normalizedTime}Z`)
   }
 
   // Interpret the date/time as UTC, then figure out the timezone offset
-  const asUtc = new Date(`${dateStr}T${timeStr}:00Z`)
+  const asUtc = new Date(`${dateStr}T${normalizedTime}Z`)
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -89,10 +95,10 @@ export async function GET(req: NextRequest) {
 
         if (existing) continue // Already sent
 
-        // Get confirmed members for this activity
+        // Get confirmed members (with phone for SMS) for this activity
         const { data: members } = await admin
           .from('whozin_activity_member')
-          .select('user_id')
+          .select('user_id, whozin_users!inner(phone)')
           .eq('activity_id', activity.id)
           .eq('status', 'confirmed')
 
@@ -115,6 +121,11 @@ export async function GET(req: NextRequest) {
             body: `Starting in ${window.label}!`,
             link: `/app/activities/${activity.id}`,
           }).catch(() => {})
+
+          const phone = (member as unknown as { whozin_users?: { phone?: string } }).whozin_users?.phone
+          if (phone) {
+            sendReminderSms(phone, activity.activity_name, window.label).catch(() => {})
+          }
 
           sent++
         }

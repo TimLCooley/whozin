@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify they're the creator
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, max_capacity, priority_invite, activity_name')
+    .select('creator_id, max_capacity, priority_invite, activity_name, chat_enabled')
     .eq('id', id)
     .single()
 
@@ -96,11 +96,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     link: `/app/activities/${id}`,
   }).catch(() => {})
 
-  // SMS for users without the app (no push token)
-  if (!targetUser?.push_token && targetUser?.phone && targetUser.text_notifications_enabled !== false) {
+  // SMS to all confirmed members (in addition to push) unless they've opted out
+  if (targetUser?.phone && targetUser.text_notifications_enabled !== false) {
+    const chatLine = activity.chat_enabled
+      ? ` Open or download the app to chat: https://whozin.io/dl`
+      : ` See details in the app: https://whozin.io/dl`
     sendSms(
       targetUser.phone,
-      `You're in for ${activityName}! See details & group chat in the app: https://whozin.io/dl`
+      `You're in for ${activityName}!${chatLine}`
     ).catch(() => {})
   }
 

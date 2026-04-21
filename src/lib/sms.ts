@@ -85,6 +85,17 @@ export async function sendActivityInvite(
   return sendSms(actualTo, message, imageUrl)
 }
 
+/** Send an activity reminder SMS */
+export async function sendReminderSms(
+  toPhone: string,
+  activityName: string,
+  windowLabel: string,
+) {
+  const { actualTo, testNote } = resolveRecipient(toPhone)
+  const message = `Whozin reminder: ${activityName} is starting in ${windowLabel}.${testNote}`
+  return sendSms(actualTo, message)
+}
+
 export async function sendFillInvite(
   toPhone: string,
   inviterName: string,
