@@ -6,6 +6,7 @@ import { AppHeader } from '@/components/app/header'
 import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
 import { usePaywall } from '@/hooks/use-pro-status'
 import ProBadge from '@/components/ui/pro-badge'
+import { ensureImage } from '@/lib/pdf-to-image'
 
 interface Preset {
   id: string
@@ -184,8 +185,9 @@ export default function CreateActivityPage() {
   async function handleImageUpload(file: File) {
     setUploadingImage(true)
     try {
+      const upload = await ensureImage(file)
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', upload)
       const res = await fetch('/api/activities/upload-image', {
         method: 'POST',
         body: formData,
@@ -568,7 +570,7 @@ export default function CreateActivityPage() {
                   </button>
                 </div>
               )}
-              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
+              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf" className="hidden"
                 onChange={(e) => { const file = e.target.files?.[0]; if (file) handleImageUpload(file) }} />
             </FieldCard>
 
@@ -1069,7 +1071,7 @@ export default function CreateActivityPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
+                accept="image/png,image/jpeg,image/webp,image/gif,application/pdf"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0]

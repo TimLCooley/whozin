@@ -6,6 +6,7 @@ import { AppHeader } from '@/components/app/header'
 import { AvatarImg } from '@/components/ui/avatar-img'
 import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
 import { createClient } from '@/lib/supabase/client'
+import { ensureImage } from '@/lib/pdf-to-image'
 
 interface MemberInfo {
   id: string
@@ -116,8 +117,9 @@ export default function ActivityDetailPage() {
   async function handleImageReplace(file: File) {
     setImageUploading(true)
     try {
+      const upload = await ensureImage(file)
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', upload)
       const up = await fetch('/api/activities/upload-image', { method: 'POST', body: formData })
       const upData = await up.json()
       if (!up.ok || !upData.url) {
@@ -708,7 +710,7 @@ export default function ActivityDetailPage() {
               <input
                 ref={imageInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
