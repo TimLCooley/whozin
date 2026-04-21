@@ -109,6 +109,32 @@ export default function ActivityDetailPage() {
   const [showTimerEdit, setShowTimerEdit] = useState(false)
   const [editTimerValue, setEditTimerValue] = useState(5)
   const [timerSaving, setTimerSaving] = useState(false)
+  const [imageExpanded, setImageExpanded] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleImageReplace(file: File) {
+    setImageUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const up = await fetch('/api/activities/upload-image', { method: 'POST', body: formData })
+      const upData = await up.json()
+      if (!up.ok || !upData.url) {
+        alert(upData.error || 'Upload failed')
+        return
+      }
+      const res = await fetch(`/api/activities/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: upData.url }),
+      })
+      if (res.ok) await loadActivity()
+      else alert('Failed to update activity')
+    } finally {
+      setImageUploading(false)
+    }
+  }
 
   function openEdit(field: 'location' | 'datetime' | 'cost') {
     if (!activity) return
@@ -624,6 +650,76 @@ export default function ActivityDetailPage() {
       <div ref={contentRef} className={`flex-1 ${tab === 'chat' ? 'flex flex-col min-h-0' : 'overflow-y-auto pb-4'}`}>
         {tab === 'details' && (
           <div className="px-4 pt-4 space-y-4 animate-enter">
+            {/* Hero image — cropped preview, tap to expand, host pencil to edit */}
+            {activity.image_url ? (
+              <div className="relative -mx-4 -mt-4 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setImageExpanded(true)}
+                  className="block w-full h-[200px] overflow-hidden bg-surface active:opacity-95 transition-opacity"
+                  aria-label="Expand image"
+                >
+                  <img
+                    src={activity.image_url}
+                    alt={activity.activity_name}
+                    className="w-full h-full object-cover object-top"
+                  />
+                </button>
+                {activity.is_creator && (
+                  <button
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={imageUploading}
+                    className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center active:bg-black/80 transition-colors shadow-lg"
+                    aria-label="Edit image"
+                  >
+                    {imageUploading ? (
+                      <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round">
+                        <path d="M21 12a9 9 0 11-6.219-8.56" />
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
+            ) : activity.is_creator ? (
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                disabled={imageUploading}
+                className="w-full h-[140px] rounded-xl border-2 border-dashed border-border/60 bg-surface flex flex-col items-center justify-center gap-2 text-muted active:bg-surface/80 transition-colors"
+              >
+                {imageUploading ? (
+                  <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                    <path d="M21 12a9 9 0 11-6.219-8.56" />
+                  </svg>
+                ) : (
+                  <>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <path d="M21 15l-5-5L5 21" />
+                    </svg>
+                    <span className="text-[13px] font-semibold">Add activity image</span>
+                  </>
+                )}
+              </button>
+            ) : null}
+            {activity.is_creator && (
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleImageReplace(file)
+                  e.target.value = ''
+                }}
+              />
+            )}
+
             {/* Host view */}
             {activity.is_creator && (
               <>
@@ -903,6 +999,31 @@ export default function ActivityDetailPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Expanded Image Modal */}
+      {imageExpanded && activity.image_url && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+          onClick={() => setImageExpanded(false)}
+        >
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
+          <button
+            onClick={() => setImageExpanded(false)}
+            className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center z-10 active:bg-white/25 transition-colors"
+            aria-label="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={activity.image_url}
+            alt={activity.activity_name}
+            className="relative max-w-full max-h-full object-contain animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
 
