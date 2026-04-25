@@ -82,6 +82,19 @@ export async function processActivityInvites(activityId: string) {
 
   // Check if full
   if (remainingSpots <= 0) {
+    // Cancel any still-pending invites for waiting members — the spot is gone.
+    await admin
+      .from('whozin_activity_member')
+      .update({ status: 'missed' })
+      .eq('activity_id', activityId)
+      .eq('status', 'waiting')
+
+    await admin
+      .from('whozin_invite')
+      .update({ status: 'expired' })
+      .eq('activity_id', activityId)
+      .eq('status', 'pending')
+
     await admin
       .from('whozin_activity')
       .update({ status: 'full', capacity_current: confirmed })
