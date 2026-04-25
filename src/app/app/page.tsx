@@ -19,6 +19,7 @@ interface ActivityCard {
   status: string
   chat_enabled: boolean
   reminder_enabled: boolean
+  waitlist_enabled: boolean
   timezone: string | null
   image_url: string | null
   is_creator: boolean
@@ -354,6 +355,19 @@ export default function AppHome() {
                               I&apos;m Out
                             </button>
                           </div>
+                        ) : (activity.waitlist_enabled && activity.my_status === 'missed') ? (
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
+                              className="flex-1 bg-amber-500 text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(245,158,11,0.3)] flex items-center justify-center gap-1.5"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              Join Wait List
+                            </button>
+                          </div>
                         ) : (activity.my_status === 'tbd' || activity.my_status === 'waiting' || activity.my_status === 'missed' || (!activity.my_status && !activity.is_creator)) ? (
                           <div className="flex gap-2 mt-3">
                             <button
@@ -503,6 +517,19 @@ export default function AppHome() {
                         className="px-4 py-2.5 rounded-lg bg-surface text-foreground text-[13px] font-bold border border-border/50 active:opacity-80 transition-opacity"
                       >
                         I&apos;m Out
+                      </button>
+                    </div>
+                  ) : (activity.waitlist_enabled && activity.my_status === 'missed') ? (
+                    <div className="flex gap-2 mt-3 pt-2.5 border-t border-amber-200">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
+                        className="flex-1 bg-amber-500 text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(245,158,11,0.3)] flex items-center justify-center gap-1.5"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        Join Wait List
                       </button>
                     </div>
                   ) : (activity.my_status === 'tbd' || activity.my_status === 'waiting' || activity.my_status === 'missed' || (!activity.my_status && !activity.is_creator)) ? (

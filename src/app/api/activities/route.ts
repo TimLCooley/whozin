@@ -134,6 +134,7 @@ export async function GET(req: NextRequest) {
       status: a.status,
       chat_enabled: a.chat_enabled,
       reminder_enabled: a.reminder_enabled,
+      waitlist_enabled: a.waitlist_enabled ?? false,
       timezone: a.timezone,
       image_url: a.image_url,
       note: a.note,
