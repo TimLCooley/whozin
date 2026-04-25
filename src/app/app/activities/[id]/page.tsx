@@ -14,7 +14,7 @@ import ProBadge from '@/components/ui/pro-badge'
 interface MemberInfo {
   id: string
   user_id: string
-  status: 'confirmed' | 'tbd' | 'waiting' | 'out' | 'missed'
+  status: 'confirmed' | 'tbd' | 'waiting' | 'waitlist' | 'out' | 'missed'
   priority_order: number
   responded_at: string | null
   user: {
@@ -59,6 +59,7 @@ type Tab = 'details' | 'group' | 'chat'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   confirmed: { label: 'Confirmed', color: 'text-green-600', icon: 'check' },
+  waitlist: { label: 'Wait List', color: 'text-blue-600', icon: 'waitlist' },
   waiting: { label: 'Invited', color: 'text-yellow-600', icon: 'clock' },
   tbd: { label: 'On Deck', color: 'text-muted', icon: 'queue' },
   missed: { label: 'Missed', color: 'text-orange-500', icon: 'missed' },
@@ -629,6 +630,7 @@ export default function ActivityDetailPage() {
 
   const confirmed = activity.members.filter((m) => m.status === 'confirmed')
   const waiting = activity.members.filter((m) => m.status === 'waiting')
+  const waitlist = activity.members.filter((m) => m.status === 'waitlist')
   const tbd = activity.members.filter((m) => m.status === 'tbd')
   const missed = activity.members.filter((m) => m.status === 'missed')
   const out = activity.members.filter((m) => m.status === 'out')
@@ -954,7 +956,8 @@ export default function ActivityDetailPage() {
             )}
 
             <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={setSelectedMember} />
-            {!isCountdownActive && <StatusSection title="Waiting" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
+            <StatusSection title="Wait List" count={waitlist.length} members={waitlist} statusKey="waitlist" onMemberTap={setSelectedMember} />
+            {!isCountdownActive && <StatusSection title="Invited" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
 
             {/* Status banner — show when invites are done */}
             {!isCountdownActive && isFull && tbd.length > 0 && (
@@ -1984,6 +1987,13 @@ function StatusIcon({ status }: { status: string }) {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00C853" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" strokeWidth={1.5} />
           <path d="M8 12l3 3 5-5" />
+        </svg>
+      )
+    case 'waitlist':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" strokeWidth={1.5} />
+          <path d="M8 12h8M12 8v8" />
         </svg>
       )
     case 'waiting':
