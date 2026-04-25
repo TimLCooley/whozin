@@ -85,6 +85,7 @@ export default function CreateActivityPage() {
   const [responseTimer, setResponseTimer] = useState(5)
   const [chatEnabled, setChatEnabled] = useState(false)
   const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
+  const [waitlistEnabled, setWaitlistEnabled] = useState(false)
   const [showTimerDropdown, setShowTimerDropdown] = useState(false)
   const [showNoGroupsModal, setShowNoGroupsModal] = useState(false)
 
@@ -145,9 +146,11 @@ export default function CreateActivityPage() {
         setNote(data.note ?? '')
         setCostType(data.cost_type ?? 'free')
         setCostAmount(data.cost ? String(data.cost) : '')
+        setDurationHours(data.duration_hours ?? 2)
         setReminderEnabled(data.reminder_enabled ?? false)
         setChatEnabled(data.chat_enabled ?? false)
         setAutoEmergencyFill(data.auto_emergency_fill ?? false)
+        setWaitlistEnabled(data.waitlist_enabled ?? false)
         setPriorityInvite(data.priority_invite ?? true)
         setResponseTimer(data.response_timer_minutes ?? 5)
         if (data.image_url) setImageUrl(data.image_url)
@@ -265,6 +268,7 @@ export default function CreateActivityPage() {
           chat_enabled: chatEnabled,
           reminder_enabled: reminderEnabled,
           auto_emergency_fill: autoEmergencyFill,
+          waitlist_enabled: waitlistEnabled,
           image_url: imageUrl || null,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
@@ -1407,6 +1411,27 @@ export default function CreateActivityPage() {
                   {autoEmergencyFill
                     ? 'When someone drops out, the next person on the list is automatically invited.'
                     : 'When someone drops out, you\'ll get a text to decide whether to fill the spot.'}
+                </p>
+              </FieldCard>
+            )}
+
+            {/* Wait List (Pro) */}
+            {!isAllMode && (
+              <FieldCard>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[14px] font-semibold text-foreground">Wait List</span>
+                    <ProBadge />
+                  </div>
+                  <Toggle
+                    checked={waitlistEnabled}
+                    onChange={(v) => { if (v && !requirePro()) return; setWaitlistEnabled(v) }}
+                  />
+                </div>
+                <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                  {isPro
+                    ? 'When the activity is full, anyone replying IN is added to a wait list. If a spot opens, the next person is auto-confirmed and notified.'
+                    : 'Upgrade to Pro to enable a wait list when the activity fills up.'}
                 </p>
               </FieldCard>
             )}

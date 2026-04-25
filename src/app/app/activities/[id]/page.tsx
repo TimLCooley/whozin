@@ -2321,15 +2321,14 @@ function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
     let startDate = ''
     let endDate = ''
     if (activity.activity_date) {
-      const date = activity.activity_date.replace(/-/g, '')
-      const time = activity.activity_time ? activity.activity_time.replace(/:/g, '') + '00' : '120000'
-      startDate = `${date}T${time}`
-      const start = new Date(`${activity.activity_date}T${activity.activity_time ?? '12:00'}`)
+      const start = new Date(`${activity.activity_date}T${activity.activity_time ?? '12:00:00'}`)
       const durMs = (activity.duration_hours ?? 2) * 60 * 60 * 1000
       const end = new Date(start.getTime() + durMs)
-      const endD = end.toISOString().split('T')[0].replace(/-/g, '')
-      const endT = String(end.getHours()).padStart(2, '0') + String(end.getMinutes()).padStart(2, '0') + '00'
-      endDate = `${endD}T${endT}`
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}` +
+        `T${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}00`
+      startDate = fmt(start)
+      endDate = fmt(end)
     }
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&location=${location}`
     window.open(url, '_blank')

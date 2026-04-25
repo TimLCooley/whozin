@@ -186,6 +186,7 @@ export async function POST(req: NextRequest) {
     reminder_enabled,
     image_url,
     auto_emergency_fill,
+    waitlist_enabled,
     timezone,
   } = body
 
@@ -225,6 +226,7 @@ export async function POST(req: NextRequest) {
       reminder_enabled: finalReminderEnabled,
       image_url: image_url || null,
       auto_emergency_fill: auto_emergency_fill ?? false,
+      waitlist_enabled: isPro ? (waitlist_enabled ?? false) : false,
       timezone: timezone || null,
       status: 'open',
     })
