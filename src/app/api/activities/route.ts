@@ -75,12 +75,13 @@ export async function GET(req: NextRequest) {
 
   // 'waiting' and 'missed' users never locked in a spot. Once the activity
   // is full or its date has passed, there's nothing they can do with it — hide
-  // the card. Past tab is always hidden for both statuses.
+  // the card. Exception: if waitlist is enabled, missed users can still join.
+  // Past tab is always hidden for both statuses.
   const visibleActivities = (activities ?? []).filter((a) => {
     const myStatus = statusMap.get(a.id)
     if (myStatus !== 'waiting' && myStatus !== 'missed') return true
     if (tab === 'past') return false
-    if (a.status === 'full') return false
+    if (a.status === 'full' && !(a.waitlist_enabled && myStatus === 'missed')) return false
     if (a.activity_date && a.activity_date < today) return false
     return true
   })
