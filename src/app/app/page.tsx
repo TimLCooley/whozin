@@ -92,18 +92,30 @@ export default function AppHome() {
   useEffect(() => { loadActivities() }, [loadActivities])
 
   async function handleResponse(activityId: string, response: 'in' | 'out') {
+    let predicted: 'confirmed' | 'out' | 'waitlist' = response === 'in' ? 'confirmed' : 'out'
+
     // Optimistic update
     setActivities((prev) =>
       sortActivities(
         prev.map((a) => {
           if (a.id !== activityId) return a
+          // If they're missed/out and the activity is full with waitlist on,
+          // they'll land on the wait list — predict that instead of confirmed.
+          if (
+            response === 'in' &&
+            a.waitlist_enabled &&
+            (a.my_status === 'missed' || a.my_status === 'out') &&
+            a.max_capacity != null &&
+            a.confirmed_count >= a.max_capacity
+          ) {
+            predicted = 'waitlist'
+          }
           const wasConfirmed = a.my_status === 'confirmed'
-          const nextStatus = response === 'in' ? 'confirmed' : 'out'
-          const willBeConfirmed = nextStatus === 'confirmed'
+          const willBeConfirmed = predicted === 'confirmed'
           const delta = willBeConfirmed === wasConfirmed ? 0 : willBeConfirmed ? 1 : -1
           return {
             ...a,
-            my_status: nextStatus,
+            my_status: predicted,
             confirmed_count: Math.max(0, a.confirmed_count + delta),
           }
         })
@@ -117,8 +129,7 @@ export default function AppHome() {
     })
 
     const data = await res.json().catch(() => null)
-    const expected = response === 'in' ? 'confirmed' : 'out'
-    if (!res.ok || (data?.status && data.status !== expected)) {
+    if (!res.ok || (data?.status && data.status !== predicted)) {
       loadActivities()
     }
   }
