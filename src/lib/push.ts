@@ -58,7 +58,6 @@ async function sendFcm(token: string, title: string, body: string, link?: string
       priority: 'high',
       notification: {
         channelId: 'default',
-        clickAction: 'FLUTTER_NOTIFICATION_CLICK',
       },
     },
   })

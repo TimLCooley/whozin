@@ -121,11 +121,33 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // Check if activity was full BEFORE this response (for emergency fill detection)
   const { data: activityBefore } = await admin
     .from('whozin_activity')
-    .select('status, max_capacity, auto_emergency_fill, creator_id')
+    .select('status, max_capacity, auto_emergency_fill, waitlist_enabled, creator_id')
     .eq('id', id)
     .single()
 
   const wasFull = activityBefore?.status === 'full'
+
+  // Wait list: a missed/out user replying IN on a full activity goes to wait list
+  // (only when waitlist is enabled and the user isn't the host)
+  if (
+    response === 'in' &&
+    wasFull &&
+    activityBefore?.waitlist_enabled &&
+    activityBefore.creator_id !== whozinUser.id
+  ) {
+    const { data: existing } = await admin
+      .from('whozin_activity_member')
+      .select('status')
+      .eq('activity_id', id)
+      .eq('user_id', whozinUser.id)
+      .single()
+
+    if (existing && (existing.status === 'missed' || existing.status === 'out')) {
+      const { addToWaitlist } = await import('@/lib/waitlist')
+      const result = await addToWaitlist(id, whozinUser.id)
+      return NextResponse.json({ status: 'waitlist', position: result.position })
+    }
+  }
 
   // Block non-host users from confirming when activity is full
   if (response === 'in' && wasFull && activityBefore?.creator_id !== whozinUser.id) {
@@ -168,23 +190,32 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   // Emergency fill: someone dropped out of a FULL activity
   if (response === 'out' && wasFull && activityBefore) {
-    // Get the name of who dropped out
-    const { data: dropout } = await admin
-      .from('whozin_users')
-      .select('first_name, last_name')
-      .eq('id', whozinUser.id)
-      .single()
+    // First try the wait list — auto-promote earliest waitlist member
+    let filledFromWaitlist = false
+    if (activityBefore.waitlist_enabled) {
+      const { promoteFromWaitlist } = await import('@/lib/waitlist')
+      filledFromWaitlist = await promoteFromWaitlist(id)
+    }
 
-    const dropoutName = dropout ? `${dropout.first_name} ${dropout.last_name}` : 'Someone'
+    if (!filledFromWaitlist) {
+      // Get the name of who dropped out
+      const { data: dropout } = await admin
+        .from('whozin_users')
+        .select('first_name, last_name')
+        .eq('id', whozinUser.id)
+        .single()
 
-    const { sendEmergencyFill, notifyHostOfDropout } = await import('@/lib/emergency-fill')
+      const dropoutName = dropout ? `${dropout.first_name} ${dropout.last_name}` : 'Someone'
 
-    if (activityBefore.auto_emergency_fill) {
-      // Auto mode: blast everyone immediately
-      await sendEmergencyFill(id)
-    } else {
-      // Manual mode: notify host, they decide
-      await notifyHostOfDropout(id, dropoutName)
+      const { sendEmergencyFill, notifyHostOfDropout } = await import('@/lib/emergency-fill')
+
+      if (activityBefore.auto_emergency_fill) {
+        // Auto mode: blast everyone immediately
+        await sendEmergencyFill(id)
+      } else {
+        // Manual mode: notify host, they decide
+        await notifyHostOfDropout(id, dropoutName)
+      }
     }
   } else {
     // Normal flow: advance the invite queue
@@ -257,6 +288,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.reminder_enabled !== undefined) updates.reminder_enabled = isPro ? body.reminder_enabled : false
   if (body.image_url !== undefined) updates.image_url = body.image_url || null
   if (body.auto_emergency_fill !== undefined) updates.auto_emergency_fill = body.auto_emergency_fill
+  if (body.waitlist_enabled !== undefined) updates.waitlist_enabled = isPro ? body.waitlist_enabled : false
 
   if (Object.keys(updates).length === 0 && !body.stop_current_batch) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

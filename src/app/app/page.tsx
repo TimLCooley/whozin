@@ -31,7 +31,8 @@ interface ActivityCard {
 function formatDate(date: string | null, time: string | null, duration?: number | null) {
   if (!date) return 'No date set'
   const d = new Date(date + 'T00:00:00')
-  const dateStr = d.toLocaleDateString('en-US', { month: 'numeric', day: '2-digit', year: '2-digit' })
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+  const dateStr = `${weekday} ${d.toLocaleDateString('en-US', { month: 'numeric', day: '2-digit', year: '2-digit' })}`
   if (!time) return dateStr
   const [h, m] = time.split(':')
   const hour = parseInt(h)
@@ -114,7 +115,9 @@ export default function AppHome() {
       body: JSON.stringify({ response }),
     })
 
-    if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    const expected = response === 'in' ? 'confirmed' : 'out'
+    if (!res.ok || (data?.status && data.status !== expected)) {
       loadActivities()
     }
   }
@@ -197,7 +200,7 @@ export default function AppHome() {
           <div className="space-y-3">
             {activities.map((activity, i) => {
               const needsResponse = activity.my_status === 'tbd' || activity.my_status === 'waiting'
-              const showReminder = activity.reminder_enabled && activity.my_status === 'confirmed'
+              const showReminder = activity.reminder_enabled && activity.is_creator && activity.my_status === 'confirmed'
               const nextReminder = showReminder ? getNextReminderLabel(activity.activity_date, activity.activity_time) : null
               return (
                 <div
@@ -260,33 +263,31 @@ export default function AppHome() {
 
                       {/* Bottom content over image */}
                       <div className="relative px-4 pb-4">
-                        <h3 className="text-[17px] font-bold text-white truncate drop-shadow-sm">{activity.activity_name}</h3>
+                        <h3 className="text-[30px] font-bold text-white truncate drop-shadow-sm">{activity.activity_name}</h3>
 
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
-                              <rect x="3" y="4" width="18" height="18" rx="2" />
-                              <path d="M3 10h18M8 2v4M16 2v4" />
-                            </svg>
-                            <span className="text-[11px] text-white/90">{formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)}</span>
-                          </div>
-                          {activity.location && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activity.location!)}`, '_blank')
-                              }}
-                              className="flex items-center gap-1.5 active:opacity-70 transition-opacity"
-                            >
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
-                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-                                <circle cx="12" cy="10" r="3" />
-                              </svg>
-                              <span className="text-[11px] text-white/90 truncate max-w-[160px] underline-offset-2 hover:underline">{activity.location}</span>
-                            </button>
-                          )}
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                            <rect x="3" y="4" width="18" height="18" rx="2" />
+                            <path d="M3 10h18M8 2v4M16 2v4" />
+                          </svg>
+                          <span className="text-[15px] text-white/90">{formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)}</span>
                         </div>
+                        {activity.location && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activity.location!)}`, '_blank')
+                            }}
+                            className="flex items-center gap-1.5 mt-1 active:opacity-70 transition-opacity"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="opacity-70">
+                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                              <circle cx="12" cy="10" r="3" />
+                            </svg>
+                            <span className="text-[15px] text-white/90 truncate max-w-[260px] underline-offset-2 hover:underline">{activity.location}</span>
+                          </button>
+                        )}
 
                         <div className="flex items-center gap-4 mt-1">
                           {activity.cost_type !== 'free' && (
@@ -295,7 +296,7 @@ export default function AppHome() {
                                 <line x1="12" y1="1" x2="12" y2="23" />
                                 <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
                               </svg>
-                              <span className="text-[11px] text-white/80">{formatCost(activity.cost_type, activity.cost)}</span>
+                              <span className="text-[15px] text-white/80">{formatCost(activity.cost_type, activity.cost)}</span>
                             </div>
                           )}
                           <div className="flex items-center gap-1.5">
@@ -304,7 +305,7 @@ export default function AppHome() {
                               <circle cx="9" cy="7" r="4" />
                               <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
                             </svg>
-                            <span className="text-[11px] text-white/80 font-medium">
+                            <span className="text-[15px] text-white/80 font-medium">
                               {activity.max_capacity
                                 ? `${activity.confirmed_count}/${activity.max_capacity}`
                                 : `${activity.confirmed_count} in`}
@@ -337,7 +338,23 @@ export default function AppHome() {
                               You&apos;re Out
                             </button>
                           </div>
-                        ) : (activity.my_status === 'tbd' || activity.my_status === 'waiting') ? (
+                        ) : activity.my_status === 'waitlist' ? (
+                          <div className="flex gap-2 mt-3">
+                            <div className="flex-1 bg-amber-500/90 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              On Wait List
+                            </div>
+                            <button
+                              onClick={(e) => handleOutClick(e, activity)}
+                              className="px-4 py-2.5 rounded-lg bg-white/20 backdrop-blur-sm text-white text-[13px] font-bold active:opacity-80 transition-opacity"
+                            >
+                              I&apos;m Out
+                            </button>
+                          </div>
+                        ) : (activity.my_status === 'tbd' || activity.my_status === 'waiting' || activity.my_status === 'missed' || (!activity.my_status && !activity.is_creator)) ? (
                           <div className="flex gap-2 mt-3">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
@@ -369,13 +386,13 @@ export default function AppHome() {
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-[15px] font-bold text-foreground truncate">{activity.activity_name}</h3>
+                      <h3 className="text-[30px] font-bold text-foreground truncate">{activity.activity_name}</h3>
                       <div className="flex items-center gap-1.5 mt-1 text-muted">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                           <rect x="3" y="4" width="18" height="18" rx="2" />
                           <path d="M3 10h18M8 2v4M16 2v4" />
                         </svg>
-                        <span className="text-[12px]">{formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)}</span>
+                        <span className="text-[15px]">{formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)}</span>
                       </div>
                     </div>
 
@@ -418,7 +435,7 @@ export default function AppHome() {
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                         <circle cx="12" cy="10" r="3" />
                       </svg>
-                      <span className="text-[12px] text-primary truncate underline-offset-2 hover:underline">{activity.location}</span>
+                      <span className="text-[15px] text-primary truncate underline-offset-2 hover:underline">{activity.location}</span>
                     </button>
                   )}
 
@@ -429,7 +446,7 @@ export default function AppHome() {
                         <line x1="12" y1="1" x2="12" y2="23" />
                         <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
                       </svg>
-                      <span className="text-[12px]">{formatCost(activity.cost_type, activity.cost)}</span>
+                      <span className="text-[15px]">{formatCost(activity.cost_type, activity.cost)}</span>
                     </div>
                   )}
 
@@ -440,7 +457,7 @@ export default function AppHome() {
                       <circle cx="9" cy="7" r="4" />
                       <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
                     </svg>
-                    <span className="text-[12px] font-medium">
+                    <span className="text-[15px] font-medium">
                       {activity.max_capacity
                         ? `${activity.confirmed_count} / ${activity.max_capacity} filled`
                         : `${activity.confirmed_count} in`}
@@ -472,7 +489,23 @@ export default function AppHome() {
                         You&apos;re Out
                       </button>
                     </div>
-                  ) : (activity.my_status === 'tbd' || activity.my_status === 'waiting') ? (
+                  ) : activity.my_status === 'waitlist' ? (
+                    <div className="flex gap-2 mt-3 pt-2.5 border-t border-amber-200">
+                      <div className="flex-1 bg-amber-500/10 text-amber-700 text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5 border border-amber-200">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        On Wait List
+                      </div>
+                      <button
+                        onClick={(e) => handleOutClick(e, activity)}
+                        className="px-4 py-2.5 rounded-lg bg-surface text-foreground text-[13px] font-bold border border-border/50 active:opacity-80 transition-opacity"
+                      >
+                        I&apos;m Out
+                      </button>
+                    </div>
+                  ) : (activity.my_status === 'tbd' || activity.my_status === 'waiting' || activity.my_status === 'missed' || (!activity.my_status && !activity.is_creator)) ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-primary/15">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
@@ -506,7 +539,7 @@ export default function AppHome() {
                           <circle cx="9" cy="7" r="4" />
                           <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
                         </svg>
-                        <span className="text-[12px] font-medium">
+                        <span className="text-[15px] font-medium">
                           {activity.max_capacity
                             ? `${activity.confirmed_count} / ${activity.max_capacity} filled`
                             : `${activity.confirmed_count} in`}
