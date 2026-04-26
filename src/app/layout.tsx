@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import CodeGrab from "@/components/dev/code-grab";
+import RunAsBanner from "@/components/admin/run-as-banner";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -165,6 +166,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${jakarta.variable} antialiased`} suppressHydrationWarning>
+        <RunAsBanner />
         {children}
         {process.env.NODE_ENV === "development" && <CodeGrab />}
         <Script

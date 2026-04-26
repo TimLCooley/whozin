@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 interface UserRow {
   id: string
@@ -31,6 +32,9 @@ export default function UsersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [reinviting, setReinviting] = useState(false)
   const [reinviteResult, setReinviteResult] = useState<{ sent: number; total: number } | null>(null)
+  const [runAsUser, setRunAsUser] = useState<UserRow | null>(null)
+  const [runningAs, setRunningAs] = useState(false)
+  const [runAsError, setRunAsError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/admin/users')
@@ -132,6 +136,39 @@ export default function UsersPage() {
     setEditUser(user)
     setEditFirst(user.first_name)
     setEditLast(user.last_name)
+  }
+
+  async function handleRunAs() {
+    if (!runAsUser) return
+    setRunningAs(true)
+    setRunAsError(null)
+    try {
+      const res = await fetch('/api/admin/users/run-as', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: runAsUser.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setRunAsError(data.error || 'Failed to start session')
+        setRunningAs(false)
+        return
+      }
+      const supabase = createClient()
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: data.token_hash,
+        type: 'magiclink',
+      })
+      if (error) {
+        setRunAsError(error.message)
+        setRunningAs(false)
+        return
+      }
+      window.location.href = '/app'
+    } catch (err) {
+      setRunAsError(err instanceof Error ? err.message : 'Unknown error')
+      setRunningAs(false)
+    }
   }
 
   async function handleSaveEdit() {
@@ -280,12 +317,22 @@ export default function UsersPage() {
                   <p className="text-xs text-muted">
                     Joined {new Date(user.created_at).toLocaleDateString()}
                   </p>
-                  <button
-                    onClick={() => setDeleteConfirm(user)}
-                    className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {user.auth_user_id && (
+                      <button
+                        onClick={() => { setRunAsError(null); setRunAsUser(user) }}
+                        className="text-xs text-primary hover:text-primary-dark font-medium px-2 py-1 rounded-lg hover:bg-primary/5 transition-colors"
+                      >
+                        Run As
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setDeleteConfirm(user)}
+                      className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -338,12 +385,22 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3 text-muted">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => setDeleteConfirm(user)}
-                        className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        {user.auth_user_id && (
+                          <button
+                            onClick={() => { setRunAsError(null); setRunAsUser(user) }}
+                            className="text-xs text-primary hover:text-primary-dark font-medium px-2 py-1 rounded-lg hover:bg-primary/5 transition-colors"
+                          >
+                            Run As
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setDeleteConfirm(user)}
+                          className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -398,6 +455,52 @@ export default function UsersPage() {
                 className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Run As Confirmation Modal */}
+      {runAsUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !runningAs && setRunAsUser(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">Run As {runAsUser.first_name || 'User'}?</h3>
+              <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
+                You&apos;ll be signed in as <span className="font-semibold">{runAsUser.first_name} {runAsUser.last_name}</span> and see the app exactly as they do.
+              </p>
+              <p className="text-[13px] text-muted mt-1.5">
+                A red banner will let you stop and return to your super admin session at any time.
+              </p>
+              {runAsError && (
+                <p className="text-[13px] text-red-600 mt-3">{runAsError}</p>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRunAsUser(null)}
+                disabled={runningAs}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRunAs}
+                disabled={runningAs}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {runningAs ? 'Starting…' : 'Run As'}
               </button>
             </div>
           </div>

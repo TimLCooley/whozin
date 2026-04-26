@@ -812,11 +812,14 @@ export default function ActivityDetailPage() {
                 <InfoRow icon="pin" label="Location" value={activity.location || "Not specified"} link={!!activity.location} onEdit={activity.is_creator ? () => openEdit('location') : undefined} />
                 <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)} trailing={<AddToCalendarButton activity={activity} />} onEdit={activity.is_creator ? () => openEdit('datetime') : undefined} />
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} onEdit={activity.is_creator ? () => openEdit('cost') : undefined} />
-                <InfoRow icon="people" label="Spots" value={
-                  activity.max_capacity
+                <InfoRow icon="people" label="Spots" value={(() => {
+                  const base = activity.max_capacity
                     ? `${confirmed.length} / ${activity.max_capacity} in`
                     : `${confirmed.length} in`
-                } />
+                  return activity.is_creator && waitlist.length > 0
+                    ? `${base} (${waitlist.length} waiting)`
+                    : base
+                })()} />
                 {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
                 {activity.priority_invite && (
                   <InfoRow icon="timer" label="Response Timer" value={
@@ -933,7 +936,7 @@ export default function ActivityDetailPage() {
                   <circle cx="12" cy="12" r="10" />
                   <path d="M12 16v-4M12 8h.01" />
                 </svg>
-                <span className="text-[12px] text-foreground/70">Tap any member to mark them <span className="font-semibold text-green-600">In</span> or <span className="font-semibold text-red-500">remove</span> them. Marking someone In will override the max capacity.</span>
+                <span className="text-[12px] text-foreground/70">Tap any member to mark them <span className="font-semibold text-green-600">In</span> or <span className="font-semibold text-red-500">Out</span>. Marking someone In will override the max capacity.</span>
               </div>
             )}
 
@@ -944,7 +947,7 @@ export default function ActivityDetailPage() {
                   {Math.floor(countdownSeconds / 60)}:{String(countdownSeconds % 60).padStart(2, '0')}
                 </div>
                 <p className="text-[13px] text-foreground/70 leading-snug">
-                  Invites will go out when the timer ends. Tap anyone below to <span className="font-semibold text-green-600">mark them in</span> or <span className="font-semibold text-red-500">remove them</span>.
+                  Invites will go out when the timer ends. Tap anyone below to <span className="font-semibold text-green-600">mark them In</span> or <span className="font-semibold text-red-500">Out</span>.
                 </p>
                 <button
                   onClick={handleStartInvites}
@@ -957,7 +960,7 @@ export default function ActivityDetailPage() {
 
             <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={setSelectedMember} />
             <StatusSection title="Wait List" count={waitlist.length} members={waitlist} statusKey="waitlist" onMemberTap={setSelectedMember} />
-            {!isCountdownActive && <StatusSection title="Invited" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
+            {!isCountdownActive && <StatusSection title="Inviting" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
 
             {/* Status banner — show when invites are done */}
             {!isCountdownActive && isFull && tbd.length > 0 && (
@@ -1054,7 +1057,7 @@ export default function ActivityDetailPage() {
                   disabled={memberActioning}
                   className="w-full py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
                 >
-                  {memberActioning ? 'Removing...' : 'Remove & Notify Open Spot'}
+                  {memberActioning ? 'Updating...' : 'Out & Notify Open Spot'}
                 </button>
               )}
 
@@ -1063,7 +1066,7 @@ export default function ActivityDetailPage() {
                 disabled={memberActioning}
                 className="w-full py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white active:opacity-80 transition-opacity disabled:opacity-50"
               >
-                {memberActioning ? 'Removing...' : 'Remove'}
+                {memberActioning ? 'Updating...' : 'Out'}
               </button>
               <button
                 onClick={() => setSelectedMember(null)}
