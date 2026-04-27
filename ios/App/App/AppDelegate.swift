@@ -6,6 +6,7 @@ import Capacitor
 // because SPM modules get dead-stripped when nothing references them.
 import PushNotificationsPlugin
 import AppleSignInPlugin
+import ContactsPlugin
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -25,6 +26,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         let pluginClasses: [String] = [
             "PushNotificationsPlugin",
             "AppleSignInPlugin",
+            "ContactsPlugin",
         ]
         for name in pluginClasses {
             if NSClassFromString(name) == nil {
