@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { createServerClient } from '@/lib/supabase/server'
+import { createServerClientReal as createServerClient } from '@/lib/supabase/server'
 import { isSuperAdmin } from '@/lib/auth'
 
 // GET — list build history (admin only)
