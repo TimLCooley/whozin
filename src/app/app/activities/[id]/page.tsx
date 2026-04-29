@@ -2395,8 +2395,16 @@ function openMapsDirections(destination: string) {
 }
 
 function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdit }: { icon: string; label: string; value: string; secondary?: string; link?: boolean; trailing?: React.ReactNode; onClick?: () => void; onEdit?: () => void }) {
+  const interactive = !!onClick
   return (
-    <div className="bg-background border border-border/50 rounded-xl px-4 py-3 flex items-start gap-3">
+    <div
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={interactive ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.() } } : undefined}
+      aria-label={interactive ? `${label}: ${value}` : undefined}
+      className={`bg-background border border-border/50 rounded-xl px-4 py-3 flex items-start gap-3 ${interactive ? 'active:bg-surface transition-colors cursor-pointer' : ''}`}
+    >
       <div className="mt-0.5 flex-shrink-0">
         {icon === 'calendar' && (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -2431,17 +2439,7 @@ function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdi
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium text-muted uppercase tracking-wider">{label}</p>
-        {onClick ? (
-          <button
-            type="button"
-            onClick={onClick}
-            className={`block w-full text-left text-[14px] font-medium mt-0.5 underline-offset-2 hover:underline ${link ? 'text-primary' : 'text-foreground'}`}
-          >
-            {value}
-          </button>
-        ) : (
-          <p className={`text-[14px] font-medium mt-0.5 ${link ? 'text-primary' : 'text-foreground'}`}>{value}</p>
-        )}
+        <p className={`text-[14px] font-medium mt-0.5 ${link ? 'text-primary' : 'text-foreground'}`}>{value}</p>
         {secondary && (
           <p className="text-[12px] text-muted mt-0.5 truncate">{secondary}</p>
         )}
@@ -2449,7 +2447,7 @@ function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdi
       {onEdit && (
         <button
           type="button"
-          onClick={onEdit}
+          onClick={(e) => { e.stopPropagation(); onEdit() }}
           className="flex-shrink-0 p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
           aria-label={`Edit ${label}`}
         >
@@ -2459,7 +2457,9 @@ function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdi
           </svg>
         </button>
       )}
-      {trailing}
+      {trailing && (
+        <span onClick={(e) => e.stopPropagation()}>{trailing}</span>
+      )}
     </div>
   )
 }
