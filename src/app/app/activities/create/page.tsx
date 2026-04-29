@@ -63,6 +63,7 @@ export default function CreateActivityPage() {
   const [activityTime, setActivityTime] = useState('')
   const [durationHours, setDurationHours] = useState<number>(2)
   const [location, setLocation] = useState('')
+  const [address, setAddress] = useState('')
   const [note, setNote] = useState('')
   const [reminderEnabled, setReminderEnabled] = useState(false)
   const [costType, setCostType] = useState<CostType>('free')
@@ -143,6 +144,7 @@ export default function CreateActivityPage() {
         setSelectedPreset(data.activity_type ?? '')
         setActivityName(data.activity_name ?? '')
         setLocation(data.location ?? '')
+        setAddress(data.address ?? '')
         setNote(data.note ?? '')
         setCostType(data.cost_type ?? 'free')
         setCostAmount(data.cost ? String(data.cost) : '')
@@ -259,6 +261,7 @@ export default function CreateActivityPage() {
           activity_time: activityTime || null,
           duration_hours: activityTime ? durationHours : null,
           location: location.trim() || null,
+          address: address.trim() || null,
           note: note.trim() || null,
           cost_type: costType,
           cost: costType !== 'free' ? parseFloat(costAmount) || null : null,
@@ -1037,8 +1040,24 @@ export default function CreateActivityPage() {
               <PlacesAutocomplete
                 value={location}
                 onChange={setLocation}
+                onPlaceSelected={(_name, addr) => setAddress(addr)}
+                onManualEdit={() => setAddress('')}
                 placeholder="Search for a location..."
               />
+              {location.trim() && !address.trim() && (
+                <div className="mt-2">
+                  <p className="text-[12px] text-muted mb-1.5">
+                    Add a physical address so people can get directions.
+                  </p>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="e.g. 123 Main St, San Diego, CA"
+                    className="input-field"
+                  />
+                </div>
+              )}
             </FieldCard>
 
             {/* Note */}

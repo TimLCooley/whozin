@@ -28,6 +28,13 @@ function loadGoogleMaps(): Promise<void> {
 interface PlacesAutocompleteProps {
   value: string
   onChange: (value: string) => void
+  /** Called when the user picks a Google Places result. `address` is the
+   *  Place's formattedAddress; `name` is its displayName. Use this to capture
+   *  a physical address separately from whatever the user types. */
+  onPlaceSelected?: (name: string, address: string) => void
+  /** Called when the user types into the input manually (vs picking from the
+   *  dropdown). Lets the parent clear any previously-stored address. */
+  onManualEdit?: () => void
   placeholder?: string
   className?: string
 }
@@ -38,7 +45,7 @@ interface Suggestion {
   prediction: google.maps.places.PlacePrediction
 }
 
-export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for a location...', className }: PlacesAutocompleteProps) {
+export function PlacesAutocomplete({ value, onChange, onPlaceSelected, onManualEdit, placeholder = 'Search for a location...', className }: PlacesAutocompleteProps) {
   const [ready, setReady] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [open, setOpen] = useState(false)
@@ -122,6 +129,7 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
 
   function handleChange(text: string) {
     onChange(text)
+    onManualEdit?.()
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => fetchSuggestions(text), 250)
   }
@@ -136,8 +144,11 @@ export function PlacesAutocomplete({ value, onChange, placeholder = 'Search for 
       const addr = place.formattedAddress || s.secondary
       const display = addr && !addr.startsWith(name) ? `${name}, ${addr}` : addr || name
       onChange(display)
+      onPlaceSelected?.(name, addr || '')
     } catch {
-      onChange(s.secondary ? `${s.primary}, ${s.secondary}` : s.primary)
+      const fallback = s.secondary ? `${s.primary}, ${s.secondary}` : s.primary
+      onChange(fallback)
+      onPlaceSelected?.(s.primary, s.secondary || '')
     }
     const places = window.google?.maps?.places
     if (places?.AutocompleteSessionToken) {
