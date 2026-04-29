@@ -270,6 +270,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.activity_time !== undefined) updates.activity_time = body.activity_time || null
   if (body.duration_hours !== undefined) updates.duration_hours = body.duration_hours ?? null
   if (body.location !== undefined) updates.location = body.location?.trim() || null
+  if (body.address !== undefined) updates.address = body.address?.trim() || null
   if (body.note !== undefined) updates.note = body.note?.trim() || null
   if (body.cost_type !== undefined) {
     updates.cost_type = body.cost_type

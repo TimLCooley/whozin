@@ -33,6 +33,7 @@ interface ActivityDetail {
   activity_time: string | null
   duration_hours: number | null
   location: string | null
+  address: string | null
   cost: number | null
   cost_type: string
   note: string | null
@@ -113,6 +114,7 @@ export default function ActivityDetailPage() {
   const [editField, setEditField] = useState<'name' | 'location' | 'datetime' | 'cost' | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [editLocation, setEditLocation] = useState('')
+  const [editAddress, setEditAddress] = useState('')
   const [editName, setEditName] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editTime, setEditTime] = useState('')
@@ -194,7 +196,10 @@ export default function ActivityDetailPage() {
   function openEdit(field: 'name' | 'location' | 'datetime' | 'cost') {
     if (!activity) return
     if (field === 'name') setEditName(activity.activity_name ?? '')
-    if (field === 'location') setEditLocation(activity.location ?? '')
+    if (field === 'location') {
+      setEditLocation(activity.location ?? '')
+      setEditAddress(activity.address ?? '')
+    }
     if (field === 'datetime') {
       setEditDate(activity.activity_date ?? '')
       setEditTime(activity.activity_time ?? '')
@@ -221,6 +226,7 @@ export default function ActivityDetailPage() {
     }
     if (editField === 'location') {
       payload.location = editLocation.trim() || null
+      payload.address = editAddress.trim() || null
     }
     if (editField === 'datetime') {
       payload.activity_date = editDate || null
@@ -807,7 +813,15 @@ export default function ActivityDetailPage() {
                    activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
                 </div>
 
-                <InfoRow icon="pin" label="Location" value={activity.location || "Not specified"} link={!!activity.location} onEdit={activity.is_creator ? () => openEdit('location') : undefined} />
+                <InfoRow
+                  icon="pin"
+                  label="Location"
+                  value={activity.location || "Not specified"}
+                  secondary={activity.address || undefined}
+                  link={!!(activity.location || activity.address)}
+                  onClick={(activity.location || activity.address) ? () => openMapsDirections(activity.address || activity.location || '') : undefined}
+                  onEdit={activity.is_creator ? () => openEdit('location') : undefined}
+                />
                 <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)} trailing={<AddToCalendarButton activity={activity} />} onEdit={activity.is_creator ? () => openEdit('datetime') : undefined} />
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} onEdit={activity.is_creator ? () => openEdit('cost') : undefined} />
                 <InfoRow icon="people" label="Spots" value={
@@ -883,7 +897,14 @@ export default function ActivityDetailPage() {
             {/* Invitee view — just the essentials */}
             {!activity.is_creator && (
               <>
-                <InfoRow icon="pin" label="Location" value={activity.location || "Not specified"} link={!!activity.location} />
+                <InfoRow
+                  icon="pin"
+                  label="Location"
+                  value={activity.location || "Not specified"}
+                  secondary={activity.address || undefined}
+                  link={!!(activity.location || activity.address)}
+                  onClick={(activity.location || activity.address) ? () => openMapsDirections(activity.address || activity.location || '') : undefined}
+                />
                 <InfoRow icon="calendar" label="Date & Time" value={formatDate(activity.activity_date, activity.activity_time, activity.duration_hours)} trailing={<AddToCalendarButton activity={activity} />} />
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
 
@@ -1812,11 +1833,29 @@ export default function ActivityDetailPage() {
             )}
 
             {editField === 'location' && (
-              <PlacesAutocomplete
-                value={editLocation}
-                onChange={setEditLocation}
-                placeholder="Search for a location..."
-              />
+              <div className="space-y-2">
+                <PlacesAutocomplete
+                  value={editLocation}
+                  onChange={setEditLocation}
+                  onPlaceSelected={(_name, addr) => setEditAddress(addr)}
+                  onManualEdit={() => setEditAddress('')}
+                  placeholder="Search for a location..."
+                />
+                {editLocation.trim() && !editAddress.trim() && (
+                  <p className="text-[12px] text-muted">
+                    Add a physical address so people can get directions.
+                  </p>
+                )}
+                {editLocation.trim() && (
+                  <input
+                    type="text"
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    placeholder="Address (e.g. 123 Main St)"
+                    className="input-field"
+                  />
+                )}
+              </div>
             )}
 
             {editField === 'datetime' && (
@@ -2317,7 +2356,7 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
 function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
   function handleAddToCalendar() {
     const title = encodeURIComponent(activity.activity_name)
-    const location = encodeURIComponent(activity.location ?? '')
+    const location = encodeURIComponent(activity.address || activity.location || '')
     let startDate = ''
     let endDate = ''
     if (activity.activity_date) {
@@ -2349,7 +2388,13 @@ function AddToCalendarButton({ activity }: { activity: ActivityDetail }) {
   )
 }
 
-function InfoRow({ icon, label, value, link, trailing, onEdit }: { icon: string; label: string; value: string; link?: boolean; trailing?: React.ReactNode; onEdit?: () => void }) {
+function openMapsDirections(destination: string) {
+  if (!destination) return
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdit }: { icon: string; label: string; value: string; secondary?: string; link?: boolean; trailing?: React.ReactNode; onClick?: () => void; onEdit?: () => void }) {
   return (
     <div className="bg-background border border-border/50 rounded-xl px-4 py-3 flex items-start gap-3">
       <div className="mt-0.5 flex-shrink-0">
@@ -2386,7 +2431,20 @@ function InfoRow({ icon, label, value, link, trailing, onEdit }: { icon: string;
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-medium text-muted uppercase tracking-wider">{label}</p>
-        <p className={`text-[14px] font-medium mt-0.5 ${link ? 'text-primary' : 'text-foreground'}`}>{value}</p>
+        {onClick ? (
+          <button
+            type="button"
+            onClick={onClick}
+            className={`block w-full text-left text-[14px] font-medium mt-0.5 underline-offset-2 hover:underline ${link ? 'text-primary' : 'text-foreground'}`}
+          >
+            {value}
+          </button>
+        ) : (
+          <p className={`text-[14px] font-medium mt-0.5 ${link ? 'text-primary' : 'text-foreground'}`}>{value}</p>
+        )}
+        {secondary && (
+          <p className="text-[12px] text-muted mt-0.5 truncate">{secondary}</p>
+        )}
       </div>
       {onEdit && (
         <button

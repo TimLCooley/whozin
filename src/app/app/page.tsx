@@ -12,6 +12,7 @@ interface ActivityCard {
   activity_time: string | null
   duration_hours: number | null
   location: string | null
+  address: string | null
   cost: number | null
   cost_type: string
   max_capacity: number | null
@@ -289,7 +290,7 @@ export default function AppHome() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
-                              window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activity.location!)}`, '_blank')
+                              window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(activity.address || activity.location!)}`, '_blank')
                             }}
                             className="flex items-center gap-1.5 mt-1 active:opacity-70 transition-opacity"
                           >
@@ -452,7 +453,7 @@ export default function AppHome() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activity.location!)}`, '_blank')
+                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(activity.address || activity.location!)}`, '_blank')
                       }}
                       className="flex items-center gap-1.5 mt-2 text-muted active:opacity-70 transition-opacity"
                     >
