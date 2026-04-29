@@ -1042,22 +1042,19 @@ export default function CreateActivityPage() {
                 onChange={setLocation}
                 onPlaceSelected={(_name, addr) => setAddress(addr)}
                 onManualEdit={() => setAddress('')}
-                placeholder="Search for a location..."
+                placeholder="e.g. Tim's House"
               />
-              {location.trim() && !address.trim() && (
-                <div className="mt-2">
-                  <p className="text-[12px] text-muted mb-1.5">
-                    Add a physical address so people can get directions.
-                  </p>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="e.g. 123 Main St, San Diego, CA"
-                    className="input-field"
-                  />
-                </div>
-              )}
+              <div className="mt-3">
+                <FieldLabel>Address</FieldLabel>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="e.g. 123 Main St, San Diego, CA"
+                  className="input-field"
+                />
+                <p className="text-[11px] text-muted mt-1">Used for directions and the calendar invite.</p>
+              </div>
             </FieldCard>
 
             {/* Note */}

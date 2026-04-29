@@ -1833,28 +1833,28 @@ export default function ActivityDetailPage() {
             )}
 
             {editField === 'location' && (
-              <div className="space-y-2">
-                <PlacesAutocomplete
-                  value={editLocation}
-                  onChange={setEditLocation}
-                  onPlaceSelected={(_name, addr) => setEditAddress(addr)}
-                  onManualEdit={() => setEditAddress('')}
-                  placeholder="Search for a location..."
-                />
-                {editLocation.trim() && !editAddress.trim() && (
-                  <p className="text-[12px] text-muted">
-                    Add a physical address so people can get directions.
-                  </p>
-                )}
-                {editLocation.trim() && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] font-medium text-muted uppercase tracking-wider mb-1.5">Name</p>
+                  <PlacesAutocomplete
+                    value={editLocation}
+                    onChange={setEditLocation}
+                    onPlaceSelected={(_name, addr) => setEditAddress(addr)}
+                    onManualEdit={() => setEditAddress('')}
+                    placeholder="e.g. Tim's House"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] font-medium text-muted uppercase tracking-wider mb-1.5">Address</p>
                   <input
                     type="text"
                     value={editAddress}
                     onChange={(e) => setEditAddress(e.target.value)}
-                    placeholder="Address (e.g. 123 Main St)"
+                    placeholder="e.g. 123 Main St, Nashville, TN"
                     className="input-field"
                   />
-                )}
+                  <p className="text-[11px] text-muted mt-1">Used for directions and the calendar invite.</p>
+                </div>
               </div>
             )}
 
