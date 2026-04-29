@@ -1,5 +1,6 @@
 import { getAdminClient } from '@/lib/supabase/admin'
-import { sendPush, pushGroupMembers } from '@/lib/push'
+import { sendPush } from '@/lib/push'
+import { sendSms, isTestNumber } from '@/lib/sms'
 
 interface CreateAlertParams {
   user_id: string
@@ -8,6 +9,34 @@ interface CreateAlertParams {
   body: string
   link?: string
   meta?: Record<string, unknown>
+}
+
+const CHAT_SMS_FALLBACK_BODY =
+  'You have a chat waiting on Whozin. Download the app: https://whozin.io/dl'
+
+/**
+ * Try push first; if the user has no push token or push is disabled, fall back
+ * to SMS for chat messages so recipients without the app still get notified.
+ */
+async function deliverChatNotification(userId: string, title: string, body: string, link?: string) {
+  const sent = await sendPush({ userId, title, body, link }).catch(() => false)
+  if (sent) return
+
+  const admin = getAdminClient()
+  const { data: user } = await admin
+    .from('whozin_users')
+    .select('phone, country_code, text_notifications_enabled')
+    .eq('id', userId)
+    .single()
+
+  if (!user?.phone || user.text_notifications_enabled === false) return
+
+  const phone = user.phone.startsWith('+')
+    ? user.phone
+    : `+${(user.country_code || '1').replace(/\D/g, '')}${user.phone.replace(/\D/g, '')}`
+
+  const finalTo = isTestNumber(phone) ? '+16193019180' : phone
+  await sendSms(finalTo, CHAT_SMS_FALLBACK_BODY).catch(() => {})
 }
 
 export async function createAlert(params: CreateAlertParams) {
@@ -21,13 +50,16 @@ export async function createAlert(params: CreateAlertParams) {
     meta: params.meta || {},
   })
 
-  // Also send push notification (fire and forget)
-  sendPush({
-    userId: params.user_id,
-    title: params.title,
-    body: params.body,
-    link: params.link,
-  }).catch(() => {})
+  if (params.type === 'chat_message') {
+    deliverChatNotification(params.user_id, params.title, params.body, params.link).catch(() => {})
+  } else {
+    sendPush({
+      userId: params.user_id,
+      title: params.title,
+      body: params.body,
+      link: params.link,
+    }).catch(() => {})
+  }
 }
 
 // Create alerts for all group members except the actor
@@ -56,10 +88,20 @@ export async function alertGroupMembers(
 
   await admin.from('whozin_alerts').insert(rows)
 
-  // Also send push notifications (fire and forget)
-  pushGroupMembers(groupId, excludeUserId, {
-    title: alert.title,
-    body: alert.body,
-    link: alert.link,
-  }).catch(() => {})
+  if (alert.type === 'chat_message') {
+    Promise.allSettled(
+      members.map((m) => deliverChatNotification(m.user_id, alert.title, alert.body, alert.link))
+    ).catch(() => {})
+  } else {
+    Promise.allSettled(
+      members.map((m) =>
+        sendPush({
+          userId: m.user_id,
+          title: alert.title,
+          body: alert.body,
+          link: alert.link,
+        })
+      )
+    ).catch(() => {})
+  }
 }
