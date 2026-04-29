@@ -134,6 +134,22 @@ export default function UsersPage() {
     setEditLast(user.last_name)
   }
 
+  async function runAs(user: UserRow) {
+    const name = `${user.first_name} ${user.last_name}`.trim() || user.phone
+    if (!confirm(`Run as ${name}? You'll see and act as them until you click "Stop" in the banner.`)) return
+    const res = await fetch('/api/admin/impersonate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: user.id }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || 'Failed to start impersonation')
+      return
+    }
+    window.location.href = '/app'
+  }
+
   async function handleSaveEdit() {
     if (!editUser) return
     setSaving(true)
@@ -280,12 +296,22 @@ export default function UsersPage() {
                   <p className="text-xs text-muted">
                     Joined {new Date(user.created_at).toLocaleDateString()}
                   </p>
-                  <button
-                    onClick={() => setDeleteConfirm(user)}
-                    className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex gap-1">
+                    {user.auth_user_id && (
+                      <button
+                        onClick={() => runAs(user)}
+                        className="text-xs text-primary hover:text-primary/80 font-medium px-2 py-1 rounded-lg hover:bg-primary/5 transition-colors"
+                      >
+                        Run as
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setDeleteConfirm(user)}
+                      className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -338,12 +364,22 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3 text-muted">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => setDeleteConfirm(user)}
-                        className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        {user.auth_user_id && (
+                          <button
+                            onClick={() => runAs(user)}
+                            className="text-xs text-primary hover:text-primary/80 font-medium px-2 py-1 rounded-lg hover:bg-primary/5 transition-colors"
+                          >
+                            Run as
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setDeleteConfirm(user)}
+                          className="text-xs text-danger/70 hover:text-danger font-medium px-2 py-1 rounded-lg hover:bg-danger/5 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

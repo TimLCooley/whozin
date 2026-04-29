@@ -9,6 +9,7 @@ import { usePushNotifications } from '@/lib/use-push-notifications'
 import { BottomNav } from '@/components/app/bottom-nav'
 import { PushPermissionGate } from '@/components/app/push-permission-gate'
 import { ForceUpdateGate } from '@/components/app/force-update-gate'
+import { ImpersonationBanner } from '@/components/app/impersonation-banner'
 import { PaywallModal } from '@/components/ui/paywall-modal'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -151,6 +152,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ForceUpdateGate>
       <div className="h-dvh md:flex md:items-center md:justify-center md:bg-gray-100">
         <div className="relative w-full h-full md:max-w-[480px] md:h-[calc(100dvh-4rem)] md:max-h-[932px] md:rounded-3xl md:shadow-2xl md:border md:border-gray-200 bg-background flex flex-col" style={{ transform: 'translateZ(0)' }}>
+          <ImpersonationBanner />
           <div className="flex-1 flex flex-col min-h-0">
             {children}
           </div>
