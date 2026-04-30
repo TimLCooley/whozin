@@ -390,6 +390,32 @@ export default function ActivityDetailPage() {
     await loadActivity()
   }
 
+  async function handleReorderTbd(fromIdx: number, toIdx: number) {
+    if (!activity) return
+    const tbdMembers = activity.members.filter((m) => m.status === 'tbd')
+    if (fromIdx === toIdx || fromIdx < 0 || fromIdx >= tbdMembers.length || toIdx < 0 || toIdx >= tbdMembers.length) return
+
+    const reordered = [...tbdMembers]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+
+    // Reuse the existing TBD priority_order values, redistributed in the new sequence
+    const existingPriorities = tbdMembers.map((m) => m.priority_order).sort((a, b) => a - b)
+    const idToNewPriority = new Map(reordered.map((m, i) => [m.id, existingPriorities[i]]))
+
+    const newMembers = activity.members.map((m) => idToNewPriority.has(m.id) ? { ...m, priority_order: idToNewPriority.get(m.id)! } : m)
+    setActivity({ ...activity, members: newMembers })
+
+    const res = await fetch(`/api/activities/${id}/reorder-members`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order: reordered.map((m, i) => ({ activity_member_id: m.id, priority_order: existingPriorities[i] })),
+      }),
+    })
+    if (!res.ok) await loadActivity()
+  }
+
   async function handleEmergencyFill() {
     setEmergencySending(true)
     const res = await fetch(`/api/activities/${id}/emergency-fill`, { method: 'POST' })
@@ -637,7 +663,7 @@ export default function ActivityDetailPage() {
   const confirmed = activity.members.filter((m) => m.status === 'confirmed')
   const waiting = activity.members.filter((m) => m.status === 'waiting')
   const waitlist = activity.members.filter((m) => m.status === 'waitlist')
-  const tbd = activity.members.filter((m) => m.status === 'tbd')
+  const tbd = activity.members.filter((m) => m.status === 'tbd').sort((a, b) => a.priority_order - b.priority_order)
   const missed = activity.members.filter((m) => m.status === 'missed')
   const out = activity.members.filter((m) => m.status === 'out')
 
@@ -965,7 +991,7 @@ export default function ActivityDetailPage() {
                   {Math.floor(countdownSeconds / 60)}:{String(countdownSeconds % 60).padStart(2, '0')}
                 </div>
                 <p className="text-[13px] text-foreground/70 leading-snug">
-                  Invites will go out when the timer ends. Tap anyone below to <span className="font-semibold text-green-600">mark them in</span> or <span className="font-semibold text-red-500">remove them</span>.
+                  Invites will go out when the timer ends. Tap anyone below to <span className="font-semibold text-green-600">mark them in</span> or <span className="font-semibold text-red-500">remove them</span>, or use the arrows to reorder.
                 </p>
                 <button
                   onClick={handleStartInvites}
@@ -1001,7 +1027,7 @@ export default function ActivityDetailPage() {
             )}
 
             {/* On Deck — always tappable for host */}
-            <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" onMemberTap={setSelectedMember} />
+            <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" onMemberTap={setSelectedMember} onReorder={isCountdownActive ? handleReorderTbd : undefined} />
 
             {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" onMemberTap={setSelectedMember} />}
             <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={setSelectedMember} />
@@ -1959,6 +1985,7 @@ function StatusSection({
   members,
   statusKey,
   onMemberTap,
+  onReorder,
 }: {
   title: string
   count: number
@@ -1967,6 +1994,7 @@ function StatusSection({
   members: MemberInfo[]
   statusKey: string
   onMemberTap?: (member: MemberInfo) => void
+  onReorder?: (fromIdx: number, toIdx: number) => void
 }) {
   const config = STATUS_CONFIG[statusKey]
   return (
@@ -2001,6 +2029,30 @@ function StatusSection({
                   </p>
                   <p className={`text-[11px] font-medium ${config.color}`}>{config.label}</p>
                 </div>
+                {onReorder && (
+                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (i > 0) onReorder(i, i - 1) }}
+                      disabled={i === 0}
+                      className="p-1 text-muted disabled:opacity-30 active:text-primary"
+                      aria-label="Move up"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 15l-6-6-6 6" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (i < members.length - 1) onReorder(i, i + 1) }}
+                      disabled={i === members.length - 1}
+                      className="p-1 text-muted disabled:opacity-30 active:text-primary"
+                      aria-label="Move down"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
                 {onMemberTap ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
                     <path d="M9 18l6-6-6-6" />
