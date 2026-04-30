@@ -1305,7 +1305,7 @@ export default function CreateActivityPage() {
                     />
                   )}
                   <p className="text-[12px] text-muted mt-2 leading-relaxed">
-                    {customMode === 'no_max' && 'No cap — everyone in the group is invited at once.'}
+                    {customMode === 'no_max' && 'No cap — anyone can say they are In.'}
                     {customMode === 'number' && 'Set a specific cap for this activity.'}
                   </p>
                 </div>
