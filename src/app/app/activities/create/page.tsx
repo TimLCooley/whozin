@@ -80,7 +80,7 @@ export default function CreateActivityPage() {
   const [groups, setGroups] = useState<GroupOption[]>([])
   const [selectedGroup, setSelectedGroup] = useState<string>('')
   const [maxCapacity, setMaxCapacity] = useState<number | 'custom'>(2)
-  const [customMode, setCustomMode] = useState<'number' | 'all' | 'any'>('number')
+  const [customMode, setCustomMode] = useState<'number' | 'no_max'>('number')
   const [customCapacity, setCustomCapacity] = useState('')
   const [priorityInvite, setPriorityInvite] = useState(true)
   const [responseTimer, setResponseTimer] = useState(5)
@@ -233,12 +233,11 @@ export default function CreateActivityPage() {
     setGeneratingImage(false)
   }
 
-  const isAllMode = maxCapacity === 'custom' && customMode === 'all'
+  const isAllMode = maxCapacity === 'custom' && customMode === 'no_max'
 
   function getEffectiveMaxCapacity(): number | null {
     if (maxCapacity === 'custom') {
-      if (customMode === 'all') return null
-      if (customMode === 'any') return 999
+      if (customMode === 'no_max') return null
       return parseInt(customCapacity) || null
     }
     return maxCapacity
@@ -1285,24 +1284,14 @@ export default function CreateActivityPage() {
                       Number
                     </button>
                     <button
-                      onClick={() => setCustomMode('all')}
+                      onClick={() => setCustomMode('no_max')}
                       className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
-                        customMode === 'all'
+                        customMode === 'no_max'
                           ? 'bg-primary text-white'
                           : 'bg-surface text-muted border border-border/50'
                       }`}
                     >
-                      All
-                    </button>
-                    <button
-                      onClick={() => setCustomMode('any')}
-                      className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
-                        customMode === 'any'
-                          ? 'bg-primary text-white'
-                          : 'bg-surface text-muted border border-border/50'
-                      }`}
-                    >
-                      Any
+                      No Maximum
                     </button>
                   </div>
                   {customMode === 'number' && (
@@ -1316,8 +1305,7 @@ export default function CreateActivityPage() {
                     />
                   )}
                   <p className="text-[12px] text-muted mt-2 leading-relaxed">
-                    {customMode === 'all' && 'Everyone in the group is invited — no cap, all invited at once.'}
-                    {customMode === 'any' && 'Up to 999 spots — invites sent in priority order.'}
+                    {customMode === 'no_max' && 'No cap — everyone in the group is invited at once.'}
                     {customMode === 'number' && 'Set a specific cap for this activity.'}
                   </p>
                 </div>
