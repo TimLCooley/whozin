@@ -83,6 +83,8 @@ export default function CreateActivityPage() {
   const [customMode, setCustomMode] = useState<'number' | 'no_max'>('number')
   const [customCapacity, setCustomCapacity] = useState('')
   const [priorityInvite, setPriorityInvite] = useState(true)
+  const [inviteBatchSize, setInviteBatchSize] = useState<'auto' | 10 | 20 | 'all'>('auto')
+  const [invitePriorityMode, setInvitePriorityMode] = useState<'top_down' | 'random'>('top_down')
   const [responseTimer, setResponseTimer] = useState(5)
   const [chatEnabled, setChatEnabled] = useState(false)
   const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
@@ -154,6 +156,14 @@ export default function CreateActivityPage() {
         setAutoEmergencyFill(data.auto_emergency_fill ?? false)
         setWaitlistEnabled(data.waitlist_enabled ?? false)
         setPriorityInvite(data.priority_invite ?? true)
+        if (data.priority_invite === false) {
+          setInviteBatchSize('all')
+        } else if (data.invite_batch_size === 10 || data.invite_batch_size === 20) {
+          setInviteBatchSize(data.invite_batch_size)
+        } else {
+          setInviteBatchSize('auto')
+        }
+        setInvitePriorityMode(data.invite_priority_mode === 'random' ? 'random' : 'top_down')
         setResponseTimer(data.response_timer_minutes ?? 5)
         if (data.image_url) setImageUrl(data.image_url)
         if (data.max_capacity === 999) {
@@ -234,6 +244,7 @@ export default function CreateActivityPage() {
   }
 
   const isAllMode = maxCapacity === 'custom' && customMode === 'no_max'
+  const inviteAllAtOnce = isAllMode || inviteBatchSize === 'all'
 
   function getEffectiveMaxCapacity(): number | null {
     if (maxCapacity === 'custom') {
@@ -241,6 +252,17 @@ export default function CreateActivityPage() {
       return parseInt(customCapacity) || null
     }
     return maxCapacity
+  }
+
+  function getInviteFields() {
+    if (inviteAllAtOnce) {
+      return { priority_invite: false, invite_batch_size: null, invite_priority_mode: 'top_down' as const }
+    }
+    return {
+      priority_invite: true,
+      invite_batch_size: typeof inviteBatchSize === 'number' ? inviteBatchSize : null,
+      invite_priority_mode: invitePriorityMode,
+    }
   }
 
   async function handleSubmit() {
@@ -266,7 +288,7 @@ export default function CreateActivityPage() {
           cost: costType !== 'free' ? parseFloat(costAmount) || null : null,
           max_capacity: getEffectiveMaxCapacity(),
           response_timer_minutes: responseTimer,
-          priority_invite: priorityInvite,
+          ...getInviteFields(),
           chat_enabled: chatEnabled,
           reminder_enabled: reminderEnabled,
           auto_emergency_fill: autoEmergencyFill,
@@ -1312,23 +1334,88 @@ export default function CreateActivityPage() {
               )}
             </FieldCard>
 
-            {/* Priority Order Toggle — hidden when "All" selected */}
+            {/* Batch — how many invites go out per cycle (Pro for 10/20) */}
             {!isAllMode && (
               <FieldCard>
-                <div className="flex items-center justify-between">
-                  <span className="text-[14px] font-semibold text-foreground">Priority Order</span>
-                  <Toggle checked={priorityInvite} onChange={setPriorityInvite} />
+                <div className="flex items-center gap-2">
+                  <FieldLabel>Batch</FieldLabel>
+                  <ProBadge small />
                 </div>
-                <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
-                  {priorityInvite
-                    ? 'Invites sent in priority order. If someone passes, the next person gets invited.'
-                    : 'All members are invited at once.'}
+                <div className="flex gap-2 mt-1">
+                  {([
+                    { key: 'auto', label: 'Auto', pro: false },
+                    { key: 10, label: '10', pro: true },
+                    { key: 20, label: '20', pro: true },
+                    { key: 'all', label: 'All', pro: false },
+                  ] as const).map((opt) => {
+                    const selected = inviteBatchSize === opt.key
+                    return (
+                      <button
+                        key={String(opt.key)}
+                        onClick={() => {
+                          if (opt.pro && !isPro) { requirePro(); return }
+                          setInviteBatchSize(opt.key)
+                        }}
+                        className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                          selected
+                            ? 'bg-primary text-white'
+                            : 'bg-surface text-muted border border-border/50'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[12px] text-muted mt-2 leading-relaxed">
+                  {inviteBatchSize === 'auto' && 'Sends invites to as many people as there are open spots. Default behavior.'}
+                  {inviteBatchSize === 10 && 'Sends 10 invites at a time. After the response timer, the next 10 go out.'}
+                  {inviteBatchSize === 20 && 'Sends 20 invites at a time. After the response timer, the next 20 go out.'}
+                  {inviteBatchSize === 'all' && 'Texts everyone at once — first to reply gets the spot.'}
                 </p>
               </FieldCard>
             )}
 
-            {/* Response Timer — hidden when "All" selected */}
-            {!isAllMode && (
+            {/* Priority — only relevant when there's a cascade (Random is Pro) */}
+            {!inviteAllAtOnce && (
+              <FieldCard>
+                <div className="flex items-center gap-2">
+                  <FieldLabel>Priority</FieldLabel>
+                  <ProBadge small />
+                </div>
+                <div className="flex gap-2 mt-1">
+                  {([
+                    { key: 'top_down', label: 'Top-down', pro: false },
+                    { key: 'random', label: 'Random', pro: true },
+                  ] as const).map((opt) => {
+                    const selected = invitePriorityMode === opt.key
+                    return (
+                      <button
+                        key={opt.key}
+                        onClick={() => {
+                          if (opt.pro && !isPro) { requirePro(); return }
+                          setInvitePriorityMode(opt.key)
+                        }}
+                        className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                          selected
+                            ? 'bg-primary text-white'
+                            : 'bg-surface text-muted border border-border/50'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[12px] text-muted mt-2 leading-relaxed">
+                  {invitePriorityMode === 'top_down' && 'Invites go out in priority order set on the group.'}
+                  {invitePriorityMode === 'random' && 'Each batch picks randomly from the remaining group.'}
+                </p>
+              </FieldCard>
+            )}
+
+            {/* Response Timer — hidden when batch=All or max=No Maximum */}
+            {!inviteAllAtOnce && (
               <FieldCard>
                 <FieldLabel>Response Time Per Invite</FieldLabel>
                 <div className="relative">
