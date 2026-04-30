@@ -65,14 +65,31 @@ export async function GET(req: NextRequest) {
 
   const { data: activities } = await query
 
-  // Precise upcoming/past split based on end timestamp (date + time + duration).
-  // No timezone column lookup yet — comparisons in UTC. Close enough until users
-  // span timezones during edge-of-day activities.
-  function endTimestampMs(a: { activity_date: string | null; activity_time: string | null; duration_hours: number | null }): number | null {
+  // Precise upcoming/past split based on end timestamp (date + time + duration),
+  // interpreted in the activity's stored timezone (set to the creator's local
+  // tz when the activity was created). Falls back to UTC if no timezone.
+  function localDateTimeToUtcMs(date: string, time: string, tz: string): number {
+    const naiveMs = Date.parse(`${date}T${time}Z`)
+    if (isNaN(naiveMs)) return NaN
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date(naiveMs))
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00'
+    const hour = get('hour') === '24' ? '00' : get('hour')
+    const tzAsUtcMs = Date.parse(`${get('year')}-${get('month')}-${get('day')}T${hour}:${get('minute')}:${get('second')}Z`)
+    if (isNaN(tzAsUtcMs)) return NaN
+    return naiveMs - (tzAsUtcMs - naiveMs)
+  }
+
+  function endTimestampMs(a: { activity_date: string | null; activity_time: string | null; duration_hours: number | null; timezone: string | null }): number | null {
     if (!a.activity_date) return null
     const time = a.activity_time ?? '23:59:00'
     const duration = a.activity_time ? (a.duration_hours ?? 2) : 0
-    const startMs = Date.parse(`${a.activity_date}T${time}Z`)
+    const tz = a.timezone || 'UTC'
+    const startMs = localDateTimeToUtcMs(a.activity_date, time, tz)
     if (isNaN(startMs)) return null
     return startMs + duration * 60 * 60 * 1000
   }
