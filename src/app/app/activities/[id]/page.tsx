@@ -61,7 +61,7 @@ type Tab = 'details' | 'group' | 'chat'
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   confirmed: { label: 'Confirmed', color: 'text-green-600', icon: 'check' },
   waitlist: { label: 'Wait List', color: 'text-blue-600', icon: 'waitlist' },
-  waiting: { label: 'Invited', color: 'text-yellow-600', icon: 'clock' },
+  waiting: { label: 'Inviting', color: 'text-yellow-600', icon: 'clock' },
   tbd: { label: 'On Deck', color: 'text-muted', icon: 'queue' },
   missed: { label: 'Missed', color: 'text-orange-500', icon: 'missed' },
   out: { label: 'Out', color: 'text-red-500', icon: 'x' },
@@ -978,7 +978,7 @@ export default function ActivityDetailPage() {
 
             <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={setSelectedMember} />
             <StatusSection title="Wait List" count={waitlist.length} members={waitlist} statusKey="waitlist" onMemberTap={setSelectedMember} />
-            {!isCountdownActive && <StatusSection title="Invited" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
+            {!isCountdownActive && <StatusSection title="Inviting" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
 
             {/* Status banner — show when invites are done */}
             {!isCountdownActive && isFull && tbd.length > 0 && (
