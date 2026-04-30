@@ -186,6 +186,8 @@ export async function POST(req: NextRequest) {
     max_capacity,
     response_timer_minutes,
     priority_invite,
+    invite_batch_size,
+    invite_priority_mode,
     chat_enabled,
     reminder_enabled,
     image_url,
@@ -207,6 +209,8 @@ export async function POST(req: NextRequest) {
   const finalResponseTimer = (isPro || isTestUser)
     ? (response_timer_minutes ?? 5)
     : 5
+  const finalInviteBatchSize = isPro ? (invite_batch_size ?? null) : null
+  const finalInvitePriorityMode = isPro && invite_priority_mode === 'random' ? 'random' : 'top_down'
 
   // Create the activity
   const { data: activity, error } = await admin
@@ -227,6 +231,8 @@ export async function POST(req: NextRequest) {
       max_capacity: finalMaxCapacity,
       response_timer_minutes: finalResponseTimer,
       priority_invite: priority_invite ?? true,
+      invite_batch_size: finalInviteBatchSize,
+      invite_priority_mode: finalInvitePriorityMode,
       chat_enabled: finalChatEnabled,
       reminder_enabled: finalReminderEnabled,
       image_url: image_url || null,

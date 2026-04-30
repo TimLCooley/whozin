@@ -9,7 +9,9 @@ import { createAlert } from '@/lib/alerts'
  * Flow:
  * 1. Check for expired 'waiting' members → move to 'missed'
  * 2. Count remaining spots (max_capacity - confirmed)
- * 3. If spots remain, invite next batch of 'tbd' members (batch size = remaining spots)
+ * 3. If spots remain, invite next batch of 'tbd' members
+ *    (batch size = invite_batch_size if set, else remaining spots)
+ *    (order = top_down by priority_order, or random)
  * 4. Set them to 'waiting', send SMS, create invite records
  * 5. If activity is full or everyone contacted, update status
  */
@@ -125,13 +127,32 @@ export async function processActivityInvites(activityId: string) {
   }
 
   // Step 4: Get next batch of TBD members to fill the gap
-  const { data: nextBatch } = await admin
-    .from('whozin_activity_member')
-    .select('id, user_id')
-    .eq('activity_id', activityId)
-    .eq('status', 'tbd')
-    .order('priority_order', { ascending: true })
-    .limit(spotsToFill)
+  // Batch size: use configured invite_batch_size if set, else match remaining spots
+  // Order: top_down (priority_order asc) or random
+  const batchLimit = activity.invite_batch_size ?? spotsToFill
+  const priorityMode = activity.invite_priority_mode ?? 'top_down'
+
+  let nextBatch: { id: string; user_id: string }[] | null = null
+  if (priorityMode === 'random') {
+    const { data: allTbd } = await admin
+      .from('whozin_activity_member')
+      .select('id, user_id')
+      .eq('activity_id', activityId)
+      .eq('status', 'tbd')
+    if (allTbd && allTbd.length > 0) {
+      const shuffled = [...allTbd].sort(() => Math.random() - 0.5)
+      nextBatch = shuffled.slice(0, batchLimit)
+    }
+  } else {
+    const { data } = await admin
+      .from('whozin_activity_member')
+      .select('id, user_id')
+      .eq('activity_id', activityId)
+      .eq('status', 'tbd')
+      .order('priority_order', { ascending: true })
+      .limit(batchLimit)
+    nextBatch = data
+  }
 
   if (!nextBatch || nextBatch.length === 0) {
     // No more people to invite — update capacity
