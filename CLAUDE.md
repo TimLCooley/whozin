@@ -19,7 +19,8 @@
 - **Project**: `whozin`
 - **Preview URL**: https://whozin-ruddy.vercel.app
 - **Production URL**: https://whozin.io
-- **Deploy command**: `npx vercel --prod`
+- **Deploy**: Auto-deploys on push to `master` via Vercel's GitHub integration. No CLI needed — `git push origin master` triggers a production build at whozin.io within ~30s. Other branches build to preview URLs automatically.
+- **Sandbox note**: This Claude Code environment cannot reach `api.vercel.com` (host not in allowlist), so `npx vercel --prod` will not work from inside a session. Always deploy by pushing to `master`. To check deploy status, look at https://vercel.com/tim-cooleys-projects-41557754/whozin/deployments.
 
 ### Supabase
 - **Project ref**: `ooqdkonjcztjankkvejh`
