@@ -158,7 +158,7 @@ export default function CreateActivityPage() {
         if (data.image_url) setImageUrl(data.image_url)
         if (data.max_capacity === 999) {
           setMaxCapacity('custom')
-          setCustomMode('any')
+          setCustomMode('no_max')
         } else if (data.max_capacity && [2, 3, 4].includes(data.max_capacity)) {
           setMaxCapacity(data.max_capacity)
         } else if (data.max_capacity) {
@@ -167,7 +167,7 @@ export default function CreateActivityPage() {
           setCustomCapacity(String(data.max_capacity))
         } else {
           setMaxCapacity('custom')
-          setCustomMode('all')
+          setCustomMode('no_max')
         }
         if (data.group_id) setSelectedGroup(data.group_id)
         // Set date to today, keep same time
