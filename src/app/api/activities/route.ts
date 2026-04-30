@@ -47,22 +47,42 @@ export async function GET(req: NextRequest) {
     .select('*, whozin_activity_member(count)')
     .in('id', Array.from(activityIds))
 
-  const today = new Date().toISOString().split('T')[0]
+  const nowMs = Date.now()
+  const todayUtc = new Date(nowMs).toISOString().split('T')[0]
+  const yesterdayUtc = new Date(nowMs - 86400000).toISOString().split('T')[0]
 
   if (tab === 'upcoming') {
-    // Upcoming: open/full status AND date is today or future (or no date set)
+    // Yesterday-in-UTC catches long-running activities that end today
     query = query
       .in('status', ['open', 'full'])
-      .or(`activity_date.gte.${today},activity_date.is.null`)
+      .or(`activity_date.gte.${yesterdayUtc},activity_date.is.null`)
       .order('activity_date', { ascending: true, nullsFirst: false })
   } else {
-    // Past: explicitly past/cancelled OR open/full with a date that has passed
     query = query
-      .or(`status.in.(past,cancelled),and(status.in.(open,full),activity_date.lt.${today})`)
+      .or(`status.in.(past,cancelled),and(status.in.(open,full),activity_date.lte.${todayUtc})`)
       .order('activity_date', { ascending: false })
   }
 
   const { data: activities } = await query
+
+  // Precise upcoming/past split based on end timestamp (date + time + duration).
+  // No timezone column lookup yet — comparisons in UTC. Close enough until users
+  // span timezones during edge-of-day activities.
+  function endTimestampMs(a: { activity_date: string | null; activity_time: string | null; duration_hours: number | null }): number | null {
+    if (!a.activity_date) return null
+    const time = a.activity_time ?? '23:59:00'
+    const duration = a.activity_time ? (a.duration_hours ?? 2) : 0
+    const startMs = Date.parse(`${a.activity_date}T${time}Z`)
+    if (isNaN(startMs)) return null
+    return startMs + duration * 60 * 60 * 1000
+  }
+
+  const dateFilteredActivities = (activities ?? []).filter((a) => {
+    if (a.status === 'past' || a.status === 'cancelled') return tab === 'past'
+    const endMs = endTimestampMs(a)
+    if (endMs === null) return tab === 'upcoming'
+    return tab === 'upcoming' ? endMs >= nowMs : endMs < nowMs
+  })
 
   // Get user's response status for each activity
   const { data: myStatuses } = await admin
@@ -77,12 +97,13 @@ export async function GET(req: NextRequest) {
   // is full or its date has passed, there's nothing they can do with it — hide
   // the card. Exception: if waitlist is enabled, missed users can still join.
   // Past tab is always hidden for both statuses.
-  const visibleActivities = (activities ?? []).filter((a) => {
+  const visibleActivities = dateFilteredActivities.filter((a) => {
     const myStatus = statusMap.get(a.id)
     if (myStatus !== 'waiting' && myStatus !== 'missed') return true
     if (tab === 'past') return false
     if (a.status === 'full' && !(a.waitlist_enabled && myStatus === 'missed')) return false
-    if (a.activity_date && a.activity_date < today) return false
+    const endMs = endTimestampMs(a)
+    if (endMs !== null && endMs < nowMs) return false
     return true
   })
 
