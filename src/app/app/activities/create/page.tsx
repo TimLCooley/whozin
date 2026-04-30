@@ -85,6 +85,7 @@ export default function CreateActivityPage() {
   const [priorityInvite, setPriorityInvite] = useState(true)
   const [inviteBatchSize, setInviteBatchSize] = useState<'auto' | 'custom' | 'all'>('auto')
   const [customBatchSize, setCustomBatchSize] = useState<number>(1)
+  const [batchInputDraft, setBatchInputDraft] = useState<string>('1')
   const [invitePriorityMode, setInvitePriorityMode] = useState<'top_down' | 'random'>('top_down')
   const [responseTimer, setResponseTimer] = useState(5)
   const [chatEnabled, setChatEnabled] = useState(false)
@@ -262,7 +263,11 @@ export default function CreateActivityPage() {
     if (!max || max < 2) return 1
     return max - 1
   })()
-  const displayedBatchSize = inviteBatchSize === 'custom' ? customBatchSize : autoEquivalent
+
+  // Keep the input in sync with autoEquivalent while in Auto mode
+  useEffect(() => {
+    if (inviteBatchSize !== 'custom') setBatchInputDraft(String(autoEquivalent))
+  }, [inviteBatchSize, autoEquivalent])
 
   function getInviteFields() {
     if (inviteAllAtOnce) {
@@ -1377,17 +1382,27 @@ export default function CreateActivityPage() {
                         onClick={() => { if (locked) requirePro() }}
                       >
                         <input
-                          type="number"
-                          min={1}
-                          value={displayedBatchSize}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={batchInputDraft}
                           readOnly={locked}
                           onFocus={() => { if (locked) requirePro() }}
                           onChange={(e) => {
                             if (locked) return
-                            const n = parseInt(e.target.value)
+                            const v = e.target.value.replace(/[^0-9]/g, '')
+                            setBatchInputDraft(v)
+                            const n = parseInt(v)
                             if (!isNaN(n) && n >= 1) {
                               setCustomBatchSize(n)
                               setInviteBatchSize('custom')
+                            }
+                          }}
+                          onBlur={() => {
+                            const n = parseInt(batchInputDraft)
+                            if (isNaN(n) || n < 1) {
+                              const fallback = inviteBatchSize === 'custom' ? customBatchSize : autoEquivalent
+                              setBatchInputDraft(String(fallback))
                             }
                           }}
                           onClick={(e) => {
