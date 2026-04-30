@@ -1334,13 +1334,10 @@ export default function CreateActivityPage() {
               )}
             </FieldCard>
 
-            {/* Batch — how many invites go out per cycle (Pro for 10/20) */}
+            {/* Batch — how many invites go out per cycle (Pro for 10/20/All) */}
             {!isAllMode && (
               <FieldCard>
-                <div className="flex items-center gap-2">
-                  <FieldLabel>Batch</FieldLabel>
-                  <ProBadge small />
-                </div>
+                <FieldLabel>Batch</FieldLabel>
                 <div className="flex gap-2 mt-1">
                   {([
                     { key: 'auto', label: 'Auto', pro: false },
@@ -1349,20 +1346,24 @@ export default function CreateActivityPage() {
                     { key: 'all', label: 'All', pro: true },
                   ] as const).map((opt) => {
                     const selected = inviteBatchSize === opt.key
+                    const locked = opt.pro && !isPro
                     return (
                       <button
                         key={String(opt.key)}
                         onClick={() => {
-                          if (opt.pro && !isPro) { requirePro(); return }
+                          if (locked) { requirePro(); return }
                           setInviteBatchSize(opt.key)
                         }}
-                        className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                        className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors flex items-center justify-center gap-1.5 ${
                           selected
                             ? 'bg-primary text-white'
-                            : 'bg-surface text-muted border border-border/50'
+                            : locked
+                              ? 'bg-surface text-muted/50 border border-border/30'
+                              : 'bg-surface text-muted border border-border/50'
                         }`}
                       >
                         {opt.label}
+                        {locked && <ProBadge small />}
                       </button>
                     )
                   })}
@@ -1379,30 +1380,31 @@ export default function CreateActivityPage() {
             {/* Priority — only relevant when there's a cascade (Random is Pro) */}
             {!inviteAllAtOnce && (
               <FieldCard>
-                <div className="flex items-center gap-2">
-                  <FieldLabel>Priority</FieldLabel>
-                  <ProBadge small />
-                </div>
+                <FieldLabel>Priority</FieldLabel>
                 <div className="flex gap-2 mt-1">
                   {([
                     { key: 'top_down', label: 'Top-down', pro: false },
                     { key: 'random', label: 'Random', pro: true },
                   ] as const).map((opt) => {
                     const selected = invitePriorityMode === opt.key
+                    const locked = opt.pro && !isPro
                     return (
                       <button
                         key={opt.key}
                         onClick={() => {
-                          if (opt.pro && !isPro) { requirePro(); return }
+                          if (locked) { requirePro(); return }
                           setInvitePriorityMode(opt.key)
                         }}
-                        className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                        className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors flex items-center justify-center gap-1.5 ${
                           selected
                             ? 'bg-primary text-white'
-                            : 'bg-surface text-muted border border-border/50'
+                            : locked
+                              ? 'bg-surface text-muted/50 border border-border/30'
+                              : 'bg-surface text-muted border border-border/50'
                         }`}
                       >
                         {opt.label}
+                        {locked && <ProBadge small />}
                       </button>
                     )
                   })}
