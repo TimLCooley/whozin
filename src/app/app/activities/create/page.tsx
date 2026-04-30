@@ -1346,7 +1346,7 @@ export default function CreateActivityPage() {
                     { key: 'auto', label: 'Auto', pro: false },
                     { key: 10, label: '10', pro: true },
                     { key: 20, label: '20', pro: true },
-                    { key: 'all', label: 'All', pro: false },
+                    { key: 'all', label: 'All', pro: true },
                   ] as const).map((opt) => {
                     const selected = inviteBatchSize === opt.key
                     return (
