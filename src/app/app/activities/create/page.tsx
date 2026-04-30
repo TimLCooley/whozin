@@ -83,7 +83,8 @@ export default function CreateActivityPage() {
   const [customMode, setCustomMode] = useState<'number' | 'no_max'>('number')
   const [customCapacity, setCustomCapacity] = useState('')
   const [priorityInvite, setPriorityInvite] = useState(true)
-  const [inviteBatchSize, setInviteBatchSize] = useState<'auto' | 10 | 20 | 'all'>('auto')
+  const [inviteBatchSize, setInviteBatchSize] = useState<'auto' | 'custom' | 'all'>('auto')
+  const [customBatchSize, setCustomBatchSize] = useState<number>(1)
   const [invitePriorityMode, setInvitePriorityMode] = useState<'top_down' | 'random'>('top_down')
   const [responseTimer, setResponseTimer] = useState(5)
   const [chatEnabled, setChatEnabled] = useState(false)
@@ -158,8 +159,9 @@ export default function CreateActivityPage() {
         setPriorityInvite(data.priority_invite ?? true)
         if (data.priority_invite === false) {
           setInviteBatchSize('all')
-        } else if (data.invite_batch_size === 10 || data.invite_batch_size === 20) {
-          setInviteBatchSize(data.invite_batch_size)
+        } else if (typeof data.invite_batch_size === 'number') {
+          setInviteBatchSize('custom')
+          setCustomBatchSize(data.invite_batch_size)
         } else {
           setInviteBatchSize('auto')
         }
@@ -254,13 +256,21 @@ export default function CreateActivityPage() {
     return maxCapacity
   }
 
+  // What "Auto" would resolve to right now: remaining spots (creator counts as 1)
+  const autoEquivalent = (() => {
+    const max = getEffectiveMaxCapacity()
+    if (!max || max < 2) return 1
+    return max - 1
+  })()
+  const displayedBatchSize = inviteBatchSize === 'custom' ? customBatchSize : autoEquivalent
+
   function getInviteFields() {
     if (inviteAllAtOnce) {
       return { priority_invite: false, invite_batch_size: null, invite_priority_mode: 'top_down' as const }
     }
     return {
       priority_invite: true,
-      invite_batch_size: typeof inviteBatchSize === 'number' ? inviteBatchSize : null,
+      invite_batch_size: inviteBatchSize === 'custom' ? customBatchSize : null,
       invite_priority_mode: invitePriorityMode,
     }
   }
@@ -1334,25 +1344,73 @@ export default function CreateActivityPage() {
               )}
             </FieldCard>
 
-            {/* Batch — how many invites go out per cycle (Pro for 10/20/All) */}
+            {/* Batch — how many invites go out per cycle (Pro for custom number / All) */}
             {!isAllMode && (
               <FieldCard>
                 <FieldLabel>Batch</FieldLabel>
                 <div className="flex gap-2 mt-1">
-                  {([
-                    { key: 'auto', label: 'Auto', pro: false },
-                    { key: 10, label: '10', pro: true },
-                    { key: 20, label: '20', pro: true },
-                    { key: 'all', label: 'All', pro: true },
-                  ] as const).map((opt) => {
-                    const selected = inviteBatchSize === opt.key
-                    const locked = opt.pro && !isPro
+                  {/* Auto */}
+                  <button
+                    onClick={() => setInviteBatchSize('auto')}
+                    className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors ${
+                      inviteBatchSize === 'auto'
+                        ? 'bg-primary text-white'
+                        : 'bg-surface text-muted border border-border/50'
+                    }`}
+                  >
+                    Auto
+                  </button>
+
+                  {/* Custom number input */}
+                  {(() => {
+                    const selected = inviteBatchSize === 'custom'
+                    const locked = !isPro
+                    return (
+                      <div
+                        className={`flex-1 h-10 rounded-full transition-colors flex items-center justify-center gap-1.5 px-2 ${
+                          selected
+                            ? 'bg-primary text-white'
+                            : locked
+                              ? 'bg-surface text-muted/50 border border-border/30'
+                              : 'bg-surface text-muted border border-border/50'
+                        }`}
+                        onClick={() => { if (locked) requirePro() }}
+                      >
+                        <input
+                          type="number"
+                          min={1}
+                          value={displayedBatchSize}
+                          readOnly={locked}
+                          onFocus={() => { if (locked) requirePro() }}
+                          onChange={(e) => {
+                            if (locked) return
+                            const n = parseInt(e.target.value)
+                            if (!isNaN(n) && n >= 1) {
+                              setCustomBatchSize(n)
+                              setInviteBatchSize('custom')
+                            }
+                          }}
+                          onClick={(e) => {
+                            if (locked) return
+                            e.stopPropagation()
+                            setInviteBatchSize('custom')
+                          }}
+                          className={`w-full bg-transparent text-center text-[13px] font-semibold focus:outline-none ${selected ? 'text-white' : ''} ${locked ? 'cursor-pointer' : ''}`}
+                        />
+                        {locked && <ProBadge small />}
+                      </div>
+                    )
+                  })()}
+
+                  {/* All */}
+                  {(() => {
+                    const selected = inviteBatchSize === 'all'
+                    const locked = !isPro
                     return (
                       <button
-                        key={String(opt.key)}
                         onClick={() => {
                           if (locked) { requirePro(); return }
-                          setInviteBatchSize(opt.key)
+                          setInviteBatchSize('all')
                         }}
                         className={`flex-1 h-10 rounded-full text-[13px] font-semibold transition-colors flex items-center justify-center gap-1.5 ${
                           selected
@@ -1362,16 +1420,15 @@ export default function CreateActivityPage() {
                               : 'bg-surface text-muted border border-border/50'
                         }`}
                       >
-                        {opt.label}
+                        All
                         {locked && <ProBadge small />}
                       </button>
                     )
-                  })}
+                  })()}
                 </div>
                 <p className="text-[12px] text-muted mt-2 leading-relaxed">
                   {inviteBatchSize === 'auto' && 'Sends invites to as many people as there are open spots. Default behavior.'}
-                  {inviteBatchSize === 10 && 'Sends 10 invites at a time. After the response timer, the next 10 go out.'}
-                  {inviteBatchSize === 20 && 'Sends 20 invites at a time. After the response timer, the next 20 go out.'}
+                  {inviteBatchSize === 'custom' && `Sends ${customBatchSize} invite${customBatchSize === 1 ? '' : 's'} at a time. After the response timer, the next ${customBatchSize} go out.`}
                   {inviteBatchSize === 'all' && 'Texts everyone at once — first to reply gets the spot.'}
                 </p>
               </FieldCard>
