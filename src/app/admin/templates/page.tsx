@@ -29,6 +29,16 @@ export default function TemplatesEventsPage() {
   const [query, setQuery] = useState('')
   const [showCustomizedOnly, setShowCustomizedOnly] = useState(false)
   const [channelFilter, setChannelFilter] = useState<'all' | ChannelId>('all')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     fetch('/api/admin/templates/events')
@@ -157,59 +167,129 @@ export default function TemplatesEventsPage() {
               const customized = channels.filter((c) => event.channels[c]?.is_customized)
               const target = defaultChannel(event)
               const previewBody = event.channels[target]?.body ?? ''
+              const isExpanded = expanded.has(event.id)
               return (
-                <Link
+                <div
                   key={event.id}
-                  href={`/admin/templates/${event.id}/${target}`}
-                  className="block rounded-2xl border border-border bg-background p-4 hover:border-primary/40 hover:shadow-sm transition-all group"
+                  className="rounded-2xl border border-border bg-background hover:border-primary/40 hover:shadow-sm transition-all"
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h4 className="text-sm font-semibold text-foreground">{event.name}</h4>
-                        <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${CATEGORY_ACCENT[event.category]}`}>
-                          {event.category}
-                        </span>
-                        {channels.map((c) => {
-                          const isCustomized = event.channels[c]?.is_customized
-                          return (
-                            <span
-                              key={c}
-                              className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
-                                isCustomized
-                                  ? 'text-primary bg-primary/10'
-                                  : 'text-foreground/60 bg-surface'
-                              }`}
-                            >
-                              {CHANNEL_LABELS[c]}
-                              {isCustomized && <Dot />}
-                            </span>
-                          )
-                        })}
+                  <Link
+                    href={`/admin/templates/${event.id}/${target}`}
+                    className="block p-4 group"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <h4 className="text-sm font-semibold text-foreground">{event.name}</h4>
+                          <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${CATEGORY_ACCENT[event.category]}`}>
+                            {event.category}
+                          </span>
+                          {channels.map((c) => {
+                            const isCustomized = event.channels[c]?.is_customized
+                            return (
+                              <span
+                                key={c}
+                                className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                                  isCustomized
+                                    ? 'text-primary bg-primary/10'
+                                    : 'text-foreground/60 bg-surface'
+                                }`}
+                              >
+                                {CHANNEL_LABELS[c]}
+                                {isCustomized && <Dot />}
+                              </span>
+                            )
+                          })}
+                        </div>
+                        <p className="text-xs text-muted">{event.trigger}</p>
                       </div>
-                      <p className="text-xs text-muted">{event.trigger}</p>
+                      <svg
+                        width="18" height="18" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                        className="text-muted flex-shrink-0 transition-transform group-hover:translate-x-0.5 mt-0.5"
+                      >
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
                     </div>
-                    <svg
-                      width="18" height="18" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-                      className="text-muted flex-shrink-0 transition-transform group-hover:translate-x-0.5 mt-0.5"
-                    >
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </div>
-                  <p className="text-[13px] text-foreground/80 font-mono leading-snug whitespace-pre-wrap line-clamp-2 bg-surface rounded-lg px-3 py-2 mt-2">
-                    {previewBody}
-                  </p>
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-muted">
-                    {customized.length > 0 ? (
-                      <span>
-                        {customized.length} channel{customized.length === 1 ? '' : 's'} customized
-                      </span>
-                    ) : (
-                      <span>Using defaults</span>
+                    {!isExpanded && (
+                      <p className="text-[13px] text-foreground/80 font-mono leading-snug whitespace-pre-wrap line-clamp-2 bg-surface rounded-lg px-3 py-2 mt-2">
+                        {previewBody}
+                      </p>
                     )}
+                  </Link>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-2 -mt-1 space-y-3">
+                      {channels.map((c) => {
+                        const ch = event.channels[c]!
+                        return (
+                          <div key={c} className="rounded-xl bg-surface border border-border/60 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-background/50">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-foreground/70">
+                                  {CHANNEL_LABELS[c]}
+                                </span>
+                                {ch.is_customized ? (
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded text-primary bg-primary/10">
+                                    Customized
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-muted">Default</span>
+                                )}
+                              </div>
+                              <Link
+                                href={`/admin/templates/${event.id}/${c}`}
+                                className="text-[11px] font-semibold text-primary hover:underline"
+                              >
+                                Edit →
+                              </Link>
+                            </div>
+                            {c === 'push' && ch.title && (
+                              <div className="px-3 pt-2.5 pb-1">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-0.5">Title</p>
+                                <p className="text-[13px] font-semibold text-foreground leading-snug whitespace-pre-wrap break-words font-mono">
+                                  {ch.title}
+                                </p>
+                              </div>
+                            )}
+                            <div className="px-3 pt-2.5 pb-3">
+                              {c === 'push' && (
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-0.5">Body</p>
+                              )}
+                              <p className="text-[13px] text-foreground/85 leading-snug whitespace-pre-wrap break-words font-mono">
+                                {ch.body}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between px-4 pb-3 pt-1">
+                    <span className="text-[11px] text-muted">
+                      {customized.length > 0
+                        ? `${customized.length} channel${customized.length === 1 ? '' : 's'} customized`
+                        : 'Using defaults'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(event.id)}
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? 'Collapse' : 'Expand to see messages'}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted hover:text-foreground transition-colors px-2 py-1 -mr-1 rounded-md hover:bg-surface"
+                    >
+                      {isExpanded ? 'Collapse' : 'Show messages'}
+                      <svg
+                        width="12" height="12" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+                        className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
                   </div>
-                </Link>
+                </div>
               )
             })}
           </div>
