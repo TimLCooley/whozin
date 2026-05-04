@@ -57,16 +57,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    label: 'Activity Presets',
-    href: '/admin/presets',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-      </svg>
-    ),
-  },
-  {
     label: 'Communications',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -156,6 +146,16 @@ const NAV_ITEMS: NavItem[] = [
             <circle cx="12" cy="13" r="8" />
             <path d="M12 9v4l2 2" />
             <path d="M5 3L2 6M22 6l-3-3" />
+          </svg>
+        ),
+      },
+      {
+        label: 'Activity Presets',
+        href: '/admin/presets',
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
           </svg>
         ),
       },
