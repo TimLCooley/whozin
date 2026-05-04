@@ -78,6 +78,8 @@ export default function CreateActivityPage() {
 
   // Group Details
   const [groups, setGroups] = useState<GroupOption[]>([])
+  const [groupsLoading, setGroupsLoading] = useState(true)
+  const groupsPromiseRef = useRef<Promise<GroupOption[]> | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<string>('')
   const [maxCapacity, setMaxCapacity] = useState<number | 'custom'>(2)
   const [customMode, setCustomMode] = useState<'number' | 'no_max'>('number')
@@ -100,12 +102,19 @@ export default function CreateActivityPage() {
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setPresets(data) })
 
-    fetch('/api/groups')
+    groupsPromiseRef.current = fetch('/api/groups')
       .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setGroups(data.filter((g: GroupOption & { is_owner: boolean }) => g.is_owner))
-        }
+      .then((data): GroupOption[] => {
+        const owned = Array.isArray(data)
+          ? data.filter((g: GroupOption & { is_owner: boolean }) => g.is_owner)
+          : []
+        setGroups(owned)
+        setGroupsLoading(false)
+        return owned
+      })
+      .catch(() => {
+        setGroupsLoading(false)
+        return [] as GroupOption[]
       })
 
     fetch('/api/user/profile')
@@ -189,6 +198,26 @@ export default function CreateActivityPage() {
         setActivityTime(data.activity_time ?? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
       })
   }, [cloneId])
+
+  /**
+   * Returns the owned groups, awaiting the in-flight fetch if it hasn't
+   * resolved yet. Prevents the "no groups" modal from flashing on a fast
+   * tap right after a refresh.
+   */
+  async function getGroupsReady(): Promise<GroupOption[]> {
+    if (!groupsLoading) return groups
+    return (await groupsPromiseRef.current) ?? []
+  }
+
+  async function handleSelectMode(next: 'fill' | 'build') {
+    const ready = await getGroupsReady()
+    if (ready.length === 0) {
+      setShowNoGroupsModal(true)
+      return
+    }
+    setMode(next)
+    setResponseTimer(next === 'fill' ? defaultTimerFill : defaultTimerGroup)
+  }
 
   function handlePresetChange(presetId: string) {
     setSelectedPreset(presetId)
@@ -388,8 +417,9 @@ export default function CreateActivityPage() {
         <div className="flex-1 px-4 pt-6 space-y-4 animate-enter">
           {/* Fill a Spot card */}
           <button
-            onClick={() => { if (groups.length === 0) { setShowNoGroupsModal(true); return } setMode('fill'); setResponseTimer(defaultTimerFill) }}
-            className="w-full bg-background border-2 border-[#34c759]/30 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(52,199,89,0.12)] hover:border-[#34c759]/50"
+            onClick={() => handleSelectMode('fill')}
+            disabled={groupsLoading}
+            className="w-full bg-background border-2 border-[#34c759]/30 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(52,199,89,0.12)] hover:border-[#34c759]/50 disabled:opacity-60 disabled:cursor-progress"
           >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-2xl bg-[#34c759]/10 flex items-center justify-center flex-shrink-0">
@@ -409,8 +439,9 @@ export default function CreateActivityPage() {
 
           {/* Build Group Activity card */}
           <button
-            onClick={() => { if (groups.length === 0) { setShowNoGroupsModal(true); return } setMode('build'); setResponseTimer(defaultTimerGroup) }}
-            className="w-full bg-background border-2 border-primary/20 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(66,133,244,0.12)] hover:border-primary/40"
+            onClick={() => handleSelectMode('build')}
+            disabled={groupsLoading}
+            className="w-full bg-background border-2 border-primary/20 rounded-2xl p-5 text-left active:scale-[0.98] transition-all hover:shadow-[0_4px_20px_rgba(66,133,244,0.12)] hover:border-primary/40 disabled:opacity-60 disabled:cursor-progress"
           >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
