@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendPush } from '@/lib/push'
 import { sendReminderSms } from '@/lib/sms'
+import { renderTemplate } from '@/lib/notification-templates'
 
 /** Convert activity date + time in a given IANA timezone to a UTC Date */
 function parseActivityTime(dateStr: string, timeStr: string, timezone?: string | null): Date {
@@ -104,21 +105,26 @@ export async function GET(req: NextRequest) {
 
         if (!members?.length) continue
 
+        const { title: pushTitle, body: pushBody } = await renderTemplate('activity_reminder', 'push', {
+          activity_name: activity.activity_name,
+          window_label: window.label,
+        })
+
         // Send reminder to each confirmed member
         for (const member of members) {
           await admin.from('whozin_alerts').insert({
             user_id: member.user_id,
             type: 'system',
-            title: `Reminder: ${activity.activity_name}`,
-            body: `Starting in ${window.label}!`,
+            title: pushTitle ?? `Reminder: ${activity.activity_name}`,
+            body: pushBody,
             link: `/app/activities/${activity.id}`,
             meta: { reminder_key: reminderKey },
           })
 
           sendPush({
             userId: member.user_id,
-            title: `Reminder: ${activity.activity_name}`,
-            body: `Starting in ${window.label}!`,
+            title: pushTitle ?? `Reminder: ${activity.activity_name}`,
+            body: pushBody,
             link: `/app/activities/${activity.id}`,
           }).catch(() => {})
 

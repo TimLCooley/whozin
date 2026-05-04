@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendPush } from '@/lib/push'
 import { sendSms, isTestNumber } from '@/lib/sms'
+import { renderTemplate } from '@/lib/notification-templates'
 
 interface CreateAlertParams {
   user_id: string
@@ -11,8 +12,7 @@ interface CreateAlertParams {
   meta?: Record<string, unknown>
 }
 
-const CHAT_SMS_FALLBACK_BODY =
-  'You have a chat waiting on Whozin. Download the app: https://whozin.io/dl'
+const DOWNLOAD_LINK = 'https://whozin.io/dl'
 
 /**
  * Try push first; if the user has no push token or push is disabled, fall back
@@ -36,7 +36,10 @@ async function deliverChatNotification(userId: string, title: string, body: stri
     : `+${(user.country_code || '1').replace(/\D/g, '')}${user.phone.replace(/\D/g, '')}`
 
   const finalTo = isTestNumber(phone) ? '+16193019180' : phone
-  await sendSms(finalTo, CHAT_SMS_FALLBACK_BODY).catch(() => {})
+  const { body: fallbackBody } = await renderTemplate('chat_message', 'sms', {
+    download_link: DOWNLOAD_LINK,
+  })
+  await sendSms(finalTo, fallbackBody).catch(() => {})
 }
 
 export async function createAlert(params: CreateAlertParams) {

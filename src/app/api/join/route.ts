@@ -3,6 +3,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
 import { sendSmsInvite } from '@/lib/sms'
 import { createAlert, alertGroupMembers } from '@/lib/alerts'
+import { renderTemplate } from '@/lib/notification-templates'
 
 // POST — unauthenticated join via QR code
 // Allows a non-app user to enter their phone number and get added
@@ -127,19 +128,24 @@ export async function POST(req: NextRequest) {
       })
 
       // Alert the new member
+      const selfTpl = await renderTemplate('group_join_self_confirm', 'push', { group_name: group.name })
       await createAlert({
         user_id: targetUserId,
         type: 'group_invite',
-        title: `Added to ${group.name}`,
-        body: `You joined "${group.name}" via QR code.`,
+        title: selfTpl.title ?? `Added to ${group.name}`,
+        body: selfTpl.body,
         link: `/app/groups/${group_id}`,
       })
 
       // Alert existing group members
+      const memberTpl = await renderTemplate('member_joined_group', 'push', {
+        group_name: group.name,
+        target_name: 'A new member',
+      })
       await alertGroupMembers(group_id, targetUserId, {
         type: 'member_joined',
-        title: `New member in ${group.name}`,
-        body: `A new member joined "${group.name}".`,
+        title: memberTpl.title ?? `New member in ${group.name}`,
+        body: memberTpl.body,
         link: `/app/groups/${group_id}`,
       })
     }

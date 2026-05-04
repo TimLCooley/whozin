@@ -129,11 +129,16 @@ export async function POST(req: NextRequest) {
 
     const responderName = responder ? `${responder.first_name} ${responder.last_name}`.trim() : 'Someone'
     const { createAlert } = await import('@/lib/alerts')
+    const { renderTemplate } = await import('@/lib/notification-templates')
+    const { title, body } = await renderTemplate('member_responded', 'push', {
+      responder_name: responderName,
+      activity_name: activityName,
+    })
     await createAlert({
       user_id: activityData.creator_id,
       type: 'activity_invite',
-      title: `${responderName} is in!`,
-      body: `${responderName} confirmed for ${activityName}.`,
+      title: title ?? `${responderName} is in!`,
+      body,
       link: `/app/activities/${invite.activity_id}`,
     })
   }

@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
 import { alertGroupMembers } from '@/lib/alerts'
+import { renderTemplate } from '@/lib/notification-templates'
 
 // POST add member to group
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -101,10 +102,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const targetName = targetUser ? `${targetUser.first_name} ${targetUser.last_name}`.trim() : 'Someone'
 
   // Alert existing group members that someone joined
+  const tpl = await renderTemplate('member_joined_group', 'push', {
+    group_name: groupName,
+    target_name: targetName,
+  })
   await alertGroupMembers(groupId, whozinUser.id, {
     type: 'member_joined',
-    title: `New member in ${groupName}`,
-    body: `${targetName} was added to "${groupName}".`,
+    title: tpl.title ?? `New member in ${groupName}`,
+    body: tpl.body,
     link: `/app/groups/${groupId}`,
   })
 

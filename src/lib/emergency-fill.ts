@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendSms, sendFillInvite, isTestNumber } from '@/lib/sms'
 import { createAlert } from '@/lib/alerts'
+import { renderTemplate } from '@/lib/notification-templates'
 
 const ADMIN_PHONE = '+16193019180'
 
@@ -100,11 +101,17 @@ export async function sendEmergencyFill(activityId: string) {
     })
 
     // In-app alert
+    const { title: pushTitle, body: pushBody } = await renderTemplate('fill_invite', 'push', {
+      activity_name: activity.activity_name,
+      spots_text: spotsText,
+      inviter_name: creatorName,
+      date_time: dateTimeStr || 'TBD',
+    })
     await createAlert({
       user_id: user.id,
       type: 'activity_invite',
-      title: `${activity.activity_name}: ${spotsText}!`,
-      body: `${creatorName} is organizing — reply IN to claim it!`,
+      title: pushTitle ?? `${activity.activity_name}: ${spotsText}!`,
+      body: pushBody,
       link: `/app/activities/${activityId}`,
     })
   }
@@ -146,11 +153,15 @@ export async function notifyHostOfDropout(
   if (!host) return
 
   // In-app alert with link
+  const { title: pushTitle, body: pushBody } = await renderTemplate('dropout_notification', 'push', {
+    dropout_name: dropoutName,
+    activity_name: activity.activity_name,
+  })
   await createAlert({
     user_id: host.id,
     type: 'activity_invite',
-    title: `${dropoutName} dropped out of ${activity.activity_name}!`,
-    body: 'Tap to send an emergency fill, or reply FILL to this text.',
+    title: pushTitle ?? `${dropoutName} dropped out of ${activity.activity_name}!`,
+    body: pushBody,
     link: `/app/activities/${activityId}?emergency=true`,
   })
 
@@ -159,8 +170,9 @@ export async function notifyHostOfDropout(
   const actualTo = isTestNumber(phone) ? ADMIN_PHONE : phone
   const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
 
-  await sendSms(
-    actualTo,
-    `${dropoutName} just dropped out of ${activity.activity_name}! Reply FILL to send an emergency invite to everyone.${testNote}`
-  )
+  const { body: smsBody } = await renderTemplate('dropout_notification', 'sms', {
+    dropout_name: dropoutName,
+    activity_name: activity.activity_name,
+  })
+  await sendSms(actualTo, smsBody + testNote)
 }

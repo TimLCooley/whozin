@@ -1,108 +1,224 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
+import type { ResolvedEvent, NotifCategory, ChannelId } from '@/lib/notification-templates'
 
-interface ChannelTile {
-  id: string
-  href: string | null
-  name: string
-  description: string
-  status: 'live' | 'soon'
-  count?: number
-  icon: React.ReactNode
+const CATEGORY_ORDER: NotifCategory[] = ['Auth', 'Onboarding', 'Groups', 'Activities', 'Spots', 'Chat']
+
+const CATEGORY_ACCENT: Record<NotifCategory, string> = {
+  Auth: 'text-amber-700 bg-amber-50',
+  Onboarding: 'text-blue-700 bg-blue-50',
+  Groups: 'text-cyan-700 bg-cyan-50',
+  Activities: 'text-violet-700 bg-violet-50',
+  Spots: 'text-emerald-700 bg-emerald-50',
+  Chat: 'text-pink-700 bg-pink-50',
 }
 
-const CHANNELS: ChannelTile[] = [
-  {
-    id: 'sms',
-    href: '/admin/templates/sms',
-    name: 'SMS',
-    description: 'Twilio SMS sent during auth, invites, reminders, waitlist, and chat fallback.',
-    status: 'live',
-    count: 11,
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'email',
-    href: null,
-    name: 'Email',
-    description: 'Transactional emails via SendGrid — onboarding, activity invites, reminders.',
-    status: 'soon',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-        <polyline points="22,6 12,13 2,6" />
-      </svg>
-    ),
-  },
-  {
-    id: 'push',
-    href: null,
-    name: 'Push',
-    description: 'iOS/Android/Web push notifications via APNs and FCM.',
-    status: 'soon',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
-        <path d="M13.73 21a2 2 0 01-3.46 0" />
-      </svg>
-    ),
-  },
-]
+const CHANNEL_ORDER: ChannelId[] = ['sms', 'push']
 
-export default function TemplatesHubPage() {
+const CHANNEL_LABELS: Record<ChannelId, string> = { sms: 'SMS', push: 'Push' }
+
+function defaultChannel(event: ResolvedEvent): ChannelId {
+  return CHANNEL_ORDER.find((c) => event.channels[c]) ?? 'sms'
+}
+
+export default function TemplatesEventsPage() {
+  const [events, setEvents] = useState<ResolvedEvent[] | null>(null)
+  const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [showCustomizedOnly, setShowCustomizedOnly] = useState(false)
+  const [channelFilter, setChannelFilter] = useState<'all' | ChannelId>('all')
+
+  useEffect(() => {
+    fetch('/api/admin/templates/events')
+      .then((r) => r.json())
+      .then((data) => setEvents(data.events ?? []))
+      .catch(() => setError('Failed to load templates.'))
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!events) return null
+    const q = query.trim().toLowerCase()
+    return events.filter((e) => {
+      if (channelFilter !== 'all' && !e.channels[channelFilter]) return false
+      if (showCustomizedOnly && !Object.values(e.channels).some((c) => c?.is_customized)) return false
+      if (!q) return true
+      return (
+        e.name.toLowerCase().includes(q) ||
+        e.trigger.toLowerCase().includes(q) ||
+        e.id.toLowerCase().includes(q) ||
+        Object.values(e.channels).some((c) => c?.body.toLowerCase().includes(q) || c?.title?.toLowerCase().includes(q))
+      )
+    })
+  }, [events, query, showCustomizedOnly, channelFilter])
+
+  const grouped = useMemo(() => {
+    if (!filtered) return null
+    const map = new Map<NotifCategory, ResolvedEvent[]>()
+    for (const e of filtered) {
+      const list = map.get(e.category) ?? []
+      list.push(e)
+      map.set(e.category, list)
+    }
+    return CATEGORY_ORDER
+      .map((cat) => ({ category: cat, events: map.get(cat) ?? [] }))
+      .filter((g) => g.events.length > 0)
+  }, [filtered])
+
+  const totalCustomized = events?.filter((e) => Object.values(e.channels).some((c) => c?.is_customized)).length ?? 0
+
   return (
-    <div className="max-w-4xl">
-      <div className="mb-8">
+    <div className="max-w-5xl">
+      <div className="mb-6">
         <h2 className="text-2xl font-bold">System Templates</h2>
         <p className="text-sm text-muted mt-1">
-          Edit the wording of every automated message Whozin sends. Pick a channel below.
+          {events ? (
+            <>
+              {events.length} events • {totalCustomized > 0
+                ? <span className="text-foreground font-medium">{totalCustomized} customized</span>
+                : 'all using defaults'}
+            </>
+          ) : (
+            'Loading…'
+          )}
         </p>
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {CHANNELS.map((ch) => {
-          const inner = (
-            <div className="h-full rounded-2xl border border-border bg-background p-5 transition-all hover:border-primary/40 hover:shadow-md group">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
-                  ch.status === 'live' ? 'bg-primary/10 text-primary' : 'bg-surface text-muted'
-                }`}>
-                  {ch.icon}
-                </div>
-                {ch.status === 'soon' ? (
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted bg-surface px-2 py-1 rounded-full">
-                    Soon
-                  </span>
-                ) : ch.count !== undefined ? (
-                  <span className="text-xs font-semibold text-muted">
-                    {ch.count} templates
-                  </span>
-                ) : null}
-              </div>
-              <h3 className="text-base font-semibold text-foreground mb-1">{ch.name}</h3>
-              <p className="text-xs text-muted leading-relaxed">{ch.description}</p>
-              {ch.status === 'live' && (
-                <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-primary">
-                  Open
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:translate-x-0.5">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </div>
-              )}
-            </div>
-          )
-          return ch.href ? (
-            <Link key={ch.id} href={ch.href}>{inner}</Link>
-          ) : (
-            <div key={ch.id} className="opacity-60 cursor-not-allowed">{inner}</div>
-          )
-        })}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <svg
+            width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search events, triggers, or message body…"
+            className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-background text-sm
+                       placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30
+                       focus:border-primary"
+          />
+        </div>
+        <div className="flex items-center gap-1 p-1 bg-surface rounded-xl border border-border">
+          {(['all', 'sms', 'push'] as const).map((c) => (
+            <button
+              key={c}
+              onClick={() => setChannelFilter(c)}
+              className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors capitalize ${
+                channelFilter === c ? 'bg-background shadow-sm text-foreground' : 'text-muted hover:text-foreground'
+              }`}
+            >
+              {c === 'all' ? 'All' : c.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setShowCustomizedOnly((v) => !v)}
+          className={`h-11 px-4 rounded-xl text-sm font-medium border transition-colors whitespace-nowrap ${
+            showCustomizedOnly
+              ? 'bg-primary text-white border-primary'
+              : 'bg-background border-border text-foreground hover:bg-surface'
+          }`}
+        >
+          {showCustomizedOnly ? 'Showing customized' : 'Customized only'}
+        </button>
       </div>
+
+      {error && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-danger/10 text-danger text-sm">{error}</div>
+      )}
+
+      {!events && !error && (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {grouped && grouped.length === 0 && (
+        <div className="text-center py-16 text-muted text-sm">
+          No events match your filters.
+        </div>
+      )}
+
+      {grouped && grouped.map((group) => (
+        <div key={group.category} className="mb-8">
+          <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted mb-3">
+            {group.category}
+          </h3>
+          <div className="space-y-2">
+            {group.events.map((event) => {
+              const channels = CHANNEL_ORDER.filter((c) => event.channels[c])
+              const customized = channels.filter((c) => event.channels[c]?.is_customized)
+              const target = defaultChannel(event)
+              const previewBody = event.channels[target]?.body ?? ''
+              return (
+                <Link
+                  key={event.id}
+                  href={`/admin/templates/${event.id}/${target}`}
+                  className="block rounded-2xl border border-border bg-background p-4 hover:border-primary/40 hover:shadow-sm transition-all group"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <h4 className="text-sm font-semibold text-foreground">{event.name}</h4>
+                        <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${CATEGORY_ACCENT[event.category]}`}>
+                          {event.category}
+                        </span>
+                        {channels.map((c) => {
+                          const isCustomized = event.channels[c]?.is_customized
+                          return (
+                            <span
+                              key={c}
+                              className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                                isCustomized
+                                  ? 'text-primary bg-primary/10'
+                                  : 'text-foreground/60 bg-surface'
+                              }`}
+                            >
+                              {CHANNEL_LABELS[c]}
+                              {isCustomized && <Dot />}
+                            </span>
+                          )
+                        })}
+                      </div>
+                      <p className="text-xs text-muted">{event.trigger}</p>
+                    </div>
+                    <svg
+                      width="18" height="18" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+                      className="text-muted flex-shrink-0 transition-transform group-hover:translate-x-0.5 mt-0.5"
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </div>
+                  <p className="text-[13px] text-foreground/80 font-mono leading-snug whitespace-pre-wrap line-clamp-2 bg-surface rounded-lg px-3 py-2 mt-2">
+                    {previewBody}
+                  </p>
+                  <div className="flex items-center gap-3 mt-2 text-[11px] text-muted">
+                    {customized.length > 0 ? (
+                      <span>
+                        {customized.length} channel{customized.length === 1 ? '' : 's'} customized
+                      </span>
+                    ) : (
+                      <span>Using defaults</span>
+                    )}
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
+}
+
+function Dot() {
+  return <span className="w-1.5 h-1.5 rounded-full bg-primary" aria-hidden />
 }

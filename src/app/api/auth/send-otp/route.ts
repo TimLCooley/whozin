@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
+import { renderTemplate } from '@/lib/notification-templates'
 
 const ADMIN_PHONE = '+16193019180'
 const TEST_AREA_CODES = ['999']
@@ -71,7 +72,8 @@ export async function POST(req: NextRequest) {
 
   const smsTo = isTestNumber(normalizedPhone) ? ADMIN_PHONE : normalizedPhone
   const testNote = isTestNumber(normalizedPhone) ? ` [TEST for ${normalizedPhone}]` : ''
-  const message = `Your Whozin code is: ${code}. It expires in 5 minutes.${testNote}`
+  const { body: rendered } = await renderTemplate('otp_login', 'sms', { code })
+  const message = rendered + testNote
 
   try {
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`

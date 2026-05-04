@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { isSuperAdmin } from '@/lib/auth'
-import { getAllResolved } from '@/lib/sms-templates'
+import { getAllResolvedEvents } from '@/lib/notification-templates'
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -10,6 +10,6 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const templates = await getAllResolved()
-  return NextResponse.json({ templates })
+  const events = await getAllResolvedEvents()
+  return NextResponse.json({ events })
 }

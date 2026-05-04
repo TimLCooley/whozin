@@ -156,10 +156,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const groupName = groupInfo?.name || 'a group'
 
   // Alert other group members about the new message
+  const { renderTemplate } = await import('@/lib/notification-templates')
+  const truncated = text.length > 80 ? text.slice(0, 80) + '...' : text
+  const { title: pushTitle, body: pushBody } = await renderTemplate('chat_message', 'push', {
+    context_name: groupName,
+    sender_name: senderName,
+    text: truncated,
+  })
   await alertGroupMembers(groupId, whozinUser.id, {
     type: 'chat_message',
-    title: `New message in ${groupName}`,
-    body: `${senderName}: ${text.length > 80 ? text.slice(0, 80) + '...' : text}`,
+    title: pushTitle ?? `New message in ${groupName}`,
+    body: pushBody,
     link: `/app/groups/${groupId}?tab=chat`,
   })
 

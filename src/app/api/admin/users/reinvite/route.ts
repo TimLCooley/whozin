@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendSms } from '@/lib/sms'
+import { renderTemplate } from '@/lib/notification-templates'
 
 export async function POST(req: NextRequest) {
   const { userIds } = await req.json()
@@ -28,11 +29,10 @@ export async function POST(req: NextRequest) {
   const results: { phone: string; success: boolean }[] = []
 
   for (const user of users) {
-    const name = user.first_name || 'Someone'
-    const message =
-      `Hey${user.first_name ? ` ${user.first_name}` : ''}! You've been added to a group on Whozin.\n\n` +
-      `How it works: When there's an activity, you'll get a text. Just reply IN or OUT — that's it. No app needed.\n\n` +
-      `Want to see your groups and manage activities? Download the app: https://whozin.io/dl`
+    const { body: message } = await renderTemplate('group_invite_reinvite', 'sms', {
+      first_name_prefix: user.first_name ? ` ${user.first_name}` : '',
+      download_link: 'https://whozin.io/dl',
+    })
 
     const result = await sendSms(user.phone, message)
     results.push({ phone: user.phone, success: result.success })

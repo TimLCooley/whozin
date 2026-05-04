@@ -175,12 +175,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (confirmedMembers && confirmedMembers.length > 0) {
     const { createAlert } = await import('@/lib/alerts')
+    const { renderTemplate } = await import('@/lib/notification-templates')
+    const truncated = text.length > 80 ? text.slice(0, 80) + '...' : text
+    const { title: pushTitle, body: pushBody } = await renderTemplate('chat_message', 'push', {
+      context_name: activity.activity_name,
+      sender_name: senderName,
+      text: truncated,
+    })
     for (const member of confirmedMembers) {
       await createAlert({
         user_id: member.user_id,
         type: 'chat_message',
-        title: `New message in ${activity.activity_name}`,
-        body: `${senderName}: ${text.length > 80 ? text.slice(0, 80) + '...' : text}`,
+        title: pushTitle ?? `New message in ${activity.activity_name}`,
+        body: pushBody,
         link: `/app/activities/${activityId}?tab=chat`,
       })
     }

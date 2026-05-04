@@ -1,0 +1,8 @@
+-- Event-centric notification template overrides. Defaults live in code
+-- (src/lib/notification-templates.ts); this row stores admin overrides
+-- nested by event_id then channel:
+--
+--   { "<event_id>": { "sms": {body, updated_at}, "push": {title, body, updated_at} } }
+--
+-- An unset event/channel falls back to the default. Created lazily by the
+-- admin save endpoint, so no seed data needed.

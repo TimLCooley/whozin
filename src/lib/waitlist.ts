@@ -1,8 +1,10 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendSms, isTestNumber } from '@/lib/sms'
 import { createAlert } from '@/lib/alerts'
+import { renderTemplate } from '@/lib/notification-templates'
 
 const ADMIN_PHONE = '+16193019180'
+const DOWNLOAD_LINK = 'https://whozin.io/dl'
 
 /**
  * Add a user to the wait list for an activity.
@@ -35,23 +37,32 @@ export async function addToWaitlist(activityId: string, userId: string) {
   const activityName = activity?.activity_name || 'the activity'
   const pos = position ?? 1
 
-  createAlert({
-    user_id: userId,
-    type: 'activity_invite',
-    title: `You're on the wait list`,
-    body: `Spot #${pos} for ${activityName}. We'll notify you if a spot opens up.`,
-    link: `/app/activities/${activityId}`,
-  }).catch(() => {})
+  ;(async () => {
+    const { title, body } = await renderTemplate('waitlist_added', 'push', {
+      activity_name: activityName,
+      position: pos,
+    })
+    createAlert({
+      user_id: userId,
+      type: 'activity_invite',
+      title: title ?? "You're on the wait list",
+      body,
+      link: `/app/activities/${activityId}`,
+    }).catch(() => {})
+  })().catch(() => {})
 
   if (user?.phone && user.text_notifications_enabled !== false) {
     const phone = user.phone.startsWith('+') ? user.phone : `+${user.country_code}${user.phone}`
     const actualTo = isTestNumber(phone) ? ADMIN_PHONE : phone
     const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
 
-    sendSms(
-      actualTo,
-      `You're on the wait list for ${activityName} (spot #${pos}). We'll text you if a spot opens up.${testNote}`
-    ).catch(() => {})
+    ;(async () => {
+      const { body } = await renderTemplate('waitlist_added', 'sms', {
+        activity_name: activityName,
+        position: pos,
+      })
+      sendSms(actualTo, body + testNote).catch(() => {})
+    })().catch(() => {})
   }
 
   return { position: pos }
@@ -110,23 +121,31 @@ export async function promoteFromWaitlist(activityId: string): Promise<boolean> 
 
   const activityName = activity?.activity_name || 'the activity'
 
-  createAlert({
-    user_id: nextUp.user_id,
-    type: 'activity_invite',
-    title: `A spot opened up!`,
-    body: `You're now confirmed for ${activityName}. Open the app to change your status.`,
-    link: `/app/activities/${activityId}`,
-  }).catch(() => {})
+  ;(async () => {
+    const { title, body } = await renderTemplate('waitlist_promoted', 'push', {
+      activity_name: activityName,
+    })
+    createAlert({
+      user_id: nextUp.user_id,
+      type: 'activity_invite',
+      title: title ?? 'A spot opened up!',
+      body,
+      link: `/app/activities/${activityId}`,
+    }).catch(() => {})
+  })().catch(() => {})
 
   if (user?.phone && user.text_notifications_enabled !== false) {
     const phone = user.phone.startsWith('+') ? user.phone : `+${user.country_code}${user.phone}`
     const actualTo = isTestNumber(phone) ? ADMIN_PHONE : phone
     const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
 
-    sendSms(
-      actualTo,
-      `A spot opened up — you're now in for ${activityName}! Open the app to change to OUT if you can't make it: https://whozin.io/dl${testNote}`
-    ).catch(() => {})
+    ;(async () => {
+      const { body } = await renderTemplate('waitlist_promoted', 'sms', {
+        activity_name: activityName,
+        download_link: DOWNLOAD_LINK,
+      })
+      sendSms(actualTo, body + testNote).catch(() => {})
+    })().catch(() => {})
   }
 
   return true

@@ -1,4 +1,8 @@
+import { renderTemplate } from '@/lib/notification-templates'
+
 const ADMIN_PHONE = '+16193019180'
+
+const DOWNLOAD_LINK = 'https://whozin.io/dl'
 
 /** Area codes that are test numbers — SMS routes to admin phone instead */
 const TEST_AREA_CODES = ['999']
@@ -61,12 +65,11 @@ function resolveRecipient(toPhone: string) {
 /** Send a group invite SMS */
 export async function sendSmsInvite(toPhone: string, inviterName: string) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
-  const message =
-    `${inviterName} added you to a group on Whozin!\n\n` +
-    `How it works: When there's an activity, you'll get a text. Just reply IN or OUT — that's it. No app needed.\n\n` +
-    `Want to see your groups and activities? Download the app: https://whozin.io/dl` +
-    testNote
-  return sendSms(actualTo, message)
+  const { body } = await renderTemplate('group_invite', 'sms', {
+    inviter_name: inviterName,
+    download_link: DOWNLOAD_LINK,
+  })
+  return sendSms(actualTo, body + testNote)
 }
 
 /** Send an activity invite SMS/MMS — branded "Are you in?" */
@@ -78,11 +81,12 @@ export async function sendActivityInvite(
   imageUrl?: string
 ) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
-  const message =
-    `${inviterName} is using Whozin to organize ${activityName} on ${dateTime}. ` +
-    `Are you in? Reply IN or OUT` +
-    testNote
-  return sendSms(actualTo, message, imageUrl)
+  const { body } = await renderTemplate('activity_invite', 'sms', {
+    inviter_name: inviterName,
+    activity_name: activityName,
+    date_time: dateTime,
+  })
+  return sendSms(actualTo, body + testNote, imageUrl)
 }
 
 /** Send an activity reminder SMS */
@@ -92,8 +96,11 @@ export async function sendReminderSms(
   windowLabel: string,
 ) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
-  const message = `Whozin reminder: ${activityName} is starting in ${windowLabel}.${testNote}`
-  return sendSms(actualTo, message)
+  const { body } = await renderTemplate('activity_reminder', 'sms', {
+    activity_name: activityName,
+    window_label: windowLabel,
+  })
+  return sendSms(actualTo, body + testNote)
 }
 
 export async function sendFillInvite(
@@ -106,9 +113,11 @@ export async function sendFillInvite(
 ) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
   const spotsText = spotsNeeded === 1 ? '1 spot' : `${spotsNeeded} spots`
-  const message =
-    `${inviterName} is using Whozin to fill ${spotsText} for ${activityName} on ${dateTime}. ` +
-    `Are you in? Reply IN` +
-    testNote
-  return sendSms(actualTo, message, imageUrl)
+  const { body } = await renderTemplate('fill_invite', 'sms', {
+    inviter_name: inviterName,
+    spots_text: spotsText,
+    activity_name: activityName,
+    date_time: dateTime,
+  })
+  return sendSms(actualTo, body + testNote, imageUrl)
 }

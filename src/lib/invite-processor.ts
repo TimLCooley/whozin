@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendActivityInvite } from '@/lib/sms'
 import { createAlert } from '@/lib/alerts'
+import { renderTemplate } from '@/lib/notification-templates'
 
 /**
  * Process priority invites for a single activity.
@@ -233,11 +234,16 @@ export async function processActivityInvites(activityId: string) {
     })
 
     // In-app alert too
+    const { title: pushTitle, body: pushBody } = await renderTemplate('activity_invite', 'push', {
+      activity_name: activity.activity_name,
+      inviter_name: creator?.first_name ?? 'Someone',
+      date_time: dateTimeStr || 'TBD',
+    })
     await createAlert({
       user_id: user.id,
       type: 'activity_invite',
-      title: `You're invited: ${activity.activity_name}`,
-      body: `${creator?.first_name ?? 'Someone'} invited you. Reply IN or OUT!`,
+      title: pushTitle ?? `You're invited: ${activity.activity_name}`,
+      body: pushBody,
       link: `/app/activities/${activityId}`,
     })
   }

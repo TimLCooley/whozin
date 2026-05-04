@@ -4,6 +4,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { processActivityInvites } from '@/lib/invite-processor'
 import { createAlert } from '@/lib/alerts'
 import { sendSms } from '@/lib/sms'
+import { renderTemplate } from '@/lib/notification-templates'
 
 // POST — host marks an On Deck member as confirmed
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -88,23 +89,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const activityName = activity.activity_name || 'the activity'
 
   // In-app alert + push notification
-  createAlert({
-    user_id: targetUserId,
-    type: 'activity_invite',
-    title: "You're in!",
-    body: `${hostName} confirmed you for ${activityName}.`,
-    link: `/app/activities/${id}`,
-  }).catch(() => {})
+  ;(async () => {
+    const { title, body } = await renderTemplate('activity_confirmed', 'push', {
+      activity_name: activityName,
+      host_name: hostName,
+    })
+    createAlert({
+      user_id: targetUserId,
+      type: 'activity_invite',
+      title: title ?? "You're in!",
+      body,
+      link: `/app/activities/${id}`,
+    }).catch(() => {})
+  })().catch(() => {})
 
   // SMS to all confirmed members (in addition to push) unless they've opted out
   if (targetUser?.phone && targetUser.text_notifications_enabled !== false) {
     const chatLine = activity.chat_enabled
-      ? ` Open or download the app to chat: https://whozin.io/dl`
-      : ` See details in the app: https://whozin.io/dl`
-    sendSms(
-      targetUser.phone,
-      `You're in for ${activityName}!${chatLine}`
-    ).catch(() => {})
+      ? ' Open or download the app to chat: https://whozin.io/dl'
+      : ' See details in the app: https://whozin.io/dl'
+    ;(async () => {
+      const { body } = await renderTemplate('activity_confirmed', 'sms', {
+        activity_name: activityName,
+        host_name: hostName,
+        chat_line: chatLine,
+      })
+      sendSms(targetUser.phone, body).catch(() => {})
+    })().catch(() => {})
   }
 
   // If not full and priority invites are active, process the queue
