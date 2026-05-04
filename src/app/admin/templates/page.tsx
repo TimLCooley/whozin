@@ -1,231 +1,108 @@
 'use client'
 
-import { useState } from 'react'
+import Link from 'next/link'
 
-interface Template {
+interface ChannelTile {
   id: string
+  href: string | null
   name: string
-  channel: 'email' | 'sms'
-  category: string
-  subject?: string
-  body: string
   description: string
+  status: 'live' | 'soon'
+  count?: number
+  icon: React.ReactNode
 }
 
-const DEFAULT_TEMPLATES: Template[] = [
-  // Email templates
+const CHANNELS: ChannelTile[] = [
   {
-    id: 'welcome_email',
-    name: 'Welcome Email',
-    channel: 'email',
-    category: 'Onboarding',
-    subject: 'Welcome to Whozin! 🎉',
-    body: 'Hi {{first_name}},\n\nWelcome to Whozin! We\'re excited to have you.\n\nStart by creating a group and inviting your friends to find out who\'s in.\n\nBest,\nThe Whozin Team',
-    description: 'Sent when a new user completes registration.',
+    id: 'sms',
+    href: '/admin/templates/sms',
+    name: 'SMS',
+    description: 'Twilio SMS sent during auth, invites, reminders, waitlist, and chat fallback.',
+    status: 'live',
+    count: 11,
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+      </svg>
+    ),
   },
   {
-    id: 'activity_invite_email',
-    name: 'Activity Invitation',
-    channel: 'email',
-    category: 'Activities',
-    subject: '{{creator_name}} invited you to {{activity_name}}',
-    body: 'Hi {{first_name}},\n\n{{creator_name}} has invited you to {{activity_name}} on {{activity_date}}.\n\nTap below to respond:\n{{response_link}}\n\nBest,\nThe Whozin Team',
-    description: 'Sent when a user is invited to an activity.',
+    id: 'email',
+    href: null,
+    name: 'Email',
+    description: 'Transactional emails via SendGrid — onboarding, activity invites, reminders.',
+    status: 'soon',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+        <polyline points="22,6 12,13 2,6" />
+      </svg>
+    ),
   },
   {
-    id: 'activity_reminder_email',
-    name: 'Activity Reminder',
-    channel: 'email',
-    category: 'Activities',
-    subject: 'Reminder: {{activity_name}} is coming up!',
-    body: 'Hi {{first_name}},\n\n{{activity_name}} is happening on {{activity_date}} at {{activity_time}}.\n\nLocation: {{location}}\n\nSee you there!\nThe Whozin Team',
-    description: 'Sent 24 hours before an activity.',
-  },
-  {
-    id: 'group_invite_email',
-    name: 'Group Invitation',
-    channel: 'email',
-    category: 'Groups',
-    subject: '{{inviter_name}} added you to {{group_name}}',
-    body: 'Hi {{first_name}},\n\n{{inviter_name}} has added you to the group "{{group_name}}" on Whozin.\n\nOpen the app to see the group.\n\nBest,\nThe Whozin Team',
-    description: 'Sent when a user is added to a group.',
-  },
-  {
-    id: 'password_reset_email',
-    name: 'Password Reset',
-    channel: 'email',
-    category: 'Auth',
-    subject: 'Your Whozin verification code',
-    body: 'Hi {{first_name}},\n\nYour verification code is: {{code}}\n\nThis code expires in 10 minutes.\n\nIf you didn\'t request this, please ignore this email.\n\nBest,\nThe Whozin Team',
-    description: 'Sent when a user requests a password reset.',
-  },
-  {
-    id: 'account_deleted_email',
-    name: 'Account Deleted',
-    channel: 'email',
-    category: 'Account',
-    subject: 'Your Whozin account has been deleted',
-    body: 'Hi {{first_name}},\n\nYour Whozin account has been successfully deleted. All your data has been removed.\n\nWe\'re sorry to see you go. If you change your mind, you can always create a new account.\n\nBest,\nThe Whozin Team',
-    description: 'Sent after account deletion is completed.',
-  },
-  // SMS templates
-  {
-    id: 'otp_sms',
-    name: 'OTP Code',
-    channel: 'sms',
-    category: 'Auth',
-    body: 'Your Whozin code is {{code}}. Expires in 10 min. Don\'t share this code.',
-    description: 'SMS OTP for phone authentication.',
-  },
-  {
-    id: 'activity_invite_sms',
-    name: 'Activity Invite SMS',
-    channel: 'sms',
-    category: 'Activities',
-    body: '{{creator_name}} invited you to "{{activity_name}}" on {{activity_date}}. Reply YES or NO, or tap: {{link}}',
-    description: 'SMS sent when inviting a user to an activity.',
-  },
-  {
-    id: 'activity_reminder_sms',
-    name: 'Activity Reminder SMS',
-    channel: 'sms',
-    category: 'Activities',
-    body: 'Reminder: {{activity_name}} is tomorrow at {{activity_time}}. {{location}}',
-    description: 'SMS reminder before an activity.',
-  },
-  {
-    id: 'group_invite_sms',
-    name: 'Group Invite SMS',
-    channel: 'sms',
-    category: 'Groups',
-    body: '{{inviter_name}} added you to "{{group_name}}" on Whozin. Download the app: {{link}}',
-    description: 'SMS sent when adding a non-user to a group.',
+    id: 'push',
+    href: null,
+    name: 'Push',
+    description: 'iOS/Android/Web push notifications via APNs and FCM.',
+    status: 'soon',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 01-3.46 0" />
+      </svg>
+    ),
   },
 ]
 
-export default function TemplatesPage() {
-  const [templates, setTemplates] = useState<Template[]>(DEFAULT_TEMPLATES)
-  const [editing, setEditing] = useState<Template | null>(null)
-  const [filterChannel, setFilterChannel] = useState<'all' | 'email' | 'sms'>('all')
-
-  const filtered = filterChannel === 'all'
-    ? templates
-    : templates.filter((t) => t.channel === filterChannel)
-
-  const categories = [...new Set(filtered.map((t) => t.category))]
-
-  function handleSave() {
-    if (!editing) return
-    setTemplates((prev) => prev.map((t) => (t.id === editing.id ? editing : t)))
-    // TODO: persist to whozin_settings or a templates table
-    setEditing(null)
-  }
-
+export default function TemplatesHubPage() {
   return (
-    <div>
-      <h2 className="text-xl font-bold text-foreground mb-1">System Templates</h2>
-      <p className="text-[13px] text-muted mb-6">Manage email and SMS templates for automated system messages.</p>
-
-      {/* Filter */}
-      <div className="flex gap-2 mb-5">
-        {(['all', 'email', 'sms'] as const).map((ch) => (
-          <button
-            key={ch}
-            onClick={() => setFilterChannel(ch)}
-            className={`px-4 py-2 rounded-lg text-[12px] font-semibold transition-colors ${
-              filterChannel === ch ? 'bg-primary text-white' : 'bg-background border border-border text-foreground'
-            }`}
-          >
-            {ch === 'all' ? 'All' : ch.toUpperCase()}
-          </button>
-        ))}
+    <div className="max-w-4xl">
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold">System Templates</h2>
+        <p className="text-sm text-muted mt-1">
+          Edit the wording of every automated message Whozin sends. Pick a channel below.
+        </p>
       </div>
 
-      {/* Templates by category */}
-      {categories.map((cat) => (
-        <div key={cat} className="mb-6">
-          <h3 className="text-[12px] font-bold text-muted uppercase tracking-wide mb-2">{cat}</h3>
-          <div className="space-y-2">
-            {filtered
-              .filter((t) => t.category === cat)
-              .map((template) => (
-                <button
-                  key={template.id}
-                  onClick={() => setEditing({ ...template })}
-                  className="w-full text-left bg-background border border-border/50 rounded-xl p-4 hover:bg-surface active:bg-surface transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] font-semibold text-foreground">{template.name}</span>
-                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                      template.channel === 'email' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
-                    }`}>
-                      {template.channel}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted">{template.description}</p>
-                </button>
-              ))}
-          </div>
-        </div>
-      ))}
-
-      {/* Edit modal */}
-      {editing && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center modal-backdrop bg-black/40 px-4 pb-4" onClick={() => setEditing(null)}>
-          <div className="modal-panel bg-background rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-foreground">{editing.name}</h3>
-              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                editing.channel === 'email' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
-              }`}>
-                {editing.channel}
-              </span>
-            </div>
-            <p className="text-[12px] text-muted mb-4">{editing.description}</p>
-
-            {editing.channel === 'email' && (
-              <div className="mb-4">
-                <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Subject</label>
-                <input
-                  type="text"
-                  value={editing.subject || ''}
-                  onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
-                  className="input-field"
-                />
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {CHANNELS.map((ch) => {
+          const inner = (
+            <div className="h-full rounded-2xl border border-border bg-background p-5 transition-all hover:border-primary/40 hover:shadow-md group">
+              <div className="flex items-center justify-between mb-4">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                  ch.status === 'live' ? 'bg-primary/10 text-primary' : 'bg-surface text-muted'
+                }`}>
+                  {ch.icon}
+                </div>
+                {ch.status === 'soon' ? (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted bg-surface px-2 py-1 rounded-full">
+                    Soon
+                  </span>
+                ) : ch.count !== undefined ? (
+                  <span className="text-xs font-semibold text-muted">
+                    {ch.count} templates
+                  </span>
+                ) : null}
               </div>
-            )}
-
-            <div className="mb-4">
-              <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Body</label>
-              <textarea
-                value={editing.body}
-                onChange={(e) => setEditing({ ...editing, body: e.target.value })}
-                rows={8}
-                className="input-field resize-none font-mono text-[12px]"
-              />
+              <h3 className="text-base font-semibold text-foreground mb-1">{ch.name}</h3>
+              <p className="text-xs text-muted leading-relaxed">{ch.description}</p>
+              {ch.status === 'live' && (
+                <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-primary">
+                  Open
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:translate-x-0.5">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </div>
+              )}
             </div>
-
-            <div className="bg-surface rounded-lg p-3 mb-5">
-              <p className="text-[11px] font-medium text-muted mb-1">Available variables:</p>
-              <p className="text-[11px] text-muted">
-                {'{{first_name}}, {{last_name}}, {{creator_name}}, {{activity_name}}, {{activity_date}}, {{activity_time}}, {{location}}, {{group_name}}, {{inviter_name}}, {{code}}, {{link}}, {{response_link}}'}
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setEditing(null)}
-                className="flex-1 border border-border text-foreground font-semibold text-[13px] py-2.5 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button onClick={handleSave} className="btn-primary flex-1 py-2.5">
-                Save Template
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )
+          return ch.href ? (
+            <Link key={ch.id} href={ch.href}>{inner}</Link>
+          ) : (
+            <div key={ch.id} className="opacity-60 cursor-not-allowed">{inner}</div>
+          )
+        })}
+      </div>
     </div>
   )
 }
