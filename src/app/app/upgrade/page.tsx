@@ -8,10 +8,21 @@ import { BrandedFavicon } from '@/components/ui/branded-logo'
 
 type Plan = 'monthly' | 'annual' | 'lifetime'
 
-const PLANS: { id: Plan; label: string; price: string; subtext?: string; badge?: string }[] = [
-  { id: 'monthly', label: 'Monthly', price: '$12.99', subtext: '/month' },
-  { id: 'annual', label: 'Annual', price: '$99.99', subtext: '/year', badge: 'Save 36%' },
-  { id: 'lifetime', label: 'Lifetime', price: '$199.99', subtext: 'one-time' },
+interface DisplayPlan {
+  id: Plan
+  label: string
+  price: string
+  subtext: string
+  badge?: string
+  is_subscription: boolean
+  apple_product_id: string
+  google_product_id: string
+}
+
+const FALLBACK_PLANS: DisplayPlan[] = [
+  { id: 'monthly', label: 'Monthly', price: '$12.99', subtext: '/month', is_subscription: true, apple_product_id: 'whozin_pro_monthly', google_product_id: 'whozin_pro_monthly' },
+  { id: 'annual', label: 'Annual', price: '$99.99', subtext: '/year', badge: 'Save 36%', is_subscription: true, apple_product_id: 'whozin_pro_annual', google_product_id: 'whozin_pro_annual' },
+  { id: 'lifetime', label: 'Lifetime', price: '$199.99', subtext: 'one-time', is_subscription: false, apple_product_id: 'whozin_pro_lifetime', google_product_id: 'whozin_pro_lifetime' },
 ]
 
 const PRO_FEATURES = [
@@ -29,11 +40,35 @@ export default function UpgradePage() {
 
   const { isPro, refresh } = useProStatus()
   const [selectedPlan, setSelectedPlan] = useState<Plan>('annual')
+  const [plans, setPlans] = useState<DisplayPlan[]>(FALLBACK_PLANS)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const native = isNative()
   const platform = getPlatform()
+
+  useEffect(() => {
+    fetch('/api/pricing')
+      .then((r) => r.json())
+      .then((data: { plans?: Array<{
+        id: Plan; label: string; display_price: string; subtext: string;
+        badge?: string; is_subscription: boolean;
+        apple_product_id: string; google_product_id: string;
+      }> }) => {
+        if (!data.plans?.length) return
+        setPlans(data.plans.map((p) => ({
+          id: p.id,
+          label: p.label,
+          price: p.display_price,
+          subtext: p.subtext,
+          badge: p.badge || undefined,
+          is_subscription: p.is_subscription,
+          apple_product_id: p.apple_product_id,
+          google_product_id: p.google_product_id,
+        })))
+      })
+      .catch(() => { /* keep fallback */ })
+  }, [])
 
   // Handle Stripe return
   useEffect(() => {
@@ -244,7 +279,7 @@ export default function UpgradePage() {
 
         {/* Pricing cards */}
         <div className="space-y-3 mb-6">
-          {PLANS.map((plan) => (
+          {plans.map((plan) => (
             <button
               key={plan.id}
               onClick={() => setSelectedPlan(plan.id)}
@@ -294,9 +329,13 @@ export default function UpgradePage() {
         >
           {loading
             ? 'Processing...'
-            : selectedPlan === 'lifetime'
-              ? `Buy Lifetime — ${PLANS[2].price}`
-              : `Subscribe — ${PLANS.find((p) => p.id === selectedPlan)?.price}${selectedPlan === 'monthly' ? '/mo' : '/yr'}`
+            : (() => {
+                const sel = plans.find((p) => p.id === selectedPlan)
+                if (!sel) return 'Subscribe'
+                if (!sel.is_subscription) return `Buy ${sel.label} — ${sel.price}`
+                const period = sel.id === 'monthly' ? '/mo' : '/yr'
+                return `Subscribe — ${sel.price}${period}`
+              })()
           }
         </button>
 
@@ -314,7 +353,7 @@ export default function UpgradePage() {
         {/* Legal */}
         <div className="text-center mt-2 mb-8">
           <p className="text-[11px] text-muted leading-relaxed px-4">
-            {selectedPlan === 'lifetime'
+            {plans.find((p) => p.id === selectedPlan)?.is_subscription === false
               ? 'One-time purchase. Lifetime access to all Pro features.'
               : 'Payment will be charged to your account. Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.'
             }

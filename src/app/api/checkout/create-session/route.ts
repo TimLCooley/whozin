@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { getPricingConfig } from '@/lib/pricing'
 import Stripe from 'stripe'
 
-const PLAN_PRICES: Record<string, { envKey: string; mode: 'subscription' | 'payment' }> = {
-  monthly: { envKey: 'STRIPE_PRICE_MONTHLY', mode: 'subscription' },
-  annual: { envKey: 'STRIPE_PRICE_ANNUAL', mode: 'subscription' },
-  lifetime: { envKey: 'STRIPE_PRICE_LIFETIME', mode: 'payment' },
+const ENV_PRICE_FALLBACK: Record<string, string> = {
+  monthly: 'STRIPE_PRICE_MONTHLY',
+  annual: 'STRIPE_PRICE_ANNUAL',
+  lifetime: 'STRIPE_PRICE_LIFETIME',
 }
 
 function getStripe() {
@@ -22,10 +23,15 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { plan, returnTo } = await req.json()
-  const planConfig = PLAN_PRICES[plan]
-  if (!planConfig) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
+  const pricing = await getPricingConfig()
+  const planRow = pricing.plans.find((p) => p.id === plan && p.enabled)
+  if (!planRow) return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
 
-  const priceId = process.env[planConfig.envKey]?.trim()
+  const mode: 'subscription' | 'payment' = planRow.is_subscription ? 'subscription' : 'payment'
+  const priceId =
+    planRow.stripe_price_id?.trim() ||
+    process.env[ENV_PRICE_FALLBACK[plan] ?? '']?.trim() ||
+    ''
   if (!priceId) return NextResponse.json({ error: 'Plan not configured' }, { status: 500 })
 
   const admin = getAdminClient()
@@ -60,7 +66,7 @@ export async function POST(req: NextRequest) {
 
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: customerId,
-    mode: planConfig.mode,
+    mode,
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: successUrl,
     cancel_url: cancelUrl,
