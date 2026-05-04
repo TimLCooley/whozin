@@ -30,6 +30,7 @@ interface GroupDetail {
   members_visible: boolean
   is_owner: boolean
   current_user_id: string
+  creator_name: string | null
   creator_is_pro: boolean
   members: Member[]
 }
@@ -512,15 +513,13 @@ export default function GroupDetailPage() {
         <div className="flex-1 overflow-y-auto px-4 py-6">
           <div className="max-w-sm mx-auto">
             <div className="bg-background border border-border/50 rounded-2xl p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="9" cy="7" r="3" />
-                  <circle cx="17" cy="9" r="2.5" />
-                  <path d="M2 21v-1a5 5 0 0110 0v1M14 21v-1a4 4 0 018 0v1" />
-                </svg>
-              </div>
               <h1 className="text-[17px] font-bold text-foreground text-center">{group.name}</h1>
-              <p className="text-[12px] text-muted text-center mt-1 mb-5">
+              {group.creator_name && (
+                <p className="text-[13px] text-foreground/70 text-center mt-1">
+                  Group owner: <span className="font-semibold text-foreground">{group.creator_name}</span>
+                </p>
+              )}
+              <p className="text-[12px] text-muted text-center mt-2 mb-5">
                 The host has set this group to private. You can&apos;t see other members.
               </p>
 

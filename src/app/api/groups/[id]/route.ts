@@ -29,12 +29,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Group not found' }, { status: 404 })
   }
 
-  // Get creator's membership tier to determine Pro chat access
+  // Get creator's name + membership tier to determine Pro chat access
   const { data: creator } = await admin
     .from('whozin_users')
-    .select('membership_tier')
+    .select('first_name, last_name, show_last_name, membership_tier')
     .eq('id', group.creator_id)
     .single()
+
+  const creatorIsSelf = group.creator_id === whozinUser.id
+  const creatorShowLast = creator?.show_last_name ?? true
+  const creatorLast = creator?.last_name || ''
+  const creatorMaskedLast = creatorIsSelf || creatorShowLast
+    ? creatorLast
+    : (creatorLast ? `${creatorLast[0].toUpperCase()}.` : '')
+  const creatorName = [creator?.first_name, creatorMaskedLast].filter(Boolean).join(' ').trim() || null
 
   const isOwner = group.creator_id === whozinUser.id
   const membersVisible = group.members_visible ?? true
@@ -56,6 +64,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ...group,
     is_owner: isOwner,
     current_user_id: whozinUser.id,
+    creator_name: creatorName,
     creator_is_pro: creator?.membership_tier === 'pro',
     members: visibleMembers.map((m) => {
       const u = m.whozin_users as unknown as Record<string, unknown>
