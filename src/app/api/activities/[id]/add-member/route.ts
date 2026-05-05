@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Verify they're the creator OR a confirmed member of an open-invite activity
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, group_id, status, priority_invite, max_capacity, open_invite')
+    .select('creator_id, group_id, status, priority_invite, max_capacity, open_invite, activity_name, activity_date, activity_time, image_url, response_timer_minutes')
     .eq('id', id)
     .single()
 
@@ -112,11 +112,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const nextOrder = (lastMember?.priority_order ?? 0) + 1
 
-  // Add to activity as 'tbd' (on deck)
+  // All-at-once activities (priority_invite = false) skip the On Deck queue:
+  // a newly-added member should be invited immediately like everyone else
+  // already was. Priority-invite activities still go through On Deck and the
+  // queue processor handles the rest.
+  const allAtOnce = !activity.priority_invite && activity.status === 'open'
+  const initialStatus: 'tbd' | 'waiting' = allAtOnce ? 'waiting' : 'tbd'
+
   await admin.from('whozin_activity_member').insert({
     activity_id: id,
     user_id: targetUserId,
-    status: 'tbd',
+    status: initialStatus,
     priority_order: nextOrder,
   })
 
@@ -162,6 +168,60 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // so this new member gets picked up if there are open spots
   if (activity.status === 'open' && activity.priority_invite) {
     await processActivityInvites(id)
+  }
+
+  // All-at-once: send the new member the same Fill SMS the original
+  // batch got, attributed to the host.
+  if (allAtOnce) {
+    const [{ data: host }, { data: invitee }, { count: confirmedCount }] = await Promise.all([
+      admin.from('whozin_users').select('first_name').eq('id', activity.creator_id).single(),
+      admin.from('whozin_users').select('phone, country_code').eq('id', targetUserId).single(),
+      admin
+        .from('whozin_activity_member')
+        .select('id', { count: 'exact', head: true })
+        .eq('activity_id', id)
+        .eq('status', 'confirmed'),
+    ])
+
+    let dateTimeStr = ''
+    if (activity.activity_date) {
+      const d = new Date(activity.activity_date + 'T00:00:00')
+      dateTimeStr = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+      if (activity.activity_time) {
+        const [h, m] = activity.activity_time.split(':')
+        const hour = parseInt(h)
+        const ampm = hour >= 12 ? 'pm' : 'am'
+        const h12 = hour % 12 || 12
+        dateTimeStr += ` at ${h12}:${m} ${ampm}`
+      }
+    }
+
+    const spotsNeeded = activity.max_capacity
+      ? Math.max(activity.max_capacity - (confirmedCount ?? 0), 1)
+      : 1
+
+    if (invitee?.phone) {
+      const { sendFillInvite } = await import('@/lib/sms')
+      const phone = invitee.phone.startsWith('+') ? invitee.phone : `+${invitee.country_code}${invitee.phone}`
+      const result = await sendFillInvite(
+        phone,
+        host?.first_name ?? 'Someone',
+        activity.activity_name,
+        dateTimeStr || 'TBD',
+        spotsNeeded,
+        activity.image_url || undefined,
+      )
+      const responseTimerMs = (activity.response_timer_minutes ?? 5) * 60 * 1000
+      await admin.from('whozin_invite').insert({
+        activity_id: id,
+        user_id: targetUserId,
+        batch_number: 1,
+        status: 'pending',
+        sms_sid: result.success ? result.sid : null,
+        sent_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + responseTimerMs).toISOString(),
+      })
+    }
   }
 
   // Get the added user's name for the confirmation

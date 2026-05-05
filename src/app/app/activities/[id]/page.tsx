@@ -928,12 +928,20 @@ export default function ActivityDetailPage() {
                     : `${confirmed.length} in`
                 } onEdit={activity.is_creator ? () => openEdit('spots') : undefined} />
                 {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
-                {activity.priority_invite && (
-                  <InfoRow icon="timer" label="Response Timer" value={
-                    activity.response_timer_minutes >= 60
-                      ? `${activity.response_timer_minutes / 60} hr per batch`
-                      : `${activity.response_timer_minutes} min per batch`
-                  } onEdit={() => openTimerEdit()} />
+                <InfoRow
+                  icon="timer"
+                  label="Invites"
+                  value={
+                    activity.priority_invite
+                      ? (activity.response_timer_minutes >= 60
+                          ? `Priority queue · ${activity.response_timer_minutes / 60} hr per batch`
+                          : `Priority queue · ${activity.response_timer_minutes} min per batch`)
+                      : 'All at once'
+                  }
+                  onEdit={activity.priority_invite ? () => openTimerEdit() : undefined}
+                />
+                {!activity.priority_invite && tbd.length === 0 && (
+                  <p className="text-[12px] text-muted -mt-1 px-1">Anyone you add later gets invited right away.</p>
                 )}
 
                 {/* Batch expired banner — missed people + open spots + more tbd to invite */}
