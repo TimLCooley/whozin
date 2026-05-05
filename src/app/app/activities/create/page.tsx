@@ -93,6 +93,7 @@ export default function CreateActivityPage() {
   const [chatEnabled, setChatEnabled] = useState(false)
   const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
   const [waitlistEnabled, setWaitlistEnabled] = useState(false)
+  const [openInvite, setOpenInvite] = useState(false)
   const [showTimerDropdown, setShowTimerDropdown] = useState(false)
   const [showNoGroupsModal, setShowNoGroupsModal] = useState(false)
 
@@ -166,6 +167,7 @@ export default function CreateActivityPage() {
         setChatEnabled(data.chat_enabled ?? false)
         setAutoEmergencyFill(data.auto_emergency_fill ?? false)
         setWaitlistEnabled(data.waitlist_enabled ?? false)
+        setOpenInvite(data.open_invite ?? false)
         setPriorityInvite(data.priority_invite ?? true)
         if (data.priority_invite === false) {
           setInviteBatchSize('all')
@@ -337,6 +339,7 @@ export default function CreateActivityPage() {
           reminder_enabled: reminderEnabled,
           auto_emergency_fill: autoEmergencyFill,
           waitlist_enabled: waitlistEnabled,
+          open_invite: openInvite,
           image_url: imageUrl || null,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
@@ -1631,6 +1634,19 @@ export default function CreateActivityPage() {
                 </p>
               </FieldCard>
             )}
+
+            {/* Open Invite */}
+            <FieldCard>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-semibold text-foreground">Open Invite</span>
+                <Toggle checked={openInvite} onChange={setOpenInvite} />
+              </div>
+              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                {openInvite
+                  ? 'Anyone who is IN can add new people to this activity using the same Add button you have.'
+                  : 'Only you can add new people to this activity.'}
+              </p>
+            </FieldCard>
 
           </div>
         )}

@@ -21,14 +21,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  // Verify they're the creator
+  // Verify they're the creator OR a confirmed member of an open-invite activity
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, group_id, status, priority_invite, max_capacity')
+    .select('creator_id, group_id, status, priority_invite, max_capacity, open_invite')
     .eq('id', id)
     .single()
 
-  if (!activity || activity.creator_id !== whozinUser.id) {
+  if (!activity) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  const isCreator = activity.creator_id === whozinUser.id
+  let isConfirmedAttendee = false
+  if (!isCreator && activity.open_invite) {
+    const { data: myMember } = await admin
+      .from('whozin_activity_member')
+      .select('status')
+      .eq('activity_id', id)
+      .eq('user_id', whozinUser.id)
+      .single()
+    isConfirmedAttendee = myMember?.status === 'confirmed'
+  }
+
+  if (!isCreator && !isConfirmedAttendee) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
@@ -104,8 +120,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     priority_order: nextOrder,
   })
 
-  // Optionally add to the group permanently
-  if (add_to_group && activity.group_id) {
+  // Optionally add to the group permanently (host only)
+  if (add_to_group && activity.group_id && isCreator) {
     const { data: existingGroupMember } = await admin
       .from('whozin_group_members')
       .select('id')

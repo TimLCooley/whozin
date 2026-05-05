@@ -175,6 +175,7 @@ export async function GET(req: NextRequest) {
       chat_enabled: a.chat_enabled,
       reminder_enabled: a.reminder_enabled,
       waitlist_enabled: a.waitlist_enabled ?? false,
+      open_invite: a.open_invite ?? false,
       timezone: a.timezone,
       image_url: a.image_url,
       note: a.note,
@@ -231,6 +232,7 @@ export async function POST(req: NextRequest) {
     image_url,
     auto_emergency_fill,
     waitlist_enabled,
+    open_invite,
     timezone,
   } = body
 
@@ -276,6 +278,7 @@ export async function POST(req: NextRequest) {
       image_url: image_url || null,
       auto_emergency_fill: auto_emergency_fill ?? false,
       waitlist_enabled: isPro ? (waitlist_enabled ?? false) : false,
+      open_invite: open_invite ?? false,
       timezone: timezone || null,
       status: 'open',
     })

@@ -70,10 +70,10 @@ export default function GroupsListPage() {
   ]
 
   return (
-    <div className="h-full flex flex-col bg-surface">
+    <div className="h-full flex flex-col bg-surface overflow-hidden">
       <AppHeader showBack />
 
-      <div className="flex-1 pb-20 px-4">
+      <div className="flex-1 overflow-y-auto pb-20 px-4">
         {/* Create Group button */}
         <button
           onClick={handleCreate}

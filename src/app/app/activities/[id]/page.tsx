@@ -41,6 +41,7 @@ interface ActivityDetail {
   status: string
   chat_enabled: boolean
   reminder_enabled: boolean
+  open_invite: boolean
   priority_invite: boolean
   response_timer_minutes: number
   image_url: string | null
@@ -704,7 +705,7 @@ export default function ActivityDetailPage() {
             <p className="text-[12px] text-muted mt-0.5">{activity.group_name}</p>
           )}
         </div>
-        {activity.is_creator && (
+        {(activity.is_creator || (activity.open_invite && activity.my_status === 'confirmed')) && (
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setAddModal('add-menu')}
@@ -718,16 +719,18 @@ export default function ActivityDetailPage() {
               </svg>
               Add
             </button>
-            <button
-              onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
-              className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" />
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-              </svg>
-              Clone
-            </button>
+            {activity.is_creator && (
+              <button
+                onClick={() => router.push(`/app/activities/create?clone=${activity.id}`)}
+                className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+                Clone
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1032,10 +1035,7 @@ export default function ActivityDetailPage() {
             {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" onMemberTap={setSelectedMember} />}
             <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={setSelectedMember} />
 
-            <div className="pt-4 space-y-3">
-              <button className="btn-primary w-full py-3.5 text-[14px]">
-                Save
-              </button>
+            <div className="pt-4">
               <button
                 onClick={() => setShowDeleteModal(true)}
                 className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
@@ -2015,12 +2015,21 @@ function StatusSection({
       {members.length > 0 ? (
         <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
           {members.map((m, i) => {
-            const Row = onMemberTap ? 'button' : 'div'
+            const tapProps = onMemberTap
+              ? {
+                  role: 'button' as const,
+                  tabIndex: 0,
+                  onClick: () => onMemberTap(m),
+                  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onMemberTap(m) }
+                  },
+                }
+              : {}
             return (
-              <Row
+              <div
                 key={m.id}
-                {...(onMemberTap ? { onClick: () => onMemberTap(m) } : {})}
-                className={`flex items-center gap-3 px-4 py-3 w-full text-left ${onMemberTap ? 'active:bg-primary/5 transition-colors' : ''} ${i < members.length - 1 ? 'border-b border-border/30' : ''}`}
+                {...tapProps}
+                className={`flex items-center gap-3 px-4 py-3 w-full text-left ${onMemberTap ? 'active:bg-primary/5 transition-colors cursor-pointer' : ''} ${i < members.length - 1 ? 'border-b border-border/30' : ''}`}
               >
                 <AvatarImg src={m.user?.avatar_url} />
                 <div className="flex-1 min-w-0">
@@ -2060,7 +2069,7 @@ function StatusSection({
                 ) : (
                   <StatusIcon status={statusKey} />
                 )}
-              </Row>
+              </div>
             )
           })}
         </div>
