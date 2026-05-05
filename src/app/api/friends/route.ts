@@ -7,7 +7,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 //      were also confirmed in, ordered by most recent activity.
 //   2. Members of groups you own.
 // `whozin_friends` is no longer the source — it stays around as a lightweight
-// auto-pool but isn't queried here.
+// auto-pool but isn't queried here. Capped at the top 20.
 export async function GET(req: NextRequest) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
   // Sort by score desc and take the top 50 before fetching user records
   const ranked = [...score.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 50)
+    .slice(0, 20)
     .map(([uid]) => uid)
 
   const { data: users } = await admin
