@@ -42,6 +42,8 @@ interface ActivityDetail {
   chat_enabled: boolean
   reminder_enabled: boolean
   open_invite: boolean
+  waitlist_enabled: boolean
+  auto_emergency_fill: boolean
   priority_invite: boolean
   response_timer_minutes: number
   image_url: string | null
@@ -113,7 +115,7 @@ export default function ActivityDetailPage() {
   const [emergencyDelay, setEmergencyDelay] = useState(30) // minutes
   const [emergencyAutoSend, setEmergencyAutoSend] = useState(true)
   const [emergencySending, setEmergencySending] = useState(false)
-  const [editField, setEditField] = useState<'name' | 'location' | 'datetime' | 'cost' | null>(null)
+  const [editField, setEditField] = useState<'name' | 'location' | 'datetime' | 'cost' | 'spots' | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [editLocation, setEditLocation] = useState('')
   const [editAddress, setEditAddress] = useState('')
@@ -123,6 +125,8 @@ export default function ActivityDetailPage() {
   const [editDuration, setEditDuration] = useState<number | null>(2)
   const [editCostType, setEditCostType] = useState<'free' | 'pay_me' | 'pay_at_location'>('free')
   const [editCostAmount, setEditCostAmount] = useState('')
+  const [editSpotsMode, setEditSpotsMode] = useState<'number' | 'no_max'>('number')
+  const [editSpotsValue, setEditSpotsValue] = useState('')
   const [showTimerEdit, setShowTimerEdit] = useState(false)
   const [editTimerValue, setEditTimerValue] = useState(5)
   const [timerSaving, setTimerSaving] = useState(false)
@@ -195,7 +199,7 @@ export default function ActivityDetailPage() {
     setImageGenerating(false)
   }
 
-  function openEdit(field: 'name' | 'location' | 'datetime' | 'cost') {
+  function openEdit(field: 'name' | 'location' | 'datetime' | 'cost' | 'spots') {
     if (!activity) return
     if (field === 'name') setEditName(activity.activity_name ?? '')
     if (field === 'location') {
@@ -210,6 +214,15 @@ export default function ActivityDetailPage() {
     if (field === 'cost') {
       setEditCostType((activity.cost_type as 'free' | 'pay_me' | 'pay_at_location') ?? 'free')
       setEditCostAmount(activity.cost != null ? String(activity.cost) : '')
+    }
+    if (field === 'spots') {
+      if (activity.max_capacity == null) {
+        setEditSpotsMode('no_max')
+        setEditSpotsValue('')
+      } else {
+        setEditSpotsMode('number')
+        setEditSpotsValue(String(activity.max_capacity))
+      }
     }
     setEditField(field)
   }
@@ -238,6 +251,24 @@ export default function ActivityDetailPage() {
     if (editField === 'cost') {
       payload.cost_type = editCostType
       payload.cost = editCostType === 'free' ? null : (parseFloat(editCostAmount) || null)
+    }
+    if (editField === 'spots') {
+      if (editSpotsMode === 'no_max') {
+        payload.max_capacity = null
+      } else {
+        const n = parseInt(editSpotsValue, 10)
+        if (!Number.isFinite(n) || n < 1) {
+          setEditSaving(false)
+          alert('Enter a number of spots (1 or more).')
+          return
+        }
+        if (n < confirmed.length) {
+          setEditSaving(false)
+          alert(`You already have ${confirmed.length} confirmed — set spots to at least ${confirmed.length}.`)
+          return
+        }
+        payload.max_capacity = n
+      }
     }
     try {
       const res = await fetch(`/api/activities/${id}`, {
@@ -895,7 +926,7 @@ export default function ActivityDetailPage() {
                   activity.max_capacity
                     ? `${confirmed.length} / ${activity.max_capacity} in`
                     : `${confirmed.length} in`
-                } />
+                } onEdit={activity.is_creator ? () => openEdit('spots') : undefined} />
                 {activity.note && <InfoRow icon="note" label="Note" value={activity.note} />}
                 {activity.priority_invite && (
                   <InfoRow icon="timer" label="Response Timer" value={
@@ -1072,35 +1103,21 @@ export default function ActivityDetailPage() {
             <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={setSelectedMember} />
 
             <div className="pt-4 space-y-3">
-              <div className="bg-background border border-border/50 rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                <div className="flex items-center justify-between">
-                  <span className="text-[14px] font-semibold text-foreground">Open Invite</span>
-                  <button
-                    onClick={async () => {
-                      const next = !activity.open_invite
-                      setActivity({ ...activity, open_invite: next })
-                      const res = await fetch(`/api/activities/${id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ open_invite: next }),
-                      })
-                      if (!res.ok) setActivity({ ...activity, open_invite: !next })
-                    }}
-                    role="switch"
-                    aria-checked={activity.open_invite}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${activity.open_invite ? 'bg-primary' : 'bg-border'}`}
-                  >
-                    <span
-                      className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${activity.open_invite ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
-                    />
-                  </button>
-                </div>
-                <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
-                  {activity.open_invite
-                    ? 'Anyone who is IN can add new people to this activity.'
-                    : 'Only you can add new people to this activity.'}
-                </p>
-              </div>
+              <SettingsToggles
+                activity={activity}
+                isPro={isPro}
+                requirePro={requirePro}
+                patch={async (patch) => {
+                  const prev = activity
+                  setActivity({ ...activity, ...patch } as ActivityDetail)
+                  const res = await fetch(`/api/activities/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(patch),
+                  })
+                  if (!res.ok) setActivity(prev)
+                }}
+              />
               <button
                 onClick={() => setShowDeleteModal(true)}
                 className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
@@ -1976,6 +1993,7 @@ export default function ActivityDetailPage() {
               {editField === 'location' && 'Edit Location'}
               {editField === 'datetime' && 'Edit Date & Time'}
               {editField === 'cost' && 'Edit Cost'}
+              {editField === 'spots' && 'Edit Spots'}
             </h3>
 
             {editField === 'name' && (
@@ -2076,6 +2094,47 @@ export default function ActivityDetailPage() {
                     placeholder="Amount (USD)"
                     className="w-full h-12 px-4 rounded-xl border border-border bg-background text-[15px] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                   />
+                )}
+              </div>
+            )}
+
+            {editField === 'spots' && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditSpotsMode('number')}
+                    className={`flex-1 h-10 rounded-xl text-[13px] font-semibold transition-colors ${
+                      editSpotsMode === 'number' ? 'bg-primary text-white' : 'bg-surface text-muted border border-border/50'
+                    }`}
+                  >
+                    Set a number
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditSpotsMode('no_max')}
+                    className={`flex-1 h-10 rounded-xl text-[13px] font-semibold transition-colors ${
+                      editSpotsMode === 'no_max' ? 'bg-primary text-white' : 'bg-surface text-muted border border-border/50'
+                    }`}
+                  >
+                    No maximum
+                  </button>
+                </div>
+                {editSpotsMode === 'number' ? (
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={Math.max(1, confirmed.length)}
+                    value={editSpotsValue}
+                    onChange={(e) => setEditSpotsValue(e.target.value)}
+                    placeholder="e.g. 4"
+                    className="w-full h-12 px-4 rounded-xl border border-border bg-background text-[15px] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                ) : (
+                  <p className="text-[12px] text-muted leading-relaxed">No cap — anyone can join.</p>
+                )}
+                {confirmed.length > 0 && (
+                  <p className="text-[11px] text-muted">{confirmed.length} already confirmed.</p>
                 )}
               </div>
             )}
@@ -2659,6 +2718,59 @@ function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdi
       {trailing && (
         <span onClick={(e) => e.stopPropagation()}>{trailing}</span>
       )}
+    </div>
+  )
+}
+
+/* -- Compact toggles card (host's group tab) -- */
+function SettingsToggles({
+  activity,
+  isPro,
+  requirePro,
+  patch,
+}: {
+  activity: ActivityDetail
+  isPro: boolean
+  requirePro: () => boolean
+  patch: (p: Partial<ActivityDetail>) => void
+}) {
+  const rows: { key: keyof ActivityDetail; label: string; pro?: boolean }[] = [
+    { key: 'open_invite', label: 'Open Invite' },
+    { key: 'chat_enabled', label: 'Allow Chat', pro: true },
+    { key: 'reminder_enabled', label: 'Reminders', pro: true },
+    { key: 'waitlist_enabled', label: 'Wait List', pro: true },
+    { key: 'auto_emergency_fill', label: 'Auto-Fill Dropouts' },
+  ]
+
+  return (
+    <div className="bg-background border border-border/50 rounded-xl divide-y divide-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      {rows.map((r) => {
+        const checked = !!activity[r.key]
+        const locked = r.pro && !isPro
+        return (
+          <div key={String(r.key)} className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[14px] font-semibold text-foreground truncate">{r.label}</span>
+              {r.pro && (
+                <span className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold uppercase">Pro</span>
+              )}
+            </div>
+            <button
+              role="switch"
+              aria-checked={checked}
+              onClick={() => {
+                if (!checked && locked) { requirePro(); return }
+                patch({ [r.key]: !checked } as Partial<ActivityDetail>)
+              }}
+              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-primary' : locked ? 'bg-border/60' : 'bg-border'}`}
+            >
+              <span
+                className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+              />
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
