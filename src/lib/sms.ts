@@ -85,6 +85,7 @@ export async function sendActivityInvite(
     inviter_name: inviterName,
     activity_name: activityName,
     date_time: dateTime,
+    download_link: DOWNLOAD_LINK,
   })
   return sendSms(actualTo, body + testNote, imageUrl)
 }

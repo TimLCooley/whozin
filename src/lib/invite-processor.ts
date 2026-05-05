@@ -238,6 +238,7 @@ export async function processActivityInvites(activityId: string) {
       activity_name: activity.activity_name,
       inviter_name: creator?.first_name ?? 'Someone',
       date_time: dateTimeStr || 'TBD',
+      download_link: 'https://whozin.io/dl',
     })
     await createAlert({
       user_id: user.id,

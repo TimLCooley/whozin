@@ -132,6 +132,7 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
       { key: 'inviter_name', description: 'First name of the host', example: 'Sarah', required: true },
       { key: 'activity_name', description: 'Activity title', example: 'Pickleball at Memorial', required: true },
       { key: 'date_time', description: 'Formatted date/time of the activity', example: 'Sat May 10 at 6 PM' },
+      { key: 'download_link', description: 'Short app download link', example: 'https://whozin.io/dl' },
     ],
     channels: {
       sms: {
