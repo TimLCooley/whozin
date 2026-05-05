@@ -292,7 +292,7 @@ export default function ActivityDetailPage() {
   const [memberActioning, setMemberActioning] = useState(false)
 
   // Add member to activity
-  type AddModal = null | 'add-menu' | 'add-phone' | 'add-friends' | 'add-google' | 'add-device'
+  type AddModal = null | 'add-menu' | 'add-phone' | 'add-friends' | 'add-google' | 'add-device' | 'add-group'
   const [addModal, setAddModal] = useState<AddModal>(null)
   const [lastAddModal, setLastAddModal] = useState<AddModal>(null)
   const [addPhoneRaw, setAddPhoneRaw] = useState('')
@@ -316,6 +316,10 @@ export default function ActivityDetailPage() {
   const [addDeviceSearch, setAddDeviceSearch] = useState('')
   const [loadingDevice, setLoadingDevice] = useState(false)
   const [addDeviceError, setAddDeviceError] = useState('')
+  // Owned groups (for "Choose from Group" bulk invite)
+  const [ownedGroups, setOwnedGroups] = useState<{ id: string; name: string; member_count: number }[]>([])
+  const [loadingOwnedGroups, setLoadingOwnedGroups] = useState(false)
+  const [addingFromGroup, setAddingFromGroup] = useState<string | null>(null)
 
   const loadActivity = useCallback(async () => {
     const res = await fetch(`/api/activities/${id}`)
@@ -517,6 +521,38 @@ export default function ActivityDetailPage() {
     const res = await fetch('/api/friends')
     if (res.ok) setAddFriends(await res.json())
     setLoadingFriends(false)
+  }
+
+  async function openAddGroup() {
+    setAddModal('add-group')
+    setLoadingOwnedGroups(true)
+    const res = await fetch('/api/groups')
+    if (res.ok) {
+      const data: { id: string; name: string; member_count: number; is_owner: boolean }[] = await res.json()
+      setOwnedGroups(data.filter((g) => g.is_owner))
+    }
+    setLoadingOwnedGroups(false)
+  }
+
+  async function handleAddFromGroup(groupId: string) {
+    setAddingFromGroup(groupId)
+    const res = await fetch(`/api/activities/${id}/add-group`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId }),
+    })
+    setAddingFromGroup(null)
+    if (res.ok) {
+      const data = await res.json()
+      setAddModal(null)
+      await loadActivity()
+      if (data.added === 0) {
+        alert(data.skipped > 0 ? 'Everyone in that group is already here.' : 'No one to invite.')
+      }
+    } else {
+      const data = await res.json()
+      alert(data.error || 'Failed to invite group')
+    }
   }
 
   async function openAddGoogle() {
@@ -1035,7 +1071,36 @@ export default function ActivityDetailPage() {
             {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" onMemberTap={setSelectedMember} />}
             <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={setSelectedMember} />
 
-            <div className="pt-4">
+            <div className="pt-4 space-y-3">
+              <div className="bg-background border border-border/50 rounded-xl p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[14px] font-semibold text-foreground">Open Invite</span>
+                  <button
+                    onClick={async () => {
+                      const next = !activity.open_invite
+                      setActivity({ ...activity, open_invite: next })
+                      const res = await fetch(`/api/activities/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ open_invite: next }),
+                      })
+                      if (!res.ok) setActivity({ ...activity, open_invite: !next })
+                    }}
+                    role="switch"
+                    aria-checked={activity.open_invite}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${activity.open_invite ? 'bg-primary' : 'bg-border'}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${activity.open_invite ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+                    />
+                  </button>
+                </div>
+                <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                  {activity.open_invite
+                    ? 'Anyone who is IN can add new people to this activity.'
+                    : 'Only you can add new people to this activity.'}
+                </p>
+              </div>
               <button
                 onClick={() => setShowDeleteModal(true)}
                 className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
@@ -1307,6 +1372,20 @@ export default function ActivityDetailPage() {
                 </div>
                 <span className="text-[13px] font-semibold text-foreground">My Friends</span>
               </button>
+              <button
+                onClick={() => { setAddModal(null); setTimeout(() => openAddGroup(), 100) }}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-2xl bg-background border border-border/50 active:bg-surface transition-colors col-span-2"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="9" cy="7" r="3" />
+                    <circle cx="17" cy="9" r="2.5" />
+                    <path d="M2 21v-1a5 5 0 0110 0v1M14 21v-1a4 4 0 018 0v1" />
+                  </svg>
+                </div>
+                <span className="text-[13px] font-semibold text-foreground">From a Group</span>
+                <span className="text-[11px] text-muted">Invite everyone at once</span>
+              </button>
               {isNative() && (
                 <button
                   onClick={() => { setAddModal(null); setTimeout(() => openAddDevice(), 100) }}
@@ -1535,6 +1614,55 @@ export default function ActivityDetailPage() {
                   </div>
                 )}
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Choose from Group — bulk invite all members of a group the caller owns */}
+      {addModal === 'add-group' && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => !addingFromGroup && setAddModal(null)}>
+          <div
+            className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-1">Invite a Group</h3>
+            <p className="text-[12px] text-muted text-center mb-5">Everyone in the group gets a fill invite right away.</p>
+            {loadingOwnedGroups ? (
+              <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+            ) : ownedGroups.length === 0 ? (
+              <p className="text-[13px] text-muted text-center py-8">You don&apos;t own any groups yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {ownedGroups.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => handleAddFromGroup(g.id)}
+                    disabled={!!addingFromGroup}
+                    className="w-full bg-background border border-border/50 rounded-xl p-3 flex items-center gap-3 active:bg-surface transition-colors disabled:opacity-60"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2}>
+                        <circle cx="9" cy="7" r="3" />
+                        <circle cx="17" cy="9" r="2.5" />
+                        <path d="M2 21v-1a5 5 0 0110 0v1M14 21v-1a4 4 0 018 0v1" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-[14px] font-semibold text-foreground truncate">{g.name}</p>
+                      <p className="text-[11px] text-muted">{g.member_count} {g.member_count === 1 ? 'person' : 'people'}</p>
+                    </div>
+                    {addingFromGroup === g.id ? (
+                      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>
