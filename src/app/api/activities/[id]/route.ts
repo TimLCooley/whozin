@@ -33,6 +33,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     await processActivityInvites(id)
   }
 
+  // Backfill: if the activity is full but still has 'waiting' members
+  // (left over from before the cleanup ran inline on PUT), flip them now.
+  if (activity.status === 'full') {
+    await admin
+      .from('whozin_activity_member')
+      .update({ status: 'missed' })
+      .eq('activity_id', id)
+      .eq('status', 'waiting')
+
+    await admin
+      .from('whozin_invite')
+      .update({ status: 'expired' })
+      .eq('activity_id', id)
+      .eq('status', 'pending')
+  }
+
   // Re-fetch activity after processing (status/members may have changed)
   const { data: freshActivity } = await admin
     .from('whozin_activity')
@@ -187,6 +203,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       status: nowFull ? 'full' : 'open',
     })
     .eq('id', id)
+
+  // If the activity just became full, clean up anyone still in 'waiting'
+  // (their invite SMS went out but they hadn't responded yet — the spot
+  // is gone). processActivityInvites would normally do this, but it
+  // bails on status !== 'open', so we do it inline here.
+  if (nowFull && !wasFull) {
+    await admin
+      .from('whozin_activity_member')
+      .update({ status: 'missed' })
+      .eq('activity_id', id)
+      .eq('status', 'waiting')
+
+    await admin
+      .from('whozin_invite')
+      .update({ status: 'expired' })
+      .eq('activity_id', id)
+      .eq('status', 'pending')
+  }
 
   // Emergency fill: someone dropped out of a FULL activity
   if (response === 'out' && wasFull && activityBefore) {
