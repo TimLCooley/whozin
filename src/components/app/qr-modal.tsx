@@ -115,6 +115,21 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
     }
   }
 
+  async function requestCameraPermission() {
+    setScanError('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      })
+      stream.getTracks().forEach((t) => t.stop())
+      startScanner()
+    } catch {
+      setScanError(
+        'Camera permission was blocked. Open your device settings → Apps → Whozin → Permissions and enable Camera.'
+      )
+    }
+  }
+
   function handleClose() {
     stopScanner()
     onClose()
@@ -278,10 +293,10 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
                   </div>
                   <p className="text-[14px] text-white font-medium">{scanError}</p>
                   <button
-                    onClick={() => { setScanError(''); startScanner() }}
+                    onClick={requestCameraPermission}
                     className="mt-3 px-5 py-2.5 rounded-xl bg-primary text-white font-semibold text-[13px]"
                   >
-                    Try Again
+                    Allow Permissions
                   </button>
                 </div>
               )}
