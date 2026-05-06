@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
 import { sendSmsInvite } from '@/lib/sms'
-import { createAlert, alertGroupMembers } from '@/lib/alerts'
+import { createAlert } from '@/lib/alerts'
 import { renderTemplate } from '@/lib/notification-templates'
 
 // POST — unauthenticated join via QR code
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     // Verify group exists
     const { data: group } = await admin
       .from('whozin_groups')
-      .select('id, name')
+      .select('id, name, creator_id')
       .eq('id', group_id)
       .single()
 
@@ -137,17 +137,22 @@ export async function POST(req: NextRequest) {
         link: `/app/groups/${group_id}`,
       })
 
-      // Alert existing group members
-      const memberTpl = await renderTemplate('member_joined_group', 'push', {
-        group_name: group.name,
-        target_name: 'A new member',
-      })
-      await alertGroupMembers(group_id, targetUserId, {
-        type: 'member_joined',
-        title: memberTpl.title ?? `New member in ${group.name}`,
-        body: memberTpl.body,
-        link: `/app/groups/${group_id}`,
-      })
+      // Notify only the group owner (alert log + push)
+      if (group.creator_id && group.creator_id !== targetUserId) {
+        const newMemberName =
+          `${first_name ?? ''} ${last_name ?? ''}`.trim() || 'A new member'
+        const memberTpl = await renderTemplate('member_joined_group', 'push', {
+          group_name: group.name,
+          target_name: newMemberName,
+        })
+        createAlert({
+          user_id: group.creator_id,
+          type: 'member_joined',
+          title: memberTpl.title ?? `New member in ${group.name}`,
+          body: memberTpl.body,
+          link: `/app/groups/${group_id}`,
+        }).catch(() => {})
+      }
     }
   }
 

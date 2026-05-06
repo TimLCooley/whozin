@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
-import { alertGroupMembers } from '@/lib/alerts'
+import { createAlert } from '@/lib/alerts'
 import { renderTemplate } from '@/lib/notification-templates'
 
 // POST add member to group
@@ -95,23 +95,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Get group name and new member name for alerts
-  const { data: groupData } = await admin.from('whozin_groups').select('name').eq('id', groupId).single()
+  // Notify only the group owner (alert log + push)
+  const { data: groupData } = await admin
+    .from('whozin_groups')
+    .select('name, creator_id')
+    .eq('id', groupId)
+    .single()
   const { data: targetUser } = await admin.from('whozin_users').select('first_name, last_name').eq('id', targetUserId).single()
   const groupName = groupData?.name || 'a group'
   const targetName = targetUser ? `${targetUser.first_name} ${targetUser.last_name}`.trim() : 'Someone'
 
-  // Alert existing group members that someone joined
-  const tpl = await renderTemplate('member_joined_group', 'push', {
-    group_name: groupName,
-    target_name: targetName,
-  })
-  await alertGroupMembers(groupId, whozinUser.id, {
-    type: 'member_joined',
-    title: tpl.title ?? `New member in ${groupName}`,
-    body: tpl.body,
-    link: `/app/groups/${groupId}`,
-  })
+  const ownerId = groupData?.creator_id
+  if (ownerId && ownerId !== whozinUser.id && ownerId !== targetUserId) {
+    const tpl = await renderTemplate('member_joined_group', 'push', {
+      group_name: groupName,
+      target_name: targetName,
+    })
+    createAlert({
+      user_id: ownerId,
+      type: 'member_joined',
+      title: tpl.title ?? `New member in ${groupName}`,
+      body: tpl.body,
+      link: `/app/groups/${groupId}`,
+    }).catch(() => {})
+  }
 
   // Auto-add to friends pool (both directions)
   await Promise.all([

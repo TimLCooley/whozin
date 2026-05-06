@@ -23,6 +23,8 @@ interface ScanResult {
   id: string
   name: string
   avatar_url: string | null
+  /** Group the scanned QR is inviting to (if any) */
+  invitedGroup: { id: string; name: string } | null
 }
 
 type Tab = 'my-qr' | 'scan'
@@ -148,34 +150,51 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
       return
     }
 
+    // The QR may also encode ?group=<id> — meaning the QR holder wants the
+    // scanner added to that specific group.
+    let invitedGroupId: string | null = null
     try {
-      const res = await fetch(`/api/user/public?id=${scannedId}`)
+      const parsed = new URL(url)
+      invitedGroupId = parsed.searchParams.get('group')
+    } catch {
+      // url-encoded form / malformed — ignore, treat as friend-only QR
+    }
+
+    try {
+      const qs = invitedGroupId
+        ? `id=${scannedId}&group=${invitedGroupId}`
+        : `id=${scannedId}`
+      const res = await fetch(`/api/user/public?${qs}`)
       if (!res.ok) {
         setScanError('User not found')
         return
       }
       const profile = await res.json()
       const name = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()
-      setScanResult({ name: name || 'Whozin User', id: profile.id, avatar_url: profile.avatar_url })
+      setScanResult({
+        name: name || 'Whozin User',
+        id: profile.id,
+        avatar_url: profile.avatar_url,
+        invitedGroup: profile.group ?? null,
+      })
     } catch {
       setScanError('Failed to look up user')
     }
   }
 
-  async function handleAdd(addToGroup: boolean) {
+  async function handleAdd(opts: { groupId?: string; groupName?: string }) {
     if (!scanResult || adding) return
     setAdding(true)
     try {
       const body: Record<string, string> = { friend_id: scanResult.id }
-      if (addToGroup && selectedGroupId) body.group_id = selectedGroupId
+      if (opts.groupId) body.group_id = opts.groupId
       const res = await fetch('/api/friends/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (res.ok) {
-        const gName = addToGroup ? groups.find(g => g.id === selectedGroupId)?.name : null
-        setSuccessName(scanResult.name + (gName ? ` → ${gName}` : ''))
+        setSuccessName(scanResult.name + (opts.groupName ? ` → ${opts.groupName}` : ''))
         setScanResult(null)
         setTimeout(() => {
           setSuccessName('')
@@ -310,51 +329,85 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
 
                   <p className="text-[16px] font-bold text-white">{scanResult.name}</p>
 
-                  {/* Group dropdown — only if user has groups */}
-                  {groups.length > 0 && (
-                    <div className="mt-3 mb-1">
-                      <select
-                        value={selectedGroupId}
-                        onChange={(e) => setSelectedGroupId(e.target.value)}
-                        className="w-full px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground text-[13px] font-medium"
-                      >
-                        <option value="">No group (friend only)</option>
-                        {groups.map((g) => (
-                          <option key={g.id} value={g.id}>{g.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Action buttons */}
-                  <div className="flex gap-3 mt-4">
-                    {groups.length > 0 ? (
-                      <>
+                  {scanResult.invitedGroup ? (
+                    <>
+                      <p className="text-[13px] text-white/70 mt-1">
+                        wants to add you to{' '}
+                        <span className="font-semibold text-white">
+                          {scanResult.invitedGroup.name}
+                        </span>
+                      </p>
+                      <div className="flex gap-3 mt-4">
                         <button
-                          onClick={() => handleAdd(false)}
+                          onClick={() => handleAdd({})}
                           disabled={adding}
                           className="flex-1 py-3 rounded-xl border border-primary text-primary font-semibold text-[14px] disabled:opacity-60"
                         >
-                          {adding ? 'Adding...' : 'Add Friend'}
+                          {adding ? 'Adding...' : 'Friend Only'}
                         </button>
                         <button
-                          onClick={() => handleAdd(true)}
-                          disabled={adding || !selectedGroupId}
+                          onClick={() => handleAdd({
+                            groupId: scanResult.invitedGroup!.id,
+                            groupName: scanResult.invitedGroup!.name,
+                          })}
+                          disabled={adding}
                           className="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-[14px] disabled:opacity-60"
                         >
-                          {adding ? 'Adding...' : 'Add to Group'}
+                          {adding ? 'Adding...' : `Join ${scanResult.invitedGroup.name}`}
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => handleAdd(false)}
-                        disabled={adding}
-                        className="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-[14px] disabled:opacity-60"
-                      >
-                        {adding ? 'Adding...' : 'Add Friend'}
-                      </button>
-                    )}
-                  </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Group dropdown — only if scanner owns groups */}
+                      {groups.length > 0 && (
+                        <div className="mt-3 mb-1">
+                          <select
+                            value={selectedGroupId}
+                            onChange={(e) => setSelectedGroupId(e.target.value)}
+                            className="w-full px-3 py-2.5 rounded-xl border border-border bg-surface text-foreground text-[13px] font-medium"
+                          >
+                            <option value="">No group (friend only)</option>
+                            {groups.map((g) => (
+                              <option key={g.id} value={g.id}>{g.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="flex gap-3 mt-4">
+                        {groups.length > 0 ? (
+                          <>
+                            <button
+                              onClick={() => handleAdd({})}
+                              disabled={adding}
+                              className="flex-1 py-3 rounded-xl border border-primary text-primary font-semibold text-[14px] disabled:opacity-60"
+                            >
+                              {adding ? 'Adding...' : 'Add Friend'}
+                            </button>
+                            <button
+                              onClick={() => handleAdd({
+                                groupId: selectedGroupId,
+                                groupName: groups.find(g => g.id === selectedGroupId)?.name,
+                              })}
+                              disabled={adding || !selectedGroupId}
+                              className="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-[14px] disabled:opacity-60"
+                            >
+                              {adding ? 'Adding...' : 'Add to Group'}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleAdd({})}
+                            disabled={adding}
+                            className="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-[14px] disabled:opacity-60"
+                          >
+                            {adding ? 'Adding...' : 'Add Friend'}
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

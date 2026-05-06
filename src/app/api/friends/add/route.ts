@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { createAlert } from '@/lib/alerts'
+import { renderTemplate } from '@/lib/notification-templates'
 
 // POST — add a friend by their whozin_users id (bidirectional)
 export async function POST(req: NextRequest) {
@@ -16,7 +18,7 @@ export async function POST(req: NextRequest) {
   // Get current user's whozin_users id
   const { data: me } = await admin
     .from('whozin_users')
-    .select('id')
+    .select('id, first_name, last_name')
     .eq('auth_user_id', user.id)
     .single()
 
@@ -41,22 +43,53 @@ export async function POST(req: NextRequest) {
     { user_id: friend.id, friend_id: me.id },
   ], { onConflict: 'user_id,friend_id' })
 
-  // If group_id provided, also add to group
+  // If group_id provided, also add to that group.
+  // The group must be owned by the OTHER party (the QR holder / friend),
+  // not by `me` — `me` is the scanner being added in.
   if (group_id) {
-    // Verify user owns this group
     const { data: group } = await admin
       .from('whozin_groups')
-      .select('id')
+      .select('id, name, creator_id')
       .eq('id', group_id)
-      .eq('created_by', me.id)
       .single()
 
-    if (group) {
-      await admin.from('whozin_group_members').upsert({
-        group_id: group.id,
-        user_id: friend.id,
-        priority_order: 999,
-      }, { onConflict: 'group_id,user_id' })
+    if (group && group.creator_id === friend.id) {
+      const { data: existing } = await admin
+        .from('whozin_group_members')
+        .select('id')
+        .eq('group_id', group.id)
+        .eq('user_id', me.id)
+        .maybeSingle()
+
+      if (!existing) {
+        const { data: members } = await admin
+          .from('whozin_group_members')
+          .select('priority_order')
+          .eq('group_id', group.id)
+          .order('priority_order', { ascending: false })
+          .limit(1)
+        const nextOrder = (members?.[0]?.priority_order ?? 0) + 1
+
+        await admin.from('whozin_group_members').insert({
+          group_id: group.id,
+          user_id: me.id,
+          priority_order: nextOrder,
+        })
+
+        // Notify the group owner (alert log + push) that a new member joined
+        const targetName = `${me.first_name ?? ''} ${me.last_name ?? ''}`.trim() || 'Someone'
+        const tpl = await renderTemplate('member_joined_group', 'push', {
+          group_name: group.name,
+          target_name: targetName,
+        })
+        createAlert({
+          user_id: friend.id,
+          type: 'member_joined',
+          title: tpl.title ?? `New member in ${group.name}`,
+          body: tpl.body,
+          link: `/app/groups/${group.id}`,
+        }).catch(() => {})
+      }
     }
   }
 
