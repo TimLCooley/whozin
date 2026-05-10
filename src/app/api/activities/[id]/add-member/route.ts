@@ -3,6 +3,9 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { normalizePhone } from '@/lib/auth'
 import { processActivityInvites } from '@/lib/invite-processor'
+import { hasReachablePush } from '@/lib/push'
+import { createAlert } from '@/lib/alerts'
+import { renderTemplate } from '@/lib/notification-templates'
 
 // POST — host adds a new member to the activity (on deck) and optionally to the group
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -201,23 +204,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : 1
 
     if (invitee?.phone) {
-      const { sendFillInvite } = await import('@/lib/sms')
       const phone = invitee.phone.startsWith('+') ? invitee.phone : `+${invitee.country_code}${invitee.phone}`
-      const result = await sendFillInvite(
-        phone,
-        host?.first_name ?? 'Someone',
-        activity.activity_name,
-        dateTimeStr || 'TBD',
-        spotsNeeded,
-        activity.image_url || undefined,
-      )
+      const spotsText = spotsNeeded === 1 ? '1 spot' : `${spotsNeeded} spots`
+      const reachableViaPush = await hasReachablePush(targetUserId)
+
+      // Push first (if reachable); only fall back to Fill SMS if no push
+      if (reachableViaPush) {
+        const { title: pushTitle, body: pushBody } = await renderTemplate('fill_invite', 'push', {
+          activity_name: activity.activity_name,
+          spots_text: spotsText,
+          inviter_name: host?.first_name ?? 'Someone',
+          date_time: dateTimeStr || 'TBD',
+        })
+        createAlert({
+          user_id: targetUserId,
+          type: 'activity_invite',
+          title: pushTitle ?? `${activity.activity_name}: ${spotsText}!`,
+          body: pushBody,
+          link: `/app/activities/${id}`,
+        }).catch(() => {})
+      }
+
+      let smsSid: string | null = null
+      if (!reachableViaPush) {
+        const { sendFillInvite } = await import('@/lib/sms')
+        const result = await sendFillInvite(
+          phone,
+          host?.first_name ?? 'Someone',
+          activity.activity_name,
+          dateTimeStr || 'TBD',
+          spotsNeeded,
+          activity.image_url || undefined,
+        )
+        if (result.success) smsSid = result.sid ?? null
+      }
       const responseTimerMs = (activity.response_timer_minutes ?? 5) * 60 * 1000
       await admin.from('whozin_invite').insert({
         activity_id: id,
         user_id: targetUserId,
         batch_number: 1,
         status: 'pending',
-        sms_sid: result.success ? result.sid : null,
+        sms_sid: smsSid,
         sent_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + responseTimerMs).toISOString(),
       })

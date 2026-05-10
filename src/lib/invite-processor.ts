@@ -2,6 +2,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { sendActivityInvite } from '@/lib/sms'
 import { createAlert } from '@/lib/alerts'
 import { renderTemplate } from '@/lib/notification-templates'
+import { hasReachablePush } from '@/lib/push'
 
 /**
  * Process priority invites for a single activity.
@@ -215,20 +216,25 @@ export async function processActivityInvites(activityId: string) {
   for (const user of (users ?? [])) {
     const phone = user.phone.startsWith('+') ? user.phone : `+${user.country_code}${user.phone}`
 
-    const result = await sendActivityInvite(
-      phone,
-      creator?.first_name ?? 'Someone',
-      activity.activity_name,
-      dateTimeStr || 'TBD',
-      activity.image_url || undefined
-    )
+    // Skip SMS if the user has the app reachable — push will handle it
+    let smsSid: string | null = null
+    if (!(await hasReachablePush(user.id))) {
+      const result = await sendActivityInvite(
+        phone,
+        creator?.first_name ?? 'Someone',
+        activity.activity_name,
+        dateTimeStr || 'TBD',
+        activity.image_url || undefined
+      )
+      if (result.success) smsSid = result.sid ?? null
+    }
 
     await admin.from('whozin_invite').insert({
       activity_id: activityId,
       user_id: user.id,
       batch_number: newBatch,
       status: 'pending',
-      sms_sid: result.success ? result.sid : null,
+      sms_sid: smsSid,
       sent_at: new Date().toISOString(),
       expires_at: expiresAt,
     })

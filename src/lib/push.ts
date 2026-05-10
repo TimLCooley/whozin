@@ -10,6 +10,21 @@ interface SendPushParams {
   data?: Record<string, string>
 }
 
+/**
+ * True if the user has a registered push token AND has push enabled — i.e. the
+ * Whozin app can reach them. Call sites that send SMS use this to skip texting
+ * users who'll already get a push.
+ */
+export async function hasReachablePush(userId: string): Promise<boolean> {
+  const admin = getAdminClient()
+  const { data: user } = await admin
+    .from('whozin_users')
+    .select('push_token, push_notifications_enabled')
+    .eq('id', userId)
+    .single()
+  return !!user?.push_token && user.push_notifications_enabled !== false
+}
+
 /** Send a push notification to a single user (FCM for Android, APNs for iOS) */
 export async function sendPush({ userId, title, body, link, data }: SendPushParams) {
   const admin = getAdminClient()

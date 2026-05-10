@@ -75,7 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const [{ data: targetUser }, { data: host }] = await Promise.all([
     admin
       .from('whozin_users')
-      .select('push_token, phone, text_notifications_enabled')
+      .select('push_token, push_notifications_enabled, phone, text_notifications_enabled')
       .eq('id', targetUserId)
       .single(),
     admin
@@ -84,6 +84,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .eq('id', whozinUser.id)
       .single(),
   ])
+
+  const reachableViaPush =
+    !!targetUser?.push_token && targetUser.push_notifications_enabled !== false
 
   const hostName = host?.first_name || 'The host'
   const activityName = activity.activity_name || 'the activity'
@@ -103,8 +106,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }).catch(() => {})
   })().catch(() => {})
 
-  // SMS to all confirmed members (in addition to push) unless they've opted out
-  if (targetUser?.phone && targetUser.text_notifications_enabled !== false) {
+  // SMS only when push won't reach them — opt-out still respected
+  if (!reachableViaPush && targetUser?.phone && targetUser.text_notifications_enabled !== false) {
     const chatLine = activity.chat_enabled
       ? ' Open or download the app to chat: https://whozin.io/dl'
       : ' See details in the app: https://whozin.io/dl'

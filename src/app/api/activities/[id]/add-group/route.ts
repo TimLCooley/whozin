@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { sendFillInvite } from '@/lib/sms'
+import { hasReachablePush } from '@/lib/push'
 
 // POST — bulk-invite every member of one of the caller's owned groups to the
 // activity. Sends an immediate Fill-style SMS to everyone, attributed to the
@@ -164,20 +165,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   for (const invitee of (invitees ?? [])) {
     const phone = invitee.phone.startsWith('+') ? invitee.phone : `+${invitee.country_code}${invitee.phone}`
-    const result = await sendFillInvite(
-      phone,
-      hostName,
-      activity.activity_name,
-      dateTimeStr || 'TBD',
-      spotsNeeded,
-      activity.image_url || undefined,
-    )
+    let smsSid: string | null = null
+    if (!(await hasReachablePush(invitee.id))) {
+      const result = await sendFillInvite(
+        phone,
+        hostName,
+        activity.activity_name,
+        dateTimeStr || 'TBD',
+        spotsNeeded,
+        activity.image_url || undefined,
+      )
+      if (result.success) smsSid = result.sid ?? null
+    }
     await admin.from('whozin_invite').insert({
       activity_id: id,
       user_id: invitee.id,
       batch_number: 1,
       status: 'pending',
-      sms_sid: result.success ? result.sid : null,
+      sms_sid: smsSid,
       sent_at: new Date().toISOString(),
       expires_at: expiresAt,
     })

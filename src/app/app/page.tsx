@@ -138,7 +138,13 @@ export default function AppHome() {
 
   function handleOutClick(e: React.MouseEvent, activity: ActivityCard) {
     e.stopPropagation()
-    setOutConfirm({ id: activity.id, name: activity.activity_name })
+    // Only confirm if the user is dropping a spot they already claimed.
+    // tbd/waiting/missed/waitlist/null → just mark them out, no modal.
+    if (activity.my_status === 'confirmed') {
+      setOutConfirm({ id: activity.id, name: activity.activity_name })
+    } else {
+      handleResponse(activity.id, 'out')
+    }
   }
 
   function confirmOut() {

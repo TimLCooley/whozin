@@ -2,6 +2,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { sendSms, sendFillInvite, isTestNumber } from '@/lib/sms'
 import { createAlert } from '@/lib/alerts'
 import { renderTemplate } from '@/lib/notification-templates'
+import { hasReachablePush } from '@/lib/push'
 
 const ADMIN_PHONE = '+16193019180'
 
@@ -83,11 +84,15 @@ export async function sendEmergencyFill(activityId: string) {
   const creatorName = creator?.first_name || 'Someone'
   const spotsText = spotsOpen === 1 ? '1 spot just opened' : `${spotsOpen} spots just opened`
 
-  // Send emergency SMS to everyone
+  // Send emergency SMS to everyone (skip SMS for users reachable via push)
   for (const user of (users ?? [])) {
     const phone = user.phone.startsWith('+') ? user.phone : `+${user.country_code}${user.phone}`
 
-    const result = await sendFillInvite(phone, creatorName, activity.activity_name, dateTimeStr || 'TBD', spotsOpen, activity.image_url || undefined)
+    let smsSid: string | null = null
+    if (!(await hasReachablePush(user.id))) {
+      const result = await sendFillInvite(phone, creatorName, activity.activity_name, dateTimeStr || 'TBD', spotsOpen, activity.image_url || undefined)
+      if (result.success) smsSid = result.sid ?? null
+    }
 
     // Create invite record for tracking
     await admin.from('whozin_invite').insert({
@@ -95,7 +100,7 @@ export async function sendEmergencyFill(activityId: string) {
       user_id: user.id,
       batch_number: 999, // emergency batch
       status: 'pending',
-      sms_sid: result.success ? result.sid : null,
+      sms_sid: smsSid,
       sent_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour for emergency
     })
@@ -165,14 +170,17 @@ export async function notifyHostOfDropout(
     link: `/app/activities/${activityId}?emergency=true`,
   })
 
-  // SMS to host
-  const phone = host.phone.startsWith('+') ? host.phone : `+${host.country_code}${host.phone}`
-  const actualTo = isTestNumber(phone) ? ADMIN_PHONE : phone
-  const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
+  // SMS to host — but only if push won't reach them.
+  // (FILL-by-text reply still works for SMS-only hosts; app users can tap the push.)
+  if (!(await hasReachablePush(host.id))) {
+    const phone = host.phone.startsWith('+') ? host.phone : `+${host.country_code}${host.phone}`
+    const actualTo = isTestNumber(phone) ? ADMIN_PHONE : phone
+    const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
 
-  const { body: smsBody } = await renderTemplate('dropout_notification', 'sms', {
-    dropout_name: dropoutName,
-    activity_name: activity.activity_name,
-  })
-  await sendSms(actualTo, smsBody + testNote)
+    const { body: smsBody } = await renderTemplate('dropout_notification', 'sms', {
+      dropout_name: dropoutName,
+      activity_name: activity.activity_name,
+    })
+    await sendSms(actualTo, smsBody + testNote)
+  }
 }

@@ -137,7 +137,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // Check if activity was full BEFORE this response (for emergency fill detection)
   const { data: activityBefore } = await admin
     .from('whozin_activity')
-    .select('status, max_capacity, auto_emergency_fill, waitlist_enabled, creator_id')
+    .select('status, max_capacity, auto_emergency_fill, waitlist_enabled, creator_id, activity_name')
     .eq('id', id)
     .single()
 
@@ -220,6 +220,33 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       .update({ status: 'expired' })
       .eq('activity_id', id)
       .eq('status', 'pending')
+  }
+
+  // Notify the host when a non-host member confirms via the app
+  // (mirrors the SMS-reply path in /api/twilio/webhook)
+  if (response === 'in' && activityBefore?.creator_id && activityBefore.creator_id !== whozinUser.id) {
+    const { data: responder } = await admin
+      .from('whozin_users')
+      .select('first_name, last_name')
+      .eq('id', whozinUser.id)
+      .single()
+    const responderName = responder
+      ? `${responder.first_name} ${responder.last_name}`.trim()
+      : 'Someone'
+    const activityName = activityBefore.activity_name || 'the activity'
+    const { createAlert } = await import('@/lib/alerts')
+    const { renderTemplate } = await import('@/lib/notification-templates')
+    const { title, body: alertBody } = await renderTemplate('member_responded', 'push', {
+      responder_name: responderName,
+      activity_name: activityName,
+    })
+    createAlert({
+      user_id: activityBefore.creator_id,
+      type: 'activity_invite',
+      title: title ?? `${responderName} is in!`,
+      body: alertBody,
+      link: `/app/activities/${id}`,
+    }).catch(() => {})
   }
 
   // Emergency fill: someone dropped out of a FULL activity

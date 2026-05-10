@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { sendPush } from '@/lib/push'
+import { sendPush, hasReachablePush } from '@/lib/push'
 import { sendReminderSms } from '@/lib/sms'
 import { renderTemplate } from '@/lib/notification-templates'
 
@@ -130,7 +130,10 @@ export async function GET(req: NextRequest) {
 
           const phone = (member as unknown as { whozin_users?: { phone?: string } }).whozin_users?.phone
           if (phone) {
-            sendReminderSms(phone, activity.activity_name, window.label).catch(() => {})
+            ;(async () => {
+              if (await hasReachablePush(member.user_id)) return
+              sendReminderSms(phone, activity.activity_name, window.label).catch(() => {})
+            })().catch(() => {})
           }
 
           sent++

@@ -2,6 +2,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import { sendSms, isTestNumber } from '@/lib/sms'
 import { createAlert } from '@/lib/alerts'
 import { renderTemplate } from '@/lib/notification-templates'
+import { hasReachablePush } from '@/lib/push'
 
 const ADMIN_PHONE = '+16193019180'
 const DOWNLOAD_LINK = 'https://whozin.io/dl'
@@ -57,6 +58,7 @@ export async function addToWaitlist(activityId: string, userId: string) {
     const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
 
     ;(async () => {
+      if (await hasReachablePush(userId)) return
       const { body } = await renderTemplate('waitlist_added', 'sms', {
         activity_name: activityName,
         position: pos,
@@ -140,6 +142,7 @@ export async function promoteFromWaitlist(activityId: string): Promise<boolean> 
     const testNote = isTestNumber(phone) ? ` [TEST: originally to ${phone}]` : ''
 
     ;(async () => {
+      if (await hasReachablePush(nextUp.user_id)) return
       const { body } = await renderTemplate('waitlist_promoted', 'sms', {
         activity_name: activityName,
         download_link: DOWNLOAD_LINK,

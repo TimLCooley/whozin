@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { alertGroupMembers } from '@/lib/alerts'
 import { sendActivityInvite, sendFillInvite } from '@/lib/sms'
+import { hasReachablePush } from '@/lib/push'
 
 // GET activities for the current user (upcoming + past)
 export async function GET(req: NextRequest) {
@@ -367,13 +368,17 @@ export async function POST(req: NextRequest) {
 
       for (const member of (memberUsers ?? [])) {
         const phone = member.phone.startsWith('+') ? member.phone : `+${member.country_code}${member.phone}`
-        const result = await sendFillInvite(phone, whozinUser.first_name, activity_name.trim(), dateTimeStr || 'TBD', spotsNeeded, activity.image_url || undefined)
+        let smsSid: string | null = null
+        if (!(await hasReachablePush(member.id))) {
+          const result = await sendFillInvite(phone, whozinUser.first_name, activity_name.trim(), dateTimeStr || 'TBD', spotsNeeded, activity.image_url || undefined)
+          if (result.success) smsSid = result.sid ?? null
+        }
         await admin.from('whozin_invite').insert({
           activity_id: activity.id,
           user_id: member.id,
           batch_number: 1,
           status: 'pending',
-          sms_sid: result.success ? result.sid : null,
+          sms_sid: smsSid,
           sent_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + (finalResponseTimer * 60 * 1000)).toISOString(),
         })
