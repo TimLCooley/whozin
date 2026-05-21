@@ -141,7 +141,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .eq('id', id)
     .single()
 
-  const wasFull = activityBefore?.status === 'full'
+  // Compute fullness from actual confirmed count, not the cached status field —
+  // the cached status can drift if max_capacity was bumped after the activity filled.
+  const { count: confirmedBeforeCount } = await admin
+    .from('whozin_activity_member')
+    .select('id', { count: 'exact', head: true })
+    .eq('activity_id', id)
+    .eq('status', 'confirmed')
+  const wasFull = activityBefore?.max_capacity
+    ? (confirmedBeforeCount ?? 0) >= activityBefore.max_capacity
+    : false
 
   // Wait list: a missed/out user replying IN on a full activity goes to wait list
   // (only when waitlist is enabled and the user isn't the host)
@@ -364,6 +373,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .eq('id', id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // If max_capacity changed, recompute status so the cached 'full'/'open' field
+  // doesn't drift (e.g., 6/6 full → bump to 8 should flip back to 'open').
+  if (body.max_capacity !== undefined) {
+    const { count: confirmedCount } = await admin
+      .from('whozin_activity_member')
+      .select('id', { count: 'exact', head: true })
+      .eq('activity_id', id)
+      .eq('status', 'confirmed')
+    const confirmed = confirmedCount ?? 0
+    const newCap = updates.max_capacity as number | null
+    const isFull = newCap ? confirmed >= newCap : false
+    await admin
+      .from('whozin_activity')
+      .update({ capacity_current: confirmed, status: isFull ? 'full' : 'open' })
+      .eq('id', id)
   }
 
   // If requested, stop current batch: expire all waiting members and their invites,
