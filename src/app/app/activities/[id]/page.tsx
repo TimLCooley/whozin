@@ -44,6 +44,7 @@ interface ActivityDetail {
   open_invite: boolean
   waitlist_enabled: boolean
   auto_emergency_fill: boolean
+  repeat_interval: 'none' | 'weekly' | 'biweekly' | 'monthly'
   priority_invite: boolean
   response_timer_minutes: number
   image_url: string | null
@@ -701,6 +702,20 @@ export default function ActivityDetailPage() {
     setResponding(false)
   }
 
+  const [approving, setApproving] = useState(false)
+  async function handleApprove() {
+    if (approving) return
+    setApproving(true)
+    const res = await fetch(`/api/activities/${id}/approve`, { method: 'POST' })
+    if (res.ok) {
+      await loadActivity()
+    } else {
+      const data = await res.json().catch(() => null)
+      alert(data?.error ?? 'Failed to approve activity')
+    }
+    setApproving(false)
+  }
+
   async function handleDelete() {
     setDeleting(true)
     const res = await fetch(`/api/activities/${id}`, { method: 'DELETE' })
@@ -831,6 +846,29 @@ export default function ActivityDetailPage() {
       <div ref={contentRef} className={`flex-1 ${tab === 'chat' ? 'flex flex-col min-h-0' : 'overflow-y-auto pb-4'}`}>
         {tab === 'details' && (
           <div className="px-4 pt-4 space-y-4 animate-enter">
+            {/* Draft banner — host must approve before invites go out */}
+            {activity.status === 'draft' && activity.is_creator && (
+              <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 space-y-3">
+                <div className="flex items-start gap-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-0.5">
+                    <path d="M12 9v4M12 17h.01" />
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-bold text-amber-900">Draft — not live yet</p>
+                    <p className="text-[12px] text-amber-800/80 mt-0.5 leading-snug">Review the date, time, and details below. Tap Approve to send invites.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleApprove}
+                  disabled={approving}
+                  className="w-full py-3 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)] disabled:opacity-60"
+                >
+                  {approving ? 'Approving...' : 'Approve & Send Invites'}
+                </button>
+              </div>
+            )}
+
             {/* Hero image — cropped preview, tap to expand, host pencil to edit */}
             {activity.image_url ? (
               <div className="relative -mx-4 -mt-4 mb-2">
@@ -1122,6 +1160,21 @@ export default function ActivityDetailPage() {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(patch),
+                  })
+                  if (!res.ok) setActivity(prev)
+                }}
+              />
+              <RepeatSetting
+                value={activity.repeat_interval ?? 'none'}
+                isPro={isPro}
+                requirePro={requirePro}
+                onChange={async (next) => {
+                  const prev = activity
+                  setActivity({ ...activity, repeat_interval: next })
+                  const res = await fetch(`/api/activities/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ repeat_interval: next }),
                   })
                   if (!res.ok) setActivity(prev)
                 }}
@@ -2726,6 +2779,71 @@ function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdi
       {trailing && (
         <span onClick={(e) => e.stopPropagation()}>{trailing}</span>
       )}
+    </div>
+  )
+}
+
+/* -- Repeat picker (host's group tab) -- */
+function RepeatSetting({
+  value,
+  isPro,
+  requirePro,
+  onChange,
+}: {
+  value: 'none' | 'weekly' | 'biweekly' | 'monthly'
+  isPro: boolean
+  requirePro: () => boolean
+  onChange: (next: 'none' | 'weekly' | 'biweekly' | 'monthly') => void
+}) {
+  const enabled = value !== 'none'
+  return (
+    <div className="bg-background border border-border/50 rounded-xl px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[14px] font-semibold text-foreground">Repeat</span>
+          <span className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold uppercase">Pro</span>
+        </div>
+        <button
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => {
+            if (!enabled && !isPro) { requirePro(); return }
+            onChange(enabled ? 'none' : 'weekly')
+          }}
+          className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-primary' : isPro ? 'bg-border' : 'bg-border/60'}`}
+        >
+          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${enabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+      {enabled && (
+        <div className="flex gap-2 mt-3">
+          {([
+            { value: 'weekly' as const, label: 'Weekly' },
+            { value: 'biweekly' as const, label: 'Every 2 wks' },
+            { value: 'monthly' as const, label: 'Monthly' },
+          ]).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`flex-1 py-2 rounded-xl text-[13px] font-semibold transition-colors ${
+                value === opt.value
+                  ? 'bg-primary text-white'
+                  : 'bg-surface text-muted border border-border/50'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+        {!enabled
+          ? isPro
+            ? 'After this event ends, automatically create the next one as a draft for your review.'
+            : 'Upgrade to Pro to auto-create the next occurrence after each event.'
+          : 'After this event ends, a draft for the next one shows up on your home — review and approve to send invites.'}
+      </p>
     </div>
   )
 }

@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { alertGroupMembers } from '@/lib/alerts'
-import { sendActivityInvite, sendFillInvite } from '@/lib/sms'
-import { hasReachablePush } from '@/lib/push'
 
 // GET activities for the current user (upcoming + past)
 export async function GET(req: NextRequest) {
@@ -22,6 +19,39 @@ export async function GET(req: NextRequest) {
   if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
   const tab = req.nextUrl.searchParams.get('tab') ?? 'upcoming'
+
+  // Recurring sweep: spawn drafts for past repeating activities; clean up
+  // stale drafts (event date passed without approval). Scoped to this user
+  // so we only do work that affects their view.
+  if (tab === 'upcoming') {
+    const todayUtcForCleanup = new Date().toISOString().split('T')[0]
+    const { cleanupStaleDrafts, spawnNextDraft } = await import('@/lib/recurring')
+    await cleanupStaleDrafts(whozinUser.id, todayUtcForCleanup)
+
+    const { data: repeatingPast } = await admin
+      .from('whozin_activity')
+      .select('id, activity_date, activity_time, duration_hours, timezone')
+      .eq('creator_id', whozinUser.id)
+      .neq('repeat_interval', 'none')
+      .in('status', ['open', 'full', 'past'])
+      .not('activity_date', 'is', null)
+      .lte('activity_date', todayUtcForCleanup)
+
+    if (repeatingPast && repeatingPast.length > 0) {
+      const nowMsForSpawn = Date.now()
+      for (const a of repeatingPast) {
+        // Only spawn once the activity has actually ended (date + time + duration)
+        const time = a.activity_time ?? '23:59:00'
+        const duration = a.activity_time ? (a.duration_hours ?? 2) : 0
+        const startMs = Date.parse(`${a.activity_date}T${time}Z`)
+        if (isNaN(startMs)) continue
+        const endMs = startMs + duration * 60 * 60 * 1000
+        if (endMs < nowMsForSpawn) {
+          await spawnNextDraft(a.id)
+        }
+      }
+    }
+  }
 
   // Get activities where user is a member (already invited) OR creator
   // Exclude 'tbd' — those members haven't been invited yet
@@ -53,9 +83,10 @@ export async function GET(req: NextRequest) {
   const yesterdayUtc = new Date(nowMs - 86400000).toISOString().split('T')[0]
 
   if (tab === 'upcoming') {
-    // Yesterday-in-UTC catches long-running activities that end today
+    // Yesterday-in-UTC catches long-running activities that end today.
+    // 'draft' surfaces here for the creator (non-creators have no member row).
     query = query
-      .in('status', ['open', 'full'])
+      .in('status', ['draft', 'open', 'full'])
       .or(`activity_date.gte.${yesterdayUtc},activity_date.is.null`)
       .order('activity_date', { ascending: true, nullsFirst: false })
   } else {
@@ -97,6 +128,8 @@ export async function GET(req: NextRequest) {
 
   const dateFilteredActivities = (activities ?? []).filter((a) => {
     if (a.status === 'past' || a.status === 'cancelled') return tab === 'past'
+    // Drafts always belong to the upcoming tab regardless of timing.
+    if (a.status === 'draft') return tab === 'upcoming'
     const endMs = endTimestampMs(a)
     if (endMs === null) return tab === 'upcoming'
     return tab === 'upcoming' ? endMs >= nowMs : endMs < nowMs
@@ -177,6 +210,7 @@ export async function GET(req: NextRequest) {
       reminder_enabled: a.reminder_enabled,
       waitlist_enabled: a.waitlist_enabled ?? false,
       open_invite: a.open_invite ?? false,
+      repeat_interval: a.repeat_interval ?? 'none',
       timezone: a.timezone,
       image_url: a.image_url,
       note: a.note,
@@ -234,6 +268,7 @@ export async function POST(req: NextRequest) {
     auto_emergency_fill,
     waitlist_enabled,
     open_invite,
+    repeat_interval,
     timezone,
   } = body
 
@@ -280,6 +315,7 @@ export async function POST(req: NextRequest) {
       auto_emergency_fill: auto_emergency_fill ?? false,
       waitlist_enabled: isPro ? (waitlist_enabled ?? false) : false,
       open_invite: open_invite ?? false,
+      repeat_interval: isPro && ['weekly', 'biweekly', 'monthly'].includes(repeat_interval) ? repeat_interval : 'none',
       timezone: timezone || null,
       status: 'open',
     })
@@ -296,95 +332,8 @@ export async function POST(req: NextRequest) {
     priority_order: 0,
   })
 
-  // Get group members to add them as activity members
-  const { data: groupMembers } = await admin
-    .from('whozin_group_members')
-    .select('user_id, priority_order')
-    .eq('group_id', group_id)
-    .neq('user_id', whozinUser.id)
-    .order('priority_order', { ascending: true })
-
-  if (groupMembers && groupMembers.length > 0) {
-    // Add all group members as activity members with 'tbd' status
-    const memberInserts = groupMembers.map((m) => ({
-      activity_id: activity.id,
-      user_id: m.user_id,
-      status: 'tbd' as const,
-      priority_order: m.priority_order,
-    }))
-
-    await admin.from('whozin_activity_member').insert(memberInserts)
-
-    if (activity.priority_invite) {
-      // Build mode: set 2-minute countdown before invites go out
-      const inviteStartsAt = new Date(Date.now() + 2 * 60 * 1000).toISOString()
-      await admin
-        .from('whozin_activity')
-        .update({ invite_starts_at: inviteStartsAt })
-        .eq('id', activity.id)
-    } else {
-      // All-at-once mode: notify everyone immediately
-      const { data: group } = await admin
-        .from('whozin_groups')
-        .select('name')
-        .eq('id', group_id)
-        .single()
-
-      await alertGroupMembers(group_id, whozinUser.id, {
-        type: 'activity_invite',
-        title: `New activity: ${activity_name.trim()}`,
-        body: `${whozinUser.first_name} created "${activity_name.trim()}" in ${group?.name ?? 'your group'}`,
-        link: `/app/activities/${activity.id}`,
-      })
-
-      // Send SMS to everyone and set them all to 'waiting'
-      const memberUserIds = groupMembers.map((m) => m.user_id)
-
-      await admin
-        .from('whozin_activity_member')
-        .update({ status: 'waiting' })
-        .eq('activity_id', activity.id)
-        .in('user_id', memberUserIds)
-
-      const { data: memberUsers } = await admin
-        .from('whozin_users')
-        .select('id, phone, country_code')
-        .in('id', memberUserIds)
-
-      let dateTimeStr = ''
-      if (activity_date) {
-        const d = new Date(activity_date + 'T00:00:00')
-        dateTimeStr = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
-        if (activity_time) {
-          const [h, m] = activity_time.split(':')
-          const hour = parseInt(h)
-          const ampm = hour >= 12 ? 'pm' : 'am'
-          const h12 = hour % 12 || 12
-          dateTimeStr += ` at ${h12}:${m} ${ampm}`
-        }
-      }
-
-      const spotsNeeded = finalMaxCapacity ? finalMaxCapacity - 1 : memberUsers?.length ?? 1 // -1 for creator already confirmed
-
-      for (const member of (memberUsers ?? [])) {
-        const phone = member.phone.startsWith('+') ? member.phone : `+${member.country_code}${member.phone}`
-        let smsSid: string | null = null
-        if (!(await hasReachablePush(member.id))) {
-          const result = await sendFillInvite(phone, whozinUser.first_name, activity_name.trim(), dateTimeStr || 'TBD', spotsNeeded, activity.image_url || undefined)
-          if (result.success) smsSid = result.sid ?? null
-        }
-        await admin.from('whozin_invite').insert({
-          activity_id: activity.id,
-          user_id: member.id,
-          batch_number: 1,
-          status: 'pending',
-          sms_sid: smsSid,
-          sent_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + (finalResponseTimer * 60 * 1000)).toISOString(),
-        })
-      }
-    }
-  }
+  const { fanOutActivityInvites } = await import('@/lib/activity-fanout')
+  await fanOutActivityInvites(activity.id)
 
   return NextResponse.json(activity)
 }

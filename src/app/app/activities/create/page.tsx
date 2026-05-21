@@ -94,6 +94,7 @@ export default function CreateActivityPage() {
   const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
   const [waitlistEnabled, setWaitlistEnabled] = useState(false)
   const [openInvite, setOpenInvite] = useState(false)
+  const [repeatInterval, setRepeatInterval] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none')
   const [showTimerDropdown, setShowTimerDropdown] = useState(false)
   const [showNoGroupsModal, setShowNoGroupsModal] = useState(false)
 
@@ -167,6 +168,9 @@ export default function CreateActivityPage() {
         setChatEnabled(data.chat_enabled ?? false)
         setAutoEmergencyFill(data.auto_emergency_fill ?? false)
         setWaitlistEnabled(data.waitlist_enabled ?? false)
+        if (['weekly', 'biweekly', 'monthly'].includes(data.repeat_interval)) {
+          setRepeatInterval(data.repeat_interval)
+        }
         setOpenInvite(data.open_invite ?? false)
         setPriorityInvite(data.priority_invite ?? true)
         if (data.priority_invite === false) {
@@ -340,6 +344,7 @@ export default function CreateActivityPage() {
           auto_emergency_fill: autoEmergencyFill,
           waitlist_enabled: waitlistEnabled,
           open_invite: openInvite,
+          repeat_interval: repeatInterval,
           image_url: imageUrl || null,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }),
@@ -1645,6 +1650,52 @@ export default function CreateActivityPage() {
                 {openInvite
                   ? 'Anyone who is IN can add new people to this activity using the same Add button you have.'
                   : 'Only you can add new people to this activity.'}
+              </p>
+            </FieldCard>
+
+            {/* Repeat (Pro) */}
+            <FieldCard>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-foreground">Repeat</span>
+                  <ProBadge />
+                </div>
+                <Toggle
+                  checked={repeatInterval !== 'none'}
+                  onChange={(v) => {
+                    if (v && !requirePro()) return
+                    setRepeatInterval(v ? 'weekly' : 'none')
+                  }}
+                />
+              </div>
+              {repeatInterval !== 'none' && (
+                <div className="flex gap-2 mt-3">
+                  {([
+                    { value: 'weekly', label: 'Weekly' },
+                    { value: 'biweekly', label: 'Every 2 wks' },
+                    { value: 'monthly', label: 'Monthly' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setRepeatInterval(opt.value)}
+                      className={`flex-1 py-2 rounded-xl text-[13px] font-semibold transition-colors ${
+                        repeatInterval === opt.value
+                          ? 'bg-primary text-white'
+                          : 'bg-surface text-muted border border-border/50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                {repeatInterval === 'none'
+                  ? isPro
+                    ? 'After this event ends, automatically create the next one as a draft for your review.'
+                    : 'Upgrade to Pro to auto-create the next occurrence after each event.'
+                  : 'After this event ends, a draft for the next one shows up on your home — review and approve to send invites.'}
               </p>
             </FieldCard>
 

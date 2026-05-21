@@ -22,6 +22,7 @@ interface ActivityCard {
   reminder_enabled: boolean
   waitlist_enabled: boolean
   open_invite: boolean
+  repeat_interval: 'none' | 'weekly' | 'biweekly' | 'monthly'
   timezone: string | null
   image_url: string | null
   is_creator: boolean
@@ -154,6 +155,34 @@ export default function AppHome() {
     }
   }
 
+  const [draftActioning, setDraftActioning] = useState<string | null>(null)
+  const [discardConfirm, setDiscardConfirm] = useState<{ id: string; name: string } | null>(null)
+
+  async function handleApproveDraft(activityId: string) {
+    if (draftActioning) return
+    setDraftActioning(activityId)
+    const res = await fetch(`/api/activities/${activityId}/approve`, { method: 'POST' })
+    if (res.ok) {
+      await loadActivities()
+    } else {
+      const data = await res.json().catch(() => null)
+      alert(data?.error ?? 'Failed to approve activity')
+    }
+    setDraftActioning(null)
+  }
+
+  async function handleDiscardDraft(activityId: string) {
+    if (draftActioning) return
+    setDraftActioning(activityId)
+    const res = await fetch(`/api/activities/${activityId}`, { method: 'DELETE' })
+    if (res.ok) {
+      await loadActivities()
+    } else {
+      alert('Failed to discard draft')
+    }
+    setDraftActioning(null)
+  }
+
   return (
     <div className="relative h-full flex flex-col bg-surface overflow-hidden">
       <AppHeader />
@@ -224,16 +253,20 @@ export default function AppHome() {
               const nextReminder = showReminder ? getNextReminderLabel(activity.activity_date, activity.activity_time) : null
               const isFull = activity.max_capacity != null && activity.confirmed_count >= activity.max_capacity
               const showWaitlistJoin = activity.waitlist_enabled && activity.my_status === 'missed' && isFull
+              const isDraft = activity.status === 'draft' && activity.is_creator
+              const draftBusy = draftActioning === activity.id
               return (
                 <div
                   key={activity.id}
                   onClick={() => router.push(`/app/activities/${activity.id}`)}
                   className={`rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter cursor-pointer active:opacity-90 transition-all overflow-hidden ${
-                    needsResponse
-                      ? 'border-[1.5px] border-primary/50 ring-2 ring-primary/15'
-                      : activity.is_creator
-                        ? 'border-[1.5px] border-primary/40 ring-1 ring-primary/10'
-                        : 'border border-border/50'
+                    isDraft
+                      ? 'border-[1.5px] border-dashed border-amber-300 opacity-75'
+                      : needsResponse
+                        ? 'border-[1.5px] border-primary/50 ring-2 ring-primary/15'
+                        : activity.is_creator
+                          ? 'border-[1.5px] border-primary/40 ring-1 ring-primary/10'
+                          : 'border border-border/50'
                   }`}
                   style={{ animationDelay: `${i * 0.03}s` }}
                 >
@@ -296,6 +329,11 @@ export default function AppHome() {
 
                       {/* Bottom content over image */}
                       <div className="relative px-4 pb-4">
+                        {isDraft && (
+                          <span className="inline-block text-[10px] px-2 py-0.5 bg-amber-400 text-amber-950 rounded-full font-bold uppercase tracking-wide mb-1.5">
+                            Draft
+                          </span>
+                        )}
                         <h3 className="text-[30px] font-bold text-white truncate drop-shadow-sm">{activity.activity_name}</h3>
 
                         <div className="flex items-center gap-1.5 mt-1.5">
@@ -347,7 +385,24 @@ export default function AppHome() {
                         </div>
 
                         {/* Buttons over image */}
-                        {activity.my_status === 'confirmed' ? (
+                        {isDraft ? (
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
+                              disabled={draftBusy}
+                              className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)] disabled:opacity-60"
+                            >
+                              {draftBusy ? 'Approving...' : 'Approve'}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDiscardConfirm({ id: activity.id, name: activity.activity_name }) }}
+                              disabled={draftBusy}
+                              className="px-4 py-2.5 rounded-lg bg-white/20 backdrop-blur-sm text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-60"
+                            >
+                              Discard
+                            </button>
+                          </div>
+                        ) : activity.my_status === 'confirmed' ? (
                           <div className="flex gap-2 mt-3">
                             <div className="flex-1 bg-[#00C853]/90 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
@@ -447,6 +502,11 @@ export default function AppHome() {
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
+                      {isDraft && (
+                        <span className="inline-block text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 rounded-full font-bold uppercase tracking-wide mb-1">
+                          Draft
+                        </span>
+                      )}
                       <h3 className="text-[30px] font-bold text-foreground truncate">{activity.activity_name}</h3>
                       <div className="flex items-center gap-1.5 mt-1 text-muted">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -537,7 +597,24 @@ export default function AppHome() {
                   </div>
 
                   {/* IN/OUT Response buttons */}
-                  {activity.my_status === 'confirmed' ? (
+                  {isDraft ? (
+                    <div className="flex gap-2 mt-3 pt-2.5 border-t border-amber-200">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
+                        disabled={draftBusy}
+                        className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)] disabled:opacity-60"
+                      >
+                        {draftBusy ? 'Approving...' : 'Approve'}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDiscardConfirm({ id: activity.id, name: activity.activity_name }) }}
+                        disabled={draftBusy}
+                        className="px-4 py-2.5 rounded-lg bg-surface text-foreground text-[13px] font-bold border border-border/50 active:opacity-80 transition-opacity disabled:opacity-60"
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  ) : activity.my_status === 'confirmed' ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/30">
                       <div className="flex-1 bg-[#00C853]/10 text-[#00C853] text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
@@ -691,6 +768,47 @@ export default function AppHome() {
                 className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-muted border border-border/50 active:opacity-80 transition-opacity"
               >
                 Drop Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discard Draft Confirmation Modal */}
+      {discardConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setDiscardConfirm(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-amber-50 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6M5 6l1 14a2 2 0 002 2h8a2 2 0 002-2l1-14" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">Discard this draft?</h3>
+              <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
+                <span className="font-semibold">{discardConfirm.name}</span> will be deleted and the recurring chain will stop. You can always create a new one.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDiscardConfirm(null)}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity"
+              >
+                Keep
+              </button>
+              <button
+                onClick={() => {
+                  const id = discardConfirm.id
+                  setDiscardConfirm(null)
+                  handleDiscardDraft(id)
+                }}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white active:opacity-80 transition-opacity"
+              >
+                Discard
               </button>
             </div>
           </div>

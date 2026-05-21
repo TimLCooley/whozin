@@ -376,6 +376,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.auto_emergency_fill !== undefined) updates.auto_emergency_fill = body.auto_emergency_fill
   if (body.waitlist_enabled !== undefined) updates.waitlist_enabled = isPro ? body.waitlist_enabled : false
   if (body.open_invite !== undefined) updates.open_invite = !!body.open_invite
+  if (body.repeat_interval !== undefined) {
+    const v = body.repeat_interval
+    updates.repeat_interval = isPro && ['weekly', 'biweekly', 'monthly'].includes(v) ? v : 'none'
+  }
 
   if (Object.keys(updates).length === 0 && !body.stop_current_batch) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
