@@ -213,6 +213,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     })
     .eq('id', id)
 
+  // Backfill from wait list if there's room (e.g., recovers users stuck on
+  // the wait list when the cached fullness drifted, or when max_capacity
+  // was bumped after the activity filled).
+  if (!nowFull && activityBefore?.waitlist_enabled) {
+    const { promoteFromWaitlist } = await import('@/lib/waitlist')
+    while (await promoteFromWaitlist(id)) {
+      const { data: refreshed } = await admin
+        .from('whozin_activity')
+        .select('status')
+        .eq('id', id)
+        .single()
+      if (refreshed?.status === 'full') break
+    }
+  }
+
   // If the activity just became full, clean up anyone still in 'waiting'
   // (their invite SMS went out but they hadn't responded yet — the spot
   // is gone). processActivityInvites would normally do this, but it
@@ -377,6 +392,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // If max_capacity changed, recompute status so the cached 'full'/'open' field
   // doesn't drift (e.g., 6/6 full → bump to 8 should flip back to 'open').
+  // Also backfill from the wait list if there's room.
   if (body.max_capacity !== undefined) {
     const { count: confirmedCount } = await admin
       .from('whozin_activity_member')
@@ -390,6 +406,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .from('whozin_activity')
       .update({ capacity_current: confirmed, status: isFull ? 'full' : 'open' })
       .eq('id', id)
+
+    if (!isFull) {
+      const { data: a } = await admin
+        .from('whozin_activity')
+        .select('waitlist_enabled')
+        .eq('id', id)
+        .single()
+      if (a?.waitlist_enabled) {
+        const { promoteFromWaitlist } = await import('@/lib/waitlist')
+        while (await promoteFromWaitlist(id)) {
+          const { data: refreshed } = await admin
+            .from('whozin_activity')
+            .select('status')
+            .eq('id', id)
+            .single()
+          if (refreshed?.status === 'full') break
+        }
+      }
+    }
   }
 
   // If requested, stop current batch: expire all waiting members and their invites,
