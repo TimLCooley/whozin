@@ -371,6 +371,21 @@ export default function AppHome() {
                               You&apos;re Out
                             </button>
                           </div>
+                        ) : activity.my_status === 'waitlist' && !isFull ? (
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
+                              className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)]"
+                            >
+                              I&apos;m In!
+                            </button>
+                            <button
+                              onClick={(e) => handleOutClick(e, activity)}
+                              className="flex-1 bg-white/20 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity"
+                            >
+                              I&apos;m Out
+                            </button>
+                          </div>
                         ) : activity.my_status === 'waitlist' ? (
                           <div className="flex gap-2 mt-3">
                             <div className="flex-1 bg-amber-500/90 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
@@ -544,6 +559,21 @@ export default function AppHome() {
                         className="flex-1 bg-red-500/10 text-red-500 text-[13px] font-bold py-2.5 rounded-lg border border-red-200"
                       >
                         You&apos;re Out
+                      </button>
+                    </div>
+                  ) : activity.my_status === 'waitlist' && !isFull ? (
+                    <div className="flex gap-2 mt-3 pt-2.5 border-t border-primary/15">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
+                        className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)]"
+                      >
+                        I&apos;m In!
+                      </button>
+                      <button
+                        onClick={(e) => handleOutClick(e, activity)}
+                        className="flex-1 bg-surface text-foreground text-[13px] font-bold py-2.5 rounded-lg border border-border/50 active:opacity-80 transition-opacity"
+                      >
+                        I&apos;m Out
                       </button>
                     </div>
                   ) : activity.my_status === 'waitlist' ? (
