@@ -57,12 +57,15 @@ export async function spawnNextDraft(parentId: string): Promise<string | null> {
   const nextDate = nextDateFor(parent.activity_date, parent.repeat_interval as RepeatInterval)
   if (!nextDate) return null
 
-  // Bail if a child draft already exists
+  // Bail if any child already exists for this parent (draft OR already
+  // approved). Once a host approves, the draft becomes status='open' and
+  // is itself the next parent — spawning from the original again would
+  // duplicate the next occurrence at the same date.
   const { data: existing } = await admin
     .from('whozin_activity')
     .select('id')
     .eq('parent_activity_id', parentId)
-    .eq('status', 'draft')
+    .limit(1)
     .maybeSingle()
 
   if (existing) return null
