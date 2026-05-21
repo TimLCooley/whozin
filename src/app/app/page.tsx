@@ -222,6 +222,8 @@ export default function AppHome() {
               const needsResponse = activity.my_status === 'tbd' || activity.my_status === 'waiting'
               const showReminder = activity.reminder_enabled && activity.is_creator && activity.my_status === 'confirmed'
               const nextReminder = showReminder ? getNextReminderLabel(activity.activity_date, activity.activity_time) : null
+              const isFull = activity.max_capacity != null && activity.confirmed_count >= activity.max_capacity
+              const showWaitlistJoin = activity.waitlist_enabled && activity.my_status === 'missed' && isFull
               return (
                 <div
                   key={activity.id}
@@ -385,7 +387,7 @@ export default function AppHome() {
                               I&apos;m Out
                             </button>
                           </div>
-                        ) : (activity.waitlist_enabled && activity.my_status === 'missed') ? (
+                        ) : showWaitlistJoin ? (
                           <div className="flex gap-2 mt-3">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
@@ -560,7 +562,7 @@ export default function AppHome() {
                         I&apos;m Out
                       </button>
                     </div>
-                  ) : (activity.waitlist_enabled && activity.my_status === 'missed') ? (
+                  ) : showWaitlistJoin ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-amber-200">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleResponse(activity.id, 'in') }}
