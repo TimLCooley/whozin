@@ -474,12 +474,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id')
+    .select('creator_id, status, parent_activity_id')
     .eq('id', id)
     .single()
 
   if (!activity || activity.creator_id !== whozinUser.id) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  // If a draft is being discarded, also stop the parent's repeat chain so
+  // the sweep doesn't immediately respawn a new draft from the same parent.
+  if (activity.status === 'draft' && activity.parent_activity_id) {
+    await admin
+      .from('whozin_activity')
+      .update({ repeat_interval: 'none' })
+      .eq('id', activity.parent_activity_id)
   }
 
   await admin.from('whozin_activity').delete().eq('id', id)

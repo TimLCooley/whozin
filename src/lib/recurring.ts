@@ -119,14 +119,35 @@ export async function spawnNextDraft(parentId: string): Promise<string | null> {
 
 /**
  * Delete any of the user's drafts whose event date has already passed
- * (host never approved before the date). Stops the chain — no auto-respawn.
+ * (host never approved before the date). Stops the chain — also marks each
+ * deleted draft's parent as 'none' repeat so the sweep doesn't immediately
+ * respawn another stale draft from the same parent.
  */
 export async function cleanupStaleDrafts(userId: string, todayUtc: string): Promise<void> {
   const admin = getAdminClient()
-  await admin
+
+  const { data: stale } = await admin
     .from('whozin_activity')
-    .delete()
+    .select('id, parent_activity_id')
     .eq('creator_id', userId)
     .eq('status', 'draft')
     .lt('activity_date', todayUtc)
+
+  if (!stale || stale.length === 0) return
+
+  const parentIds = stale
+    .map((s) => s.parent_activity_id)
+    .filter((p): p is string => !!p)
+
+  if (parentIds.length > 0) {
+    await admin
+      .from('whozin_activity')
+      .update({ repeat_interval: 'none' })
+      .in('id', parentIds)
+  }
+
+  await admin
+    .from('whozin_activity')
+    .delete()
+    .in('id', stale.map((s) => s.id))
 }
