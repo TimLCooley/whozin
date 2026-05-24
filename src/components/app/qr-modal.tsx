@@ -90,6 +90,55 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
     }
   }, [open, tab, scanResult, scanError]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  function describeMediaError(err: unknown): string {
+    const e = err as { name?: string; message?: string } | null
+    const name = e?.name ?? ''
+    const message = e?.message ?? ''
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+      return 'Camera permission was blocked. Open Settings → Apps → Whozin → Permissions and enable Camera.'
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return 'No camera was found on this device.'
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+      return 'Another app is using the camera. Close it and try again.'
+    }
+    if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+      return 'This camera does not support the requested mode.'
+    }
+    if (name === 'AbortError') {
+      return 'Camera start was aborted. Try again.'
+    }
+    if (name === 'SecurityError') {
+      return 'Camera access blocked by browser security. Make sure the site is loaded over HTTPS.'
+    }
+    return `Could not access camera (${name || 'unknown error'}${message ? `: ${message}` : ''})`
+  }
+
+  /** Try a sequence of constraints. Some Android WebViews reject specific
+   * facingMode constraints but accept a plain `video: true`. */
+  async function tryGetMediaStream(): Promise<MediaStream> {
+    const attempts: MediaStreamConstraints[] = [
+      { video: { facingMode: { exact: 'environment' } } },
+      { video: { facingMode: 'environment' } },
+      { video: true },
+    ]
+    let lastErr: unknown = null
+    for (const constraints of attempts) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (err) {
+        lastErr = err
+        // Only the OverconstrainedError is worth retrying — others (Permission, etc.) won't change.
+        const name = (err as { name?: string })?.name ?? ''
+        if (name !== 'OverconstrainedError' && name !== 'ConstraintNotSatisfiedError') {
+          throw err
+        }
+      }
+    }
+    throw lastErr
+  }
+
   async function startScanner() {
     if (scanning) return
     setScanError('')
@@ -101,34 +150,55 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
       const scanner = new Html5Qrcode('qr-reader')
       html5QrRef.current = scanner
 
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          handleScanSuccess(decodedText)
-          scanner.stop().catch(() => {})
-          setScanning(false)
-        },
-        () => {}
-      )
+      // Probe permission with a plain getUserMedia first so we can surface
+      // a precise error if it fails. Stop the probe stream immediately —
+      // html5-qrcode will open its own stream below.
+      const probe = await tryGetMediaStream()
+      probe.getTracks().forEach((t) => t.stop())
+
+      try {
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            handleScanSuccess(decodedText)
+            scanner.stop().catch(() => {})
+            setScanning(false)
+          },
+          () => {}
+        )
+      } catch (startErr) {
+        // Fallback: some Android WebViews reject facingMode constraints — try the default camera.
+        const name = (startErr as { name?: string })?.name ?? ''
+        if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+          await scanner.start(
+            { facingMode: 'user' },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            (decodedText) => {
+              handleScanSuccess(decodedText)
+              scanner.stop().catch(() => {})
+              setScanning(false)
+            },
+            () => {}
+          )
+        } else {
+          throw startErr
+        }
+      }
       setScanning(true)
-    } catch {
-      setScanError('Could not access camera. Please allow camera permissions.')
+    } catch (err) {
+      setScanError(describeMediaError(err))
     }
   }
 
   async function requestCameraPermission() {
     setScanError('')
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      })
+      const stream = await tryGetMediaStream()
       stream.getTracks().forEach((t) => t.stop())
       startScanner()
-    } catch {
-      setScanError(
-        'Camera permission was blocked. Open your device settings → Apps → Whozin → Permissions and enable Camera.'
-      )
+    } catch (err) {
+      setScanError(describeMediaError(err))
     }
   }
 
