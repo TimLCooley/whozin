@@ -2,6 +2,9 @@
 import PackageDescription
 
 // DO NOT MODIFY THIS FILE - managed by Capacitor CLI commands
+// NOTE: ContactsPlugin (local SPM package at ../ContactsPlugin) is added
+// manually below. `npx cap sync ios` will drop this — re-apply after every
+// sync. See commit 0bfc526 and the workaround in scripts/.
 let package = Package(
     name: "CapApp-SPM",
     platforms: [.iOS(.v15)],
