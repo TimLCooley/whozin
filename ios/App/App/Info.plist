@@ -4,6 +4,8 @@
 <dict>
     <key>NSContactsUsageDescription</key>
     <string>Whozin uses your contacts to help you find and invite friends to group activities.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Whozin uses the camera to scan QR codes for adding friends and joining groups.</string>
     <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
