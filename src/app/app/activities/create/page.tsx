@@ -178,6 +178,7 @@ export default function CreateActivityPage() {
         } else if (typeof data.invite_batch_size === 'number') {
           setInviteBatchSize('custom')
           setCustomBatchSize(data.invite_batch_size)
+          setBatchInputDraft(String(data.invite_batch_size))
         } else {
           setInviteBatchSize('auto')
         }
