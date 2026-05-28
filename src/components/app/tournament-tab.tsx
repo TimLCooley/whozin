@@ -631,7 +631,7 @@ function MatchRowView({
                   </span>
                 </span>
                 {match.score_a != null && match.score_b != null ? (
-                  <span className="text-[14px] font-semibold tabular-nums text-muted">{match.score_a}–{match.score_b}</span>
+                  <span className="text-[14px] font-semibold tabular-nums text-muted">{match.score_a} – {match.score_b}</span>
                 ) : (
                   <span className="text-muted">·</span>
                 )}
