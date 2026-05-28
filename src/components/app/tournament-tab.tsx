@@ -689,6 +689,36 @@ function MatchRowView({
     )
   }
 
+  // When the recorder isn't a singles participant, we use the two team-name
+  // buttons as the whole row — no separate "vs" name line. The buttons
+  // themselves carry the matchup. Score entry and singles-as-player still get
+  // the traditional name line + right-side controls.
+  const buttonsOnlyLayout = canRecord && !trackScores && !(!isDoubles && (iAmA || iAmB))
+
+  if (buttonsOnlyLayout) {
+    return (
+      <div className="px-4 py-3 space-y-2">
+        {isActive && (
+          <span className="inline-block text-[9px] px-1.5 py-0.5 rounded-full bg-primary text-white font-bold uppercase tracking-wide">Active</span>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onRecord(match.id, match.player_a_id)}
+            className="flex-1 px-3 py-2 rounded-lg bg-surface text-foreground text-[13px] font-semibold border border-border/50 active:opacity-80 truncate"
+          >
+            {teamALabel} won
+          </button>
+          <button
+            onClick={() => onRecord(match.id, match.player_b_id)}
+            className="flex-1 px-3 py-2 rounded-lg bg-surface text-foreground text-[13px] font-semibold border border-border/50 active:opacity-80 truncate"
+          >
+            {teamBLabel} won
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -730,43 +760,24 @@ function MatchRowView({
           )}
         </div>
 
-        {/* Right-side actions: W/L buttons or completed-state controls.
-         *  In doubles "We won/lost" is ambiguous (especially for hosts who
-         *  shuffle in and out of the tournament), so we always use the
-         *  team-name buttons for doubles. Singles keeps the personal
-         *  framing when the recorder is one of the two players. */}
+        {/* Singles where the recorder is one of the two players keeps the
+         *  personal "I won / I lost" right-side controls. All other pending
+         *  cases use the buttons-only layout above. */}
         {canRecord && !trackScores ? (
-          !isDoubles && (iAmA || iAmB) ? (
-            <div className="flex gap-1.5 flex-shrink-0">
-              <button
-                onClick={() => onRecord(match.id, iAmA ? match.player_a_id : match.player_b_id)}
-                className="px-3 py-1.5 rounded-lg bg-[#00C853]/10 text-[#00C853] text-[12px] font-bold border border-[#00C853]/30 active:opacity-80"
-              >
-                I won
-              </button>
-              <button
-                onClick={() => onRecord(match.id, iAmA ? match.player_b_id : match.player_a_id)}
-                className="px-3 py-1.5 rounded-lg bg-surface text-muted text-[12px] font-bold border border-border/50 active:opacity-80"
-              >
-                I lost
-              </button>
-            </div>
-          ) : (
-            <div className="flex gap-1.5 flex-shrink-0">
-              <button
-                onClick={() => onRecord(match.id, match.player_a_id)}
-                className="px-2.5 py-1.5 rounded-lg bg-surface text-foreground text-[11px] font-bold border border-border/50 active:opacity-80"
-              >
-                {teamALabel} won
-              </button>
-              <button
-                onClick={() => onRecord(match.id, match.player_b_id)}
-                className="px-2.5 py-1.5 rounded-lg bg-surface text-foreground text-[11px] font-bold border border-border/50 active:opacity-80"
-              >
-                {teamBLabel} won
-              </button>
-            </div>
-          )
+          <div className="flex gap-1.5 flex-shrink-0">
+            <button
+              onClick={() => onRecord(match.id, iAmA ? match.player_a_id : match.player_b_id)}
+              className="px-3 py-1.5 rounded-lg bg-[#00C853]/10 text-[#00C853] text-[12px] font-bold border border-[#00C853]/30 active:opacity-80"
+            >
+              I won
+            </button>
+            <button
+              onClick={() => onRecord(match.id, iAmA ? match.player_b_id : match.player_a_id)}
+              className="px-3 py-1.5 rounded-lg bg-surface text-muted text-[12px] font-bold border border-border/50 active:opacity-80"
+            >
+              I lost
+            </button>
+          </div>
         ) : completed ? (
           <div className="flex items-center gap-2 flex-shrink-0">
             {(iAmA || iAmB || isHost) && (
