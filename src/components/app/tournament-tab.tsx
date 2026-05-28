@@ -57,6 +57,7 @@ export function TournamentTab({
   const [newB, setNewB] = useState('')
   const [addingMatch, setAddingMatch] = useState(false)
   const [subTab, setSubTab] = useState<SubTab>('my')
+  const [openRounds, setOpenRounds] = useState<Set<number>>(new Set())
 
   const players = useMemo(() => {
     const map = new Map<string, Player>()
@@ -80,6 +81,14 @@ export function TournamentTab({
   }, [activity.id])
 
   useEffect(() => { refresh() }, [refresh])
+
+  // Keep the active round expanded as it changes; leave the rest of the
+  // user's open/closed state alone so they can dig through history.
+  useEffect(() => {
+    if (currentRound > 0) {
+      setOpenRounds((prev) => (prev.has(currentRound) ? prev : new Set([...prev, currentRound])))
+    }
+  }, [currentRound])
 
   const maxRound = useMemo(() => matches.reduce((mx, m) => Math.max(mx, m.round_number), 0), [matches])
 
@@ -358,31 +367,53 @@ export function TournamentTab({
               {activity.tournament_format === 'assigned' ? 'No matches yet. Tap + Add to create one.' : 'No matches revealed yet.'}
             </div>
           ) : (
-            Array.from(groupByRound(visibleMatches).entries()).map(([round, list]) => (
-              <div key={round}>
-                {activity.tournament_format === 'round_robin' && (
-                  <div className={`px-4 py-1.5 border-t border-border/40 ${round === currentRound ? 'bg-primary/5' : 'bg-surface/30'}`}>
-                    <p className={`text-[10px] font-bold uppercase tracking-wide ${round === currentRound ? 'text-primary' : 'text-muted'}`}>
-                      Round {round}{round === currentRound ? ' — active' : ''}
-                    </p>
-                  </div>
-                )}
-                <div className="divide-y divide-border/40">
-                  {list.map((m) => (
-                    <MatchRowView
-                      key={m.id}
-                      match={m}
-                      players={players}
-                      meId={activity.current_user_id}
-                      isHost={activity.is_creator}
-                      onRecord={recordResult}
-                      onDelete={deleteMatch}
-                      hiddenForRound={!activity.is_creator && m.round_number > currentRound}
-                    />
-                  ))}
+            Array.from(groupByRound(visibleMatches).entries()).map(([round, list]) => {
+              const isOpen = activity.tournament_format !== 'round_robin' || openRounds.has(round)
+              const isActive = round === currentRound
+              const doneCount = list.filter((m) => m.status !== 'pending').length
+              return (
+                <div key={round}>
+                  {activity.tournament_format === 'round_robin' && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenRounds((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(round)) next.delete(round)
+                        else next.add(round)
+                        return next
+                      })}
+                      className={`w-full px-4 py-2 border-t border-border/40 flex items-center justify-between active:bg-surface/50 transition-colors ${isActive ? 'bg-primary/5' : 'bg-surface/30'}`}
+                    >
+                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isActive ? 'text-primary' : 'text-muted'}`}>
+                        Round {round}{isActive ? ' — active' : ''}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold text-muted tabular-nums">{doneCount}/{list.length}</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={`text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </div>
+                    </button>
+                  )}
+                  {isOpen && (
+                    <div className="divide-y divide-border/40">
+                      {list.map((m) => (
+                        <MatchRowView
+                          key={m.id}
+                          match={m}
+                          players={players}
+                          meId={activity.current_user_id}
+                          isHost={activity.is_creator}
+                          onRecord={recordResult}
+                          onDelete={deleteMatch}
+                          hiddenForRound={!activity.is_creator && m.round_number > currentRound}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       )}
