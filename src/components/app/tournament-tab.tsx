@@ -630,10 +630,11 @@ function MatchRowView({
                     {aWon ? 'W' : 'L'}
                   </span>
                 </span>
-                {match.score_a != null && match.score_b != null && (
+                {match.score_a != null && match.score_b != null ? (
                   <span className="text-[12px] tabular-nums text-muted">{match.score_a}–{match.score_b}</span>
+                ) : (
+                  <span className="text-muted">·</span>
                 )}
-                <span className="text-muted">·</span>
                 <span className="flex items-center gap-1">
                   <span className={bWon ? 'text-[#00C853]' : 'text-foreground/60'}>{teamBLabel}</span>
                   <span className={`text-[10px] px-1.5 rounded font-bold ${bWon ? 'bg-[#00C853]/10 text-[#00C853]' : 'bg-red-500/10 text-red-500'}`}>
