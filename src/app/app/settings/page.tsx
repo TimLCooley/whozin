@@ -79,15 +79,27 @@ export default function SettingsPage() {
 
   async function handleCameraToggle(next: boolean) {
     if (next) {
-      // Request access. The browser/WebView prompt fires; if already granted
-      // this resolves immediately. If permanently denied, getUserMedia rejects
-      // with NotAllowedError and we send the user to OS settings.
+      // Request access. If already granted this resolves immediately. If
+      // permanently denied, getUserMedia rejects and we direct the user to
+      // OS settings. We surface the DOMException name in the error message
+      // so weird states (NotReadableError, SecurityError, etc.) don't all
+      // look like a permission denial.
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true })
         stream.getTracks().forEach((t) => t.stop())
         refreshCameraPermission()
-      } catch {
-        alert('Camera access was blocked. Open your device settings — Apps → Whozin → Permissions — and enable Camera.')
+      } catch (err) {
+        const name = (err as { name?: string })?.name ?? 'unknown'
+        const message = (err as { message?: string })?.message ?? ''
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          alert('Camera access was blocked. Open your device settings — Apps → Whozin → Permissions — and enable Camera.')
+        } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+          alert('Camera is in use by another app. Close it and try again.')
+        } else if (name === 'NotFoundError') {
+          alert('No camera was found on this device.')
+        } else {
+          alert(`Camera access failed (${name}${message ? `: ${message}` : ''}).`)
+        }
         refreshCameraPermission()
       }
     } else {
