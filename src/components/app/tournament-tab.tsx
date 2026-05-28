@@ -737,7 +737,7 @@ function ScoreEntry({ matchId, onSubmit }: { matchId: string; onSubmit: (matchId
         value={a}
         onChange={(e) => setA(e.target.value)}
         placeholder="—"
-        className="w-14 h-9 px-2 rounded-lg border border-border bg-background text-[14px] text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30"
+        className="w-14 h-9 px-2 rounded-lg border border-border bg-background text-[14px] text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <span className="text-muted text-[12px]">–</span>
       <input
@@ -747,7 +747,7 @@ function ScoreEntry({ matchId, onSubmit }: { matchId: string; onSubmit: (matchId
         value={b}
         onChange={(e) => setB(e.target.value)}
         placeholder="—"
-        className="w-14 h-9 px-2 rounded-lg border border-border bg-background text-[14px] text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30"
+        className="w-14 h-9 px-2 rounded-lg border border-border bg-background text-[14px] text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <button
         onClick={() => valid && onSubmit(matchId, nA, nB)}
