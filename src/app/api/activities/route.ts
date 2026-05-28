@@ -274,6 +274,7 @@ export async function POST(req: NextRequest) {
     tournament_format,
     tournament_track_scores,
     tournament_doubles,
+    tournament_partner_rotation,
     repeat_interval,
     timezone,
   } = body
@@ -327,6 +328,7 @@ export async function POST(req: NextRequest) {
         : null,
       tournament_track_scores: isPro && tournament_mode && !!tournament_track_scores,
       tournament_doubles: isPro && tournament_mode && !!tournament_doubles,
+      tournament_partner_rotation: isPro && tournament_mode && !!tournament_doubles && !!tournament_partner_rotation,
       repeat_interval: isPro && ['weekly', 'biweekly', 'monthly'].includes(repeat_interval) ? repeat_interval : 'none',
       timezone: timezone || null,
       status: 'open',

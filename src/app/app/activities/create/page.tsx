@@ -98,7 +98,13 @@ export default function CreateActivityPage() {
   const [waitlistEnabled, setWaitlistEnabled] = useState(false)
   const [openInvite, setOpenInvite] = useState(false)
   const [tournamentMode, setTournamentMode] = useState(false)
-  const [tournamentFormat, setTournamentFormat] = useState<'assigned' | 'round_robin'>('round_robin')
+  const [tournamentTrackScores, setTournamentTrackScores] = useState(false)
+  const [tournamentDoubles, setTournamentDoubles] = useState(false)
+  const [tournamentPartnerRotation, setTournamentPartnerRotation] = useState(false)
+  // Assigned format was retired from the picker; every tournament is round_robin.
+  // Keep the variable so the rest of the file (and a possible clone of an
+  // old assigned tournament) doesn't break.
+  const tournamentFormat: 'round_robin' = 'round_robin'
   const [repeatInterval, setRepeatInterval] = useState<'none' | 'weekly' | 'biweekly' | 'monthly'>('none')
   const [showTimerDropdown, setShowTimerDropdown] = useState(false)
   const [showNoGroupsModal, setShowNoGroupsModal] = useState(false)
@@ -178,9 +184,9 @@ export default function CreateActivityPage() {
         }
         setOpenInvite(data.open_invite ?? false)
         setTournamentMode(data.tournament_mode ?? false)
-        if (data.tournament_format === 'assigned' || data.tournament_format === 'round_robin') {
-          setTournamentFormat(data.tournament_format)
-        }
+        setTournamentTrackScores(data.tournament_track_scores ?? false)
+        setTournamentDoubles(data.tournament_doubles ?? false)
+        setTournamentPartnerRotation(data.tournament_partner_rotation ?? false)
         setPriorityInvite(data.priority_invite ?? true)
         if (data.priority_invite === false) {
           setInviteBatchSize('all')
@@ -358,6 +364,9 @@ export default function CreateActivityPage() {
       open_invite: openInvite,
       tournament_mode: tournamentMode,
       tournament_format: tournamentMode ? tournamentFormat : null,
+      tournament_track_scores: tournamentMode && tournamentTrackScores,
+      tournament_doubles: tournamentMode && tournamentDoubles,
+      tournament_partner_rotation: tournamentMode && tournamentDoubles && tournamentPartnerRotation,
       repeat_interval: repeatInterval,
       image_url: imageUrl || null,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -1697,43 +1706,56 @@ export default function CreateActivityPage() {
                 </div>
                 <Toggle
                   checked={tournamentMode}
-                  onChange={(v) => { if (v && !requirePro()) return; setTournamentMode(v) }}
+                  onChange={(v) => {
+                    if (v && !requirePro()) return
+                    setTournamentMode(v)
+                    if (!v) {
+                      // Turning the feature off clears its sub-toggles so a
+                      // later flip-on starts from a clean slate.
+                      setTournamentTrackScores(false)
+                      setTournamentDoubles(false)
+                      setTournamentPartnerRotation(false)
+                    }
+                  }}
                 />
               </div>
-              {tournamentMode && (
-                <div className="flex gap-2 mt-3">
-                  {([
-                    { key: 'round_robin', label: 'Round Robin', desc: 'Everyone plays everyone' },
-                    { key: 'assigned', label: 'Assigned', desc: 'You set the matches' },
-                  ] as const).map((opt) => {
-                    const selected = tournamentFormat === opt.key
-                    return (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => setTournamentFormat(opt.key)}
-                        className={`flex-1 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-colors text-left ${
-                          selected
-                            ? 'bg-primary/10 text-primary border-2 border-primary'
-                            : 'bg-surface text-muted border border-border/50'
-                        }`}
-                      >
-                        <div className="font-bold">{opt.label}</div>
-                        <div className="text-[11px] font-medium mt-0.5 opacity-80">{opt.desc}</div>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
               <p className="text-[12px] text-muted mt-2 leading-relaxed">
                 {tournamentMode
-                  ? (tournamentFormat === 'round_robin'
-                      ? 'When you start the tournament, every confirmed player will be matched against every other player.'
-                      : 'You add each match manually. Useful when not everyone plays everyone.')
+                  ? 'Every confirmed player gets matched against every other player. Tracks results and standings on a Match tab.'
                   : (isPro
-                      ? 'Track who beat whom. Adds a Tournament tab once the activity is live.'
+                      ? 'Track who beat whom. Adds a Match tab once the activity is live.'
                       : 'Upgrade to Pro to run tournaments — track who beat whom across all players.')}
               </p>
+
+              {tournamentMode && (
+                <div className="mt-3 -mx-4 px-4 pt-3 border-t border-border/40 space-y-3">
+                  <ToggleRow
+                    label="Track scores"
+                    description="Enter the score on each match; winner is set automatically."
+                    checked={tournamentTrackScores}
+                    onChange={setTournamentTrackScores}
+                  />
+                  <ToggleRow
+                    label="Doubles"
+                    description="Each match is 2v2."
+                    checked={tournamentDoubles}
+                    onChange={(v) => {
+                      setTournamentDoubles(v)
+                      if (!v) setTournamentPartnerRotation(false)
+                    }}
+                  />
+                  {tournamentDoubles && (
+                    <ToggleRow
+                      label="Rotate partners"
+                      description={tournamentPartnerRotation
+                        ? 'Each round picks new partners and opponents at random. Rounds are open-ended.'
+                        : 'Partners are fixed for the whole tournament.'}
+                      checked={tournamentPartnerRotation}
+                      onChange={setTournamentPartnerRotation}
+                    />
+                  )}
+                </div>
+              )}
             </FieldCard>
 
             {/* Repeat (Pro) */}
@@ -1846,5 +1868,27 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
         }`}
       />
     </button>
+  )
+}
+
+function ToggleRow({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string
+  description: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-foreground">{label}</p>
+        <p className="text-[11px] text-muted mt-0.5 leading-snug">{description}</p>
+      </div>
+      <Toggle checked={checked} onChange={onChange} />
+    </div>
   )
 }

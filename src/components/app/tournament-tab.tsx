@@ -296,6 +296,45 @@ export function TournamentTab({
           )}
         </div>
 
+        {/* Pre-start settings (host only) — these are the same toggles that
+            normally live in the Settings sub-tab. Surfacing them here means
+            the host can tweak right before tapping Start without having to
+            navigate elsewhere. */}
+        {activity.is_creator && (
+          <div className="bg-background border border-border/50 rounded-xl divide-y divide-border/40 overflow-hidden">
+            <div className="px-4 py-2 bg-surface/50">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Settings</p>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-foreground">Track scores</p>
+                <p className="text-[11px] text-muted mt-0.5">Enter the score on each match; winner is set automatically.</p>
+              </div>
+              <ToggleSwitch checked={trackScores} onChange={(v) => updateSetting('tournament_track_scores', v)} />
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-foreground">Doubles</p>
+                <p className="text-[11px] text-muted mt-0.5">Each match is 2v2.</p>
+              </div>
+              <ToggleSwitch checked={doubles} onChange={(v) => updateSetting('tournament_doubles', v)} />
+            </div>
+            {doubles && (
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold text-foreground">Rotate partners</p>
+                  <p className="text-[11px] text-muted mt-0.5">
+                    {partnerRotation
+                      ? 'Each round picks new partners and opponents at random. Rounds are open-ended.'
+                      : 'Partners are fixed for the whole tournament.'}
+                  </p>
+                </div>
+                <ToggleSwitch checked={partnerRotation} onChange={(v) => updateSetting('tournament_partner_rotation', v)} />
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={startTournament}
           disabled={starting || confirmed.length < 2}
