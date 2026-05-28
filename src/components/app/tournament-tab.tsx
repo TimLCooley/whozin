@@ -730,21 +730,25 @@ function MatchRowView({
           )}
         </div>
 
-        {/* Right-side actions: W/L buttons or completed-state controls. */}
+        {/* Right-side actions: W/L buttons or completed-state controls.
+         *  In doubles "We won/lost" is ambiguous (especially for hosts who
+         *  shuffle in and out of the tournament), so we always use the
+         *  team-name buttons for doubles. Singles keeps the personal
+         *  framing when the recorder is one of the two players. */}
         {canRecord && !trackScores ? (
-          iAmA || iAmB ? (
+          !isDoubles && (iAmA || iAmB) ? (
             <div className="flex gap-1.5 flex-shrink-0">
               <button
                 onClick={() => onRecord(match.id, iAmA ? match.player_a_id : match.player_b_id)}
                 className="px-3 py-1.5 rounded-lg bg-[#00C853]/10 text-[#00C853] text-[12px] font-bold border border-[#00C853]/30 active:opacity-80"
               >
-                {isDoubles ? 'We won' : 'I won'}
+                I won
               </button>
               <button
                 onClick={() => onRecord(match.id, iAmA ? match.player_b_id : match.player_a_id)}
                 className="px-3 py-1.5 rounded-lg bg-surface text-muted text-[12px] font-bold border border-border/50 active:opacity-80"
               >
-                {isDoubles ? 'We lost' : 'I lost'}
+                I lost
               </button>
             </div>
           ) : (
