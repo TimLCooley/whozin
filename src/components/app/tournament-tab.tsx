@@ -303,9 +303,9 @@ export function TournamentTab({
           <div className="space-y-3">
             {myCurrentRoundMatch ? (
               <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
-                <div className="px-4 py-2 bg-surface/50">
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
-                    {activity.tournament_format === 'round_robin' ? `Round ${currentRound} — your match` : 'Your current match'}
+                <div className="px-4 py-2 bg-primary/5 border-b border-primary/10">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-primary">
+                    {activity.tournament_format === 'round_robin' ? `Round ${currentRound} — active` : 'Your current match'}
                   </p>
                 </div>
                 <MatchRowView
