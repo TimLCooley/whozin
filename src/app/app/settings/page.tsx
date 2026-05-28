@@ -6,7 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 import { AppHeader } from '@/components/app/header'
 import { AvatarCropModal } from '@/components/ui/avatar-crop-modal'
 
-type SectionKey = 'personal' | 'membership' | 'notifications' | 'privacy' | 'blocked'
+type SectionKey = 'personal' | 'membership' | 'permissions' | 'privacy' | 'blocked'
+
+type CameraPermissionState = 'granted' | 'denied' | 'prompt' | 'unknown'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -21,6 +23,7 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [membership, setMembership] = useState('free')
   const [pushNotifications, setPushNotifications] = useState(false)
+  const [cameraPermission, setCameraPermission] = useState<CameraPermissionState>('unknown')
   const [hideFromSearch, setHideFromSearch] = useState(false)
   const [showPhone, setShowPhone] = useState(false)
   const [showLastName, setShowLastName] = useState(true)
@@ -43,10 +46,56 @@ export default function SettingsPage() {
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     personal: true,
     membership: true,
-    notifications: true,
+    permissions: true,
     privacy: true,
     blocked: false,
   })
+
+  // Read the OS-level camera permission. navigator.permissions.query works on
+  // Chrome/WebView for 'camera' (returns granted/denied/prompt). If it throws
+  // — older WebViews, etc. — we fall back to 'unknown' and the toggle reflects
+  // that by always going through the request flow on tap.
+  async function refreshCameraPermission() {
+    try {
+      const perms = (navigator as Navigator & { permissions?: Permissions }).permissions
+      if (!perms || typeof perms.query !== 'function') {
+        setCameraPermission('unknown')
+        return
+      }
+      const status = await perms.query({ name: 'camera' as PermissionName })
+      setCameraPermission(status.state as CameraPermissionState)
+      status.onchange = () => setCameraPermission(status.state as CameraPermissionState)
+    } catch {
+      setCameraPermission('unknown')
+    }
+  }
+
+  useEffect(() => {
+    refreshCameraPermission()
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshCameraPermission() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
+  async function handleCameraToggle(next: boolean) {
+    if (next) {
+      // Request access. The browser/WebView prompt fires; if already granted
+      // this resolves immediately. If permanently denied, getUserMedia rejects
+      // with NotAllowedError and we send the user to OS settings.
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        stream.getTracks().forEach((t) => t.stop())
+        refreshCameraPermission()
+      } catch {
+        alert('Camera access was blocked. Open your device settings — Apps → Whozin → Permissions — and enable Camera.')
+        refreshCameraPermission()
+      }
+    } else {
+      // Browsers/WebViews don't expose a "revoke" API. Direct the user to OS
+      // settings where they can switch it off manually.
+      alert('To turn off camera access, open your device settings: Apps → Whozin → Permissions → Camera.')
+    }
+  }
 
   useEffect(() => {
     fetch('/api/user/profile')
@@ -332,16 +381,33 @@ export default function SettingsPage() {
           </div>
         </Section>
 
-        {/* Notifications */}
+        {/* Permissions */}
         <Section
-          title="Notifications"
-          open={openSections.notifications}
-          onToggle={() => toggleSection('notifications')}
+          title="Permissions"
+          open={openSections.permissions}
+          onToggle={() => toggleSection('permissions')}
           delay={2}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-[14px] text-foreground">Receive Push Notifications</span>
-            <Toggle checked={pushNotifications} onChange={(v) => { setPushNotifications(v); saveProfile({ push_notifications_enabled: v }) }} />
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] text-foreground">Receive Push Notifications</span>
+                <Toggle checked={pushNotifications} onChange={(v) => { setPushNotifications(v); saveProfile({ push_notifications_enabled: v }) }} />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] text-foreground">Camera</span>
+                <Toggle checked={cameraPermission === 'granted'} onChange={handleCameraToggle} />
+              </div>
+              <p className="text-[12px] text-muted leading-relaxed mt-1">
+                {cameraPermission === 'granted'
+                  ? 'Used for scanning friends\u2019 QR codes.'
+                  : cameraPermission === 'denied'
+                    ? 'Blocked. Open device settings \u2192 Apps \u2192 Whozin \u2192 Permissions to allow.'
+                    : 'Used for scanning friends\u2019 QR codes. Tap to grant access.'}
+              </p>
+            </div>
           </div>
         </Section>
 

@@ -198,6 +198,23 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
       stream.getTracks().forEach((t) => t.stop())
       startScanner()
     } catch (err) {
+      // On Android WebView the first getUserMedia call fires the OS prompt
+      // asynchronously and the original promise rejects with NotAllowedError
+      // before the user finishes choosing. Wait briefly and retry once — by
+      // then, if they granted, the WebView's cached permission will let the
+      // call succeed.
+      const name = (err as { name?: string })?.name ?? ''
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        await new Promise((resolve) => setTimeout(resolve, 800))
+        try {
+          const stream = await tryGetMediaStream()
+          stream.getTracks().forEach((t) => t.stop())
+          startScanner()
+          return
+        } catch (retryErr) {
+          err = retryErr
+        }
+      }
       setScanError(describeMediaError(err))
     }
   }

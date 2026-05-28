@@ -1,12 +1,6 @@
 name: Android Build & Deploy
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'android/**'
-      - 'capacitor.config.ts'
-      - '.github/workflows/android-build.yml'
   workflow_dispatch:
     inputs:
       track:
@@ -63,15 +57,14 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > android/app/whozin-keystore.jks
 
-      - name: Auto-increment version code
+      - name: Read version code from build.gradle
         run: |
-          # Read current versionCode from build.gradle
-          CURRENT=$(grep -oP 'versionCode \K\d+' android/app/build.gradle)
-          # Use GitHub run number to ensure unique, always-increasing codes
-          NEW_CODE=$((CURRENT + GITHUB_RUN_NUMBER))
-          sed -i "s/versionCode $CURRENT/versionCode $NEW_CODE/" android/app/build.gradle
-          echo "VERSION_CODE=$NEW_CODE" >> $GITHUB_ENV
-          echo "Version code: $NEW_CODE"
+          # No auto-increment — the value committed in android/app/build.gradle
+          # is authoritative. Bump it manually before triggering this workflow.
+          # This keeps Play tracks in lockstep with what's in git.
+          VERSION_CODE=$(grep -oP 'versionCode \K\d+' android/app/build.gradle)
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+          echo "Version code: $VERSION_CODE"
 
       - name: Build release AAB
         working-directory: android
