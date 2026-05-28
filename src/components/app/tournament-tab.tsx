@@ -337,6 +337,7 @@ export function TournamentTab({
                       onRecord={recordResult}
                       onDelete={deleteMatch}
                       hiddenForRound={!activity.is_creator && m.round_number > currentRound}
+                      isActive={m.round_number === currentRound}
                     />
                   ))}
                 </div>
@@ -407,6 +408,7 @@ export function TournamentTab({
                           onRecord={recordResult}
                           onDelete={deleteMatch}
                           hiddenForRound={!activity.is_creator && m.round_number > currentRound}
+                          isActive={m.round_number === currentRound}
                         />
                       ))}
                     </div>
@@ -483,6 +485,7 @@ function MatchRowView({
   onRecord,
   onDelete,
   hiddenForRound,
+  isActive,
 }: {
   match: Match
   players: Map<string, Player>
@@ -491,6 +494,7 @@ function MatchRowView({
   onRecord: (matchId: string, winnerId: string | null) => void
   onDelete: (matchId: string) => void
   hiddenForRound?: boolean
+  isActive?: boolean
 }) {
   const a = players.get(match.player_a_id)
   const b = players.get(match.player_b_id)
@@ -512,20 +516,25 @@ function MatchRowView({
   }
 
   return (
-    <div className="px-4 py-3">
+    <div className={`px-4 py-3 ${isActive ? 'bg-primary/5' : ''}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
-          {completed ? (
-            <p className="text-[14px] text-foreground">
-              <span className="font-bold">{winnerLabel}</span>
-              <span className="text-muted"> beat </span>
-              <span>{match.winner_id === match.player_a_id ? bLabel : aLabel}</span>
-            </p>
-          ) : (
-            <p className="text-[14px] font-semibold text-foreground truncate">
-              {aLabel} <span className="text-muted">vs</span> {bLabel}
-            </p>
-          )}
+          <div className="flex items-center gap-2">
+            {completed ? (
+              <p className="text-[14px] text-foreground">
+                <span className="font-bold">{winnerLabel}</span>
+                <span className="text-muted"> beat </span>
+                <span>{match.winner_id === match.player_a_id ? bLabel : aLabel}</span>
+              </p>
+            ) : (
+              <p className="text-[14px] font-semibold text-foreground truncate">
+                {aLabel} <span className="text-muted">vs</span> {bLabel}
+              </p>
+            )}
+            {isActive && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary text-white font-bold uppercase tracking-wide flex-shrink-0">Active</span>
+            )}
+          </div>
         </div>
         {canRecord ? (
           iAmA || iAmB ? (
