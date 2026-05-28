@@ -26,6 +26,7 @@ interface ActivityShape {
   tournament_current_round?: number
   tournament_track_scores?: boolean
   tournament_doubles?: boolean
+  tournament_partner_rotation?: boolean
 }
 
 interface Match {
@@ -58,6 +59,7 @@ export function TournamentTab({
   const [currentRound, setCurrentRound] = useState<number>(activity.tournament_current_round ?? 0)
   const [trackScores, setTrackScores] = useState<boolean>(activity.tournament_track_scores ?? false)
   const [doubles, setDoubles] = useState<boolean>(activity.tournament_doubles ?? false)
+  const [partnerRotation, setPartnerRotation] = useState<boolean>(activity.tournament_partner_rotation ?? false)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
   const [advancing, setAdvancing] = useState(false)
@@ -87,14 +89,19 @@ export function TournamentTab({
       setCurrentRound(data.tournament_current_round ?? 0)
       setTrackScores(!!data.tournament_track_scores)
       setDoubles(!!data.tournament_doubles)
+      setPartnerRotation(!!data.tournament_partner_rotation)
     }
     setLoading(false)
   }, [activity.id])
 
-  async function updateSetting(field: 'tournament_track_scores' | 'tournament_doubles', value: boolean) {
+  async function updateSetting(
+    field: 'tournament_track_scores' | 'tournament_doubles' | 'tournament_partner_rotation',
+    value: boolean,
+  ) {
     // Optimistic flip
     if (field === 'tournament_track_scores') setTrackScores(value)
     if (field === 'tournament_doubles') setDoubles(value)
+    if (field === 'tournament_partner_rotation') setPartnerRotation(value)
     const res = await fetch(`/api/activities/${activity.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -104,6 +111,7 @@ export function TournamentTab({
       // Revert on failure
       if (field === 'tournament_track_scores') setTrackScores(!value)
       if (field === 'tournament_doubles') setDoubles(!value)
+      if (field === 'tournament_partner_rotation') setPartnerRotation(!value)
       const data = await res.json().catch(() => null)
       alert(data?.error ?? 'Failed to update setting')
     }
@@ -152,7 +160,10 @@ export function TournamentTab({
     return inRound.every((m) => m.status !== 'pending')
   }, [matches, currentRound])
 
-  const canAdvance = activity.is_creator && currentRound > 0 && currentRound < maxRound
+  // In rotating-partner doubles, rounds are open-ended — host can always
+  // advance to generate a fresh round. In pre-generated modes, cap at the
+  // highest round_number we already have.
+  const canAdvance = activity.is_creator && currentRound > 0 && (partnerRotation || currentRound < maxRound)
 
   async function startTournament() {
     setStarting(true)
@@ -257,9 +268,13 @@ export function TournamentTab({
         <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
           <p className="text-[14px] font-bold text-amber-900">Tournament not started</p>
           <p className="text-[12px] text-amber-800/80 mt-1 leading-snug">
-            {activity.tournament_format === 'round_robin'
-              ? `Generates ${roundRobinMatchCount(confirmed.length)} matches across ${roundRobinRoundCount(confirmed.length)} rounds from your ${confirmed.length} confirmed player${confirmed.length === 1 ? '' : 's'}.`
-              : 'You\u2019ll add each match manually once started.'}
+            {activity.tournament_format !== 'round_robin'
+              ? 'You\u2019ll add each match manually once started.'
+              : partnerRotation
+                ? `Round 1 generates fresh random partners and opponents from your ${confirmed.length} confirmed player${confirmed.length === 1 ? '' : 's'}. Tap "Start Round N" after each round to reshuffle.`
+                : doubles
+                  ? `Pairs up ${confirmed.length} players into ${Math.floor(confirmed.length / 2)} fixed teams, then plays a round-robin between teams.`
+                  : `Generates ${roundRobinMatchCount(confirmed.length)} matches across ${roundRobinRoundCount(confirmed.length)} rounds from your ${confirmed.length} confirmed player${confirmed.length === 1 ? '' : 's'}.`}
           </p>
         </div>
 
@@ -303,7 +318,7 @@ export function TournamentTab({
         <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wide text-primary">
-              Round {currentRound} of {maxRound}
+              Round {currentRound}{partnerRotation ? '' : ` of ${maxRound}`}
             </p>
             <p className="text-[12px] text-muted mt-0.5">
               {currentRoundDone ? 'All matches recorded.' : `${matches.filter((m) => m.round_number === currentRound && m.status === 'pending').length} matches still pending.`}
@@ -492,27 +507,42 @@ export function TournamentTab({
               <ToggleSwitch checked={trackScores} onChange={(v) => updateSetting('tournament_track_scores', v)} />
             </div>
 
-            {/* Doubles — pickleball only */}
+            {/* Doubles */}
             <div className="flex items-center justify-between px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] font-semibold text-foreground">Doubles</p>
-                <p className="text-[11px] text-muted mt-0.5">
-                  {activity.activity_type === 'pickleball'
-                    ? 'Each match is 2v2. Partners are randomly shuffled at start.'
-                    : 'Doubles is currently available for Pickleball only.'}
-                </p>
+                <p className="text-[11px] text-muted mt-0.5">Each match is 2v2.</p>
               </div>
               <ToggleSwitch
                 checked={doubles}
                 onChange={(v) => updateSetting('tournament_doubles', v)}
-                disabled={activity.activity_type !== 'pickleball' || started}
+                disabled={started}
               />
             </div>
+
+            {/* Rotate partners (only meaningful with doubles) */}
+            {doubles && (
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold text-foreground">Rotate partners</p>
+                  <p className="text-[11px] text-muted mt-0.5">
+                    {partnerRotation
+                      ? 'Each round picks new partners and opponents at random. Rounds are open-ended — keep going as long as you want.'
+                      : 'Partners are fixed for the whole tournament. Each pair plays every other pair.'}
+                  </p>
+                </div>
+                <ToggleSwitch
+                  checked={partnerRotation}
+                  onChange={(v) => updateSetting('tournament_partner_rotation', v)}
+                  disabled={started}
+                />
+              </div>
+            )}
           </div>
 
           {started && (
             <p className="text-[11px] text-muted px-1">
-              Doubles is locked while the tournament is in progress.
+              Doubles + partner rotation are locked while the tournament is in progress.
             </p>
           )}
         </div>

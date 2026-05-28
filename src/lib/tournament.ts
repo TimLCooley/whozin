@@ -160,6 +160,33 @@ export function computeStandings(matches: MatchRow[], playerIds: string[]): Stan
   })
 }
 
+/**
+ * Generate a single round of doubles matches with random partner + opponent
+ * pairings. Used for rotating-partner mode where every round reshuffles.
+ *
+ * Algorithm: shuffle players, take groups of four; first two are team A,
+ * next two are team B. Any leftover players (1, 2, or 3) sit this round
+ * out — we accept that for v1 rather than over-engineering byes.
+ */
+export function generateRotatingRoundDoubles(
+  playerIds: string[],
+  roundNumber: number,
+): DoublesMatchPairing[] {
+  if (playerIds.length < 4) return []
+  const shuffled = shuffleArray(playerIds)
+  const out: DoublesMatchPairing[] = []
+  for (let i = 0; i + 3 < shuffled.length; i += 4) {
+    out.push({
+      round_number: roundNumber,
+      player_a_id: shuffled[i],
+      player_c_id: shuffled[i + 1],
+      player_b_id: shuffled[i + 2],
+      player_d_id: shuffled[i + 3],
+    })
+  }
+  return out
+}
+
 export function shuffleArray<T>(arr: readonly T[]): T[] {
   const out = [...arr]
   for (let i = out.length - 1; i > 0; i--) {

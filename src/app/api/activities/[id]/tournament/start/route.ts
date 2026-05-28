@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { generateRoundRobin, generateRoundRobinDoubles, shuffleArray } from '@/lib/tournament'
+import { generateRoundRobin, generateRoundRobinDoubles, generateRotatingRoundDoubles, shuffleArray } from '@/lib/tournament'
 
 // POST — start the tournament. Host only. For round_robin: generates every
 // pairing from the current confirmed roster. For assigned: just marks the
@@ -27,7 +27,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, tournament_mode, tournament_format, tournament_started_at, tournament_doubles')
+    .select('creator_id, tournament_mode, tournament_format, tournament_started_at, tournament_doubles, tournament_partner_rotation')
     .eq('id', id)
     .single()
 
@@ -54,15 +54,34 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   if (activity.tournament_format === 'round_robin') {
-    if (activity.tournament_doubles) {
-      // Doubles needs an even player count to form complete teams.
+    if (activity.tournament_doubles && activity.tournament_partner_rotation) {
+      // Rotating partners: only generate round 1. Each Advance produces a
+      // fresh round with new pairings.
+      if (playerIds.length < 4) {
+        return NextResponse.json({
+          error: 'Rotating doubles needs at least 4 confirmed players',
+        }, { status: 400 })
+      }
+      const round1 = generateRotatingRoundDoubles(playerIds, 1)
+      if (round1.length > 0) {
+        await admin.from('whozin_match').insert(
+          round1.map((p) => ({
+            activity_id: id,
+            round_number: p.round_number,
+            player_a_id: p.player_a_id,
+            player_b_id: p.player_b_id,
+            player_c_id: p.player_c_id,
+            player_d_id: p.player_d_id,
+          })),
+        )
+      }
+    } else if (activity.tournament_doubles) {
+      // Fixed-partner doubles needs an even player count.
       if (playerIds.length < 4 || playerIds.length % 2 === 1) {
         return NextResponse.json({
           error: 'Doubles needs an even number of confirmed players (at least 4)',
         }, { status: 400 })
       }
-      // Shuffle then pair-and-pair: a server-side shuffle is the source of
-      // truth for partner assignments.
       const shuffled = shuffleArray(playerIds)
       const pairings = generateRoundRobinDoubles(shuffled)
       if (pairings.length > 0) {

@@ -326,8 +326,7 @@ export async function POST(req: NextRequest) {
         ? tournament_format
         : null,
       tournament_track_scores: isPro && tournament_mode && !!tournament_track_scores,
-      // Doubles is pickleball-only; ignore otherwise.
-      tournament_doubles: isPro && tournament_mode && activity_type === 'pickleball' && !!tournament_doubles,
+      tournament_doubles: isPro && tournament_mode && !!tournament_doubles,
       repeat_interval: isPro && ['weekly', 'biweekly', 'monthly'].includes(repeat_interval) ? repeat_interval : 'none',
       timezone: timezone || null,
       status: 'open',

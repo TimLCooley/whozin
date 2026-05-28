@@ -391,6 +391,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.tournament_doubles !== undefined) {
     updates.tournament_doubles = isPro && !!body.tournament_doubles
   }
+  if (body.tournament_partner_rotation !== undefined) {
+    updates.tournament_partner_rotation = isPro && !!body.tournament_partner_rotation
+  }
   if (body.repeat_interval !== undefined) {
     const v = body.repeat_interval
     updates.repeat_interval = isPro && ['weekly', 'biweekly', 'monthly'].includes(v) ? v : 'none'
