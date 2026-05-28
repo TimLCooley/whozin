@@ -64,3 +64,5 @@ next-env.d.ts
 
 # dev code-grab
 .grab-selection.json
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

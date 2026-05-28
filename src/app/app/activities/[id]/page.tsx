@@ -48,6 +48,7 @@ interface ActivityDetail {
   tournament_mode: boolean
   tournament_format: 'assigned' | 'round_robin' | null
   tournament_started_at: string | null
+  tournament_current_round: number
   repeat_interval: 'none' | 'weekly' | 'biweekly' | 'monthly'
   priority_invite: boolean
   response_timer_minutes: number
@@ -64,7 +65,7 @@ interface ActivityDetail {
   invite_starts_at: string | null
 }
 
-type Tab = 'details' | 'group' | 'chat' | 'mode'
+type Tab = 'details' | 'group' | 'chat' | 'match'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   confirmed: { label: 'Confirmed', color: 'text-green-600', icon: 'check' },
@@ -757,14 +758,14 @@ export default function ActivityDetailPage() {
   const isFull = activity.max_capacity ? confirmed.length >= activity.max_capacity : false
 
   const showGroupTab = activity.is_creator || activity.my_status === 'confirmed'
-  const showModeTab = activity.tournament_mode && (
+  const showMatchTab = activity.tournament_mode && (
     activity.is_creator || (activity.my_status === 'confirmed' && !!activity.tournament_started_at)
   )
 
   const tabs: { key: Tab; label: string; pro?: boolean }[] = [
     { key: 'details', label: 'Activity Details' },
     ...(showGroupTab ? [{ key: 'group' as Tab, label: 'Group' }] : []),
-    ...(showModeTab ? [{ key: 'mode' as Tab, label: 'Mode' }] : []),
+    ...(showMatchTab ? [{ key: 'match' as Tab, label: 'Match' }] : []),
     ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
   ]
 
@@ -1215,7 +1216,7 @@ export default function ActivityDetailPage() {
           <ActivityChat activity={activity} />
         )}
 
-        {tab === 'mode' && (
+        {tab === 'match' && (
           <TournamentTab activity={activity} confirmed={confirmed} onChange={loadActivity} />
         )}
       </div>

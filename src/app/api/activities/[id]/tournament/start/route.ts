@@ -70,7 +70,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   await admin
     .from('whozin_activity')
-    .update({ tournament_started_at: new Date().toISOString() })
+    .update({
+      tournament_started_at: new Date().toISOString(),
+      tournament_current_round: 1,
+    })
     .eq('id', id)
 
   return NextResponse.json({ ok: true })

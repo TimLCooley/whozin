@@ -22,6 +22,7 @@ interface ActivityShape {
   tournament_mode: boolean
   tournament_format: 'assigned' | 'round_robin' | null
   tournament_started_at: string | null
+  tournament_current_round?: number
 }
 
 interface Match {
@@ -35,6 +36,8 @@ interface Match {
   recorded_at: string | null
 }
 
+type SubTab = 'my' | 'bracket' | 'leaderboard'
+
 export function TournamentTab({
   activity,
   confirmed,
@@ -45,12 +48,15 @@ export function TournamentTab({
   onChange: () => void
 }) {
   const [matches, setMatches] = useState<Match[]>([])
+  const [currentRound, setCurrentRound] = useState<number>(activity.tournament_current_round ?? 0)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
   const [showAddMatch, setShowAddMatch] = useState(false)
   const [newA, setNewA] = useState('')
   const [newB, setNewB] = useState('')
   const [addingMatch, setAddingMatch] = useState(false)
+  const [subTab, setSubTab] = useState<SubTab>('my')
 
   const players = useMemo(() => {
     const map = new Map<string, Player>()
@@ -68,20 +74,47 @@ export function TournamentTab({
     if (res.ok) {
       const data = await res.json()
       setMatches(data.matches ?? [])
+      setCurrentRound(data.tournament_current_round ?? 0)
     }
     setLoading(false)
   }, [activity.id])
 
   useEffect(() => { refresh() }, [refresh])
 
+  const maxRound = useMemo(() => matches.reduce((mx, m) => Math.max(mx, m.round_number), 0), [matches])
+
   const standings = useMemo(() => {
     const rows = matches as MatchRow[]
     return computeStandings(rows, playerIds)
   }, [matches, playerIds])
 
-  const myMatches = useMemo(() => {
-    return matches.filter((m) => m.player_a_id === activity.current_user_id || m.player_b_id === activity.current_user_id)
+  // Players only see matches up to the current released round. Host sees all.
+  const visibleMatches = useMemo(() => {
+    if (activity.is_creator) return matches
+    return matches.filter((m) => m.round_number <= currentRound)
+  }, [matches, activity.is_creator, currentRound])
+
+  const myCurrentRoundMatch = useMemo(() => {
+    return matches.find((m) =>
+      m.round_number === currentRound &&
+      (m.player_a_id === activity.current_user_id || m.player_b_id === activity.current_user_id),
+    ) ?? null
+  }, [matches, currentRound, activity.current_user_id])
+
+  const myAllMatches = useMemo(() => {
+    return matches.filter((m) =>
+      m.player_a_id === activity.current_user_id || m.player_b_id === activity.current_user_id,
+    )
   }, [matches, activity.current_user_id])
+
+  // Current round is "done" when every match in it has a result.
+  const currentRoundDone = useMemo(() => {
+    const inRound = matches.filter((m) => m.round_number === currentRound)
+    if (inRound.length === 0) return false
+    return inRound.every((m) => m.status !== 'pending')
+  }, [matches, currentRound])
+
+  const canAdvance = activity.is_creator && currentRound > 0 && currentRound < maxRound
 
   async function startTournament() {
     setStarting(true)
@@ -96,8 +129,19 @@ export function TournamentTab({
     }
   }
 
+  async function advanceRound() {
+    setAdvancing(true)
+    const res = await fetch(`/api/activities/${activity.id}/tournament/advance`, { method: 'POST' })
+    setAdvancing(false)
+    if (res.ok) {
+      refresh()
+    } else {
+      const data = await res.json().catch(() => null)
+      alert(data?.error ?? 'Failed to advance round')
+    }
+  }
+
   async function recordResult(matchId: string, winnerId: string | null) {
-    // Optimistic update
     setMatches((prev) => prev.map((m) =>
       m.id === matchId
         ? { ...m, winner_id: winnerId, status: winnerId ? 'completed' : 'pending' }
@@ -157,7 +201,7 @@ export function TournamentTab({
           <p className="text-[14px] font-bold text-amber-900">Tournament not started</p>
           <p className="text-[12px] text-amber-800/80 mt-1 leading-snug">
             {activity.tournament_format === 'round_robin'
-              ? `Generates ${roundRobinMatchCount(confirmed.length)} matches from your ${confirmed.length} confirmed player${confirmed.length === 1 ? '' : 's'}.`
+              ? `Generates ${roundRobinMatchCount(confirmed.length)} matches across ${roundRobinRoundCount(confirmed.length)} rounds from your ${confirmed.length} confirmed player${confirmed.length === 1 ? '' : 's'}.`
               : 'You\u2019ll add each match manually once started.'}
           </p>
         </div>
@@ -195,102 +239,179 @@ export function TournamentTab({
   }
 
   // ── In-progress view ────────────────────────────────────────────────────
-  const matchesByRound = groupByRound(matches)
-
   return (
-    <div className="px-4 pt-4 space-y-5 animate-enter pb-6">
-      {/* Standings */}
-      <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
-        <div className="px-4 py-2 bg-surface/50 flex items-center justify-between">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Standings</p>
-        </div>
-        <div className="divide-y divide-border/40">
-          {standings.map((row, i) => {
-            const p = players.get(row.player_id)
-            return (
-              <div key={row.player_id} className="px-4 py-2.5 flex items-center gap-3">
-                <span className="text-[12px] font-bold text-muted w-5 tabular-nums">{i + 1}</span>
-                <Avatar player={p ?? null} />
-                <p className="flex-1 text-[14px] font-semibold text-foreground truncate">
-                  {p ? `${p.first_name} ${p.last_name}` : 'Unknown'}
-                </p>
-                <div className="text-[12px] text-muted tabular-nums">
-                  <span className="font-bold text-foreground">{row.wins}</span>W &middot; <span className="font-bold text-foreground">{row.losses}</span>L
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* My matches */}
-      {myMatches.length > 0 && (
-        <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
-          <div className="px-4 py-2 bg-surface/50">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Your matches</p>
+    <div className="px-4 pt-4 space-y-4 animate-enter pb-6">
+      {/* Round header — only for round_robin. Assigned doesn't bucket by round. */}
+      {activity.tournament_format === 'round_robin' && maxRound > 0 && (
+        <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-primary">
+              Round {currentRound} of {maxRound}
+            </p>
+            <p className="text-[12px] text-muted mt-0.5">
+              {currentRoundDone ? 'All matches recorded.' : `${matches.filter((m) => m.round_number === currentRound && m.status === 'pending').length} matches still pending.`}
+            </p>
           </div>
-          <div className="divide-y divide-border/40">
-            {myMatches.map((m) => (
-              <MatchRow
-                key={m.id}
-                match={m}
-                players={players}
-                meId={activity.current_user_id}
-                isHost={activity.is_creator}
-                onRecord={recordResult}
-                onDelete={deleteMatch}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* All matches */}
-      <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
-        <div className="px-4 py-2 bg-surface/50 flex items-center justify-between">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
-            All matches ({matches.length})
-          </p>
-          {activity.is_creator && activity.tournament_format === 'assigned' && (
+          {canAdvance && (
             <button
-              onClick={() => setShowAddMatch(true)}
-              className="text-[12px] font-semibold text-primary"
+              onClick={advanceRound}
+              disabled={advancing}
+              className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-bold active:opacity-80 disabled:opacity-60"
             >
-              + Add
+              {advancing ? '...' : `Start Round ${currentRound + 1}`}
             </button>
           )}
         </div>
-        {loading && matches.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[13px] text-muted">Loading...</div>
-        ) : matches.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[13px] text-muted">
-            {activity.tournament_format === 'assigned' ? 'No matches yet. Tap + Add to create one.' : 'No matches.'}
-          </div>
-        ) : (
-          Array.from(matchesByRound.entries()).map(([round, list]) => (
-            <div key={round}>
-              {activity.tournament_format === 'round_robin' && (
-                <div className="px-4 py-1.5 bg-surface/30 border-t border-border/40">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Round {round}</p>
-                </div>
-              )}
-              <div className="divide-y divide-border/40">
-                {list.map((m) => (
-                  <MatchRow
-                    key={m.id}
-                    match={m}
-                    players={players}
-                    meId={activity.current_user_id}
-                    isHost={activity.is_creator}
-                    onRecord={recordResult}
-                    onDelete={deleteMatch}
-                  />
-                ))}
-              </div>
-            </div>
-          ))
-        )}
+      )}
+
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-1 p-1 bg-surface rounded-xl border border-border/50">
+        {([
+          { key: 'my', label: 'My Match' },
+          { key: 'bracket', label: 'Bracket' },
+          { key: 'leaderboard', label: 'Leaderboard' },
+        ] as const).map((opt) => {
+          const active = subTab === opt.key
+          return (
+            <button
+              key={opt.key}
+              onClick={() => setSubTab(opt.key)}
+              className={`flex-1 h-9 rounded-lg text-[12px] font-bold transition-colors ${
+                active ? 'bg-background shadow-sm text-foreground' : 'text-muted'
+              }`}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
       </div>
+
+      {/* My Match */}
+      {subTab === 'my' && (
+        myAllMatches.length === 0 ? (
+          <EmptyCard text="You\u2019re not in any matches yet." />
+        ) : (
+          <div className="space-y-3">
+            {myCurrentRoundMatch ? (
+              <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
+                <div className="px-4 py-2 bg-surface/50">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
+                    {activity.tournament_format === 'round_robin' ? `Round ${currentRound} — your match` : 'Your current match'}
+                  </p>
+                </div>
+                <MatchRowView
+                  match={myCurrentRoundMatch}
+                  players={players}
+                  meId={activity.current_user_id}
+                  isHost={activity.is_creator}
+                  onRecord={recordResult}
+                  onDelete={deleteMatch}
+                />
+              </div>
+            ) : (
+              <EmptyCard text={activity.tournament_format === 'round_robin' ? 'You sit this round out.' : 'No match for you right now.'} />
+            )}
+
+            {myAllMatches.length > (myCurrentRoundMatch ? 1 : 0) && (
+              <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
+                <div className="px-4 py-2 bg-surface/50">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted">All your matches</p>
+                </div>
+                <div className="divide-y divide-border/40">
+                  {myAllMatches.map((m) => (
+                    <MatchRowView
+                      key={m.id}
+                      match={m}
+                      players={players}
+                      meId={activity.current_user_id}
+                      isHost={activity.is_creator}
+                      onRecord={recordResult}
+                      onDelete={deleteMatch}
+                      hiddenForRound={!activity.is_creator && m.round_number > currentRound}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      )}
+
+      {/* Bracket */}
+      {subTab === 'bracket' && (
+        <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
+          <div className="px-4 py-2 bg-surface/50 flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Matches</p>
+            {activity.is_creator && activity.tournament_format === 'assigned' && (
+              <button
+                onClick={() => setShowAddMatch(true)}
+                className="text-[12px] font-semibold text-primary"
+              >
+                + Add
+              </button>
+            )}
+          </div>
+          {loading && matches.length === 0 ? (
+            <div className="px-4 py-6 text-center text-[13px] text-muted">Loading...</div>
+          ) : visibleMatches.length === 0 ? (
+            <div className="px-4 py-6 text-center text-[13px] text-muted">
+              {activity.tournament_format === 'assigned' ? 'No matches yet. Tap + Add to create one.' : 'No matches revealed yet.'}
+            </div>
+          ) : (
+            Array.from(groupByRound(visibleMatches).entries()).map(([round, list]) => (
+              <div key={round}>
+                {activity.tournament_format === 'round_robin' && (
+                  <div className={`px-4 py-1.5 border-t border-border/40 ${round === currentRound ? 'bg-primary/5' : 'bg-surface/30'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-wide ${round === currentRound ? 'text-primary' : 'text-muted'}`}>
+                      Round {round}{round === currentRound ? ' — active' : ''}
+                    </p>
+                  </div>
+                )}
+                <div className="divide-y divide-border/40">
+                  {list.map((m) => (
+                    <MatchRowView
+                      key={m.id}
+                      match={m}
+                      players={players}
+                      meId={activity.current_user_id}
+                      isHost={activity.is_creator}
+                      onRecord={recordResult}
+                      onDelete={deleteMatch}
+                      hiddenForRound={!activity.is_creator && m.round_number > currentRound}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Leaderboard */}
+      {subTab === 'leaderboard' && (
+        <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
+          <div className="px-4 py-2 bg-surface/50">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Standings</p>
+          </div>
+          <div className="divide-y divide-border/40">
+            {standings.map((row, i) => {
+              const p = players.get(row.player_id)
+              return (
+                <div key={row.player_id} className="px-4 py-2.5 flex items-center gap-3">
+                  <span className="text-[12px] font-bold text-muted w-5 tabular-nums">{i + 1}</span>
+                  <Avatar player={p ?? null} />
+                  <p className="flex-1 text-[14px] font-semibold text-foreground truncate">
+                    {p ? `${p.first_name} ${p.last_name}` : 'Unknown'}
+                  </p>
+                  <div className="text-[12px] text-muted tabular-nums">
+                    <span className="font-bold text-foreground">{row.wins}</span>W &middot; <span className="font-bold text-foreground">{row.losses}</span>L
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Add-match modal (assigned format, host only) */}
       {showAddMatch && (
@@ -315,13 +436,22 @@ export function TournamentTab({
   )
 }
 
-function MatchRow({
+function EmptyCard({ text }: { text: string }) {
+  return (
+    <div className="bg-background border border-border/50 rounded-xl px-4 py-6 text-center text-[13px] text-muted">
+      {text}
+    </div>
+  )
+}
+
+function MatchRowView({
   match,
   players,
   meId,
   isHost,
   onRecord,
   onDelete,
+  hiddenForRound,
 }: {
   match: Match
   players: Map<string, Player>
@@ -329,17 +459,26 @@ function MatchRow({
   isHost: boolean
   onRecord: (matchId: string, winnerId: string | null) => void
   onDelete: (matchId: string) => void
+  hiddenForRound?: boolean
 }) {
   const a = players.get(match.player_a_id)
   const b = players.get(match.player_b_id)
   const iAmA = match.player_a_id === meId
   const iAmB = match.player_b_id === meId
-  const canRecord = (iAmA || iAmB || isHost) && match.status === 'pending'
+  const canRecord = (iAmA || iAmB || isHost) && match.status === 'pending' && !hiddenForRound
   const completed = match.status === 'completed' && match.winner_id
   const winner = completed ? players.get(match.winner_id!) : null
   const winnerLabel = winner ? `${winner.first_name}` : ''
   const aLabel = a ? `${a.first_name}` : 'Unknown'
   const bLabel = b ? `${b.first_name}` : 'Unknown'
+
+  if (hiddenForRound) {
+    return (
+      <div className="px-4 py-3 text-[13px] text-muted/60 italic">
+        {aLabel} vs {bLabel} — revealed when host starts this round
+      </div>
+    )
+  }
 
   return (
     <div className="px-4 py-3">
@@ -485,4 +624,9 @@ function groupByRound(matches: Match[]): Map<number, Match[]> {
 function roundRobinMatchCount(n: number): number {
   if (n < 2) return 0
   return (n * (n - 1)) / 2
+}
+
+function roundRobinRoundCount(n: number): number {
+  if (n < 2) return 0
+  return n % 2 === 0 ? n - 1 : n
 }
