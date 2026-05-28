@@ -105,6 +105,13 @@ export async function PATCH(
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // If this result completes the current round, auto-advance so the next
+  // round becomes visible (and gets generated for rotating doubles).
+  if (update.status === 'completed') {
+    const { maybeAutoAdvanceRound } = await import('@/lib/tournament-server')
+    await maybeAutoAdvanceRound(id)
+  }
+
   return NextResponse.json(updated)
 }
 

@@ -211,8 +211,10 @@ export function TournamentTab({
     if (!res.ok) {
       const data = await res.json().catch(() => null)
       alert(data?.error ?? 'Failed to record result')
-      refresh()
     }
+    // Refresh either way — recording can trigger auto-advance to the next
+    // round, which the local optimistic update doesn't know about.
+    refresh()
   }
 
   async function deleteMatch(matchId: string) {
