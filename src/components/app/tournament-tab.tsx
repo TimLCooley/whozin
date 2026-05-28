@@ -286,14 +286,14 @@ export function TournamentTab({
             <div className="px-4 py-2 bg-surface/50">
               <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Settings</p>
             </div>
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-start justify-between gap-4 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] font-semibold text-foreground">Track scores</p>
                 <p className="text-[11px] text-muted mt-0.5">Enter the score on each match; winner is set automatically.</p>
               </div>
               <ToggleSwitch checked={trackScores} onChange={(v) => updateSetting('tournament_track_scores', v)} />
             </div>
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-start justify-between gap-4 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] font-semibold text-foreground">Doubles</p>
                 <p className="text-[11px] text-muted mt-0.5">Each match is 2v2.</p>
@@ -301,7 +301,7 @@ export function TournamentTab({
               <ToggleSwitch checked={doubles} onChange={(v) => updateSetting('tournament_doubles', v)} />
             </div>
             {doubles && (
-              <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-semibold text-foreground">Rotate partners</p>
                   <p className="text-[11px] text-muted mt-0.5">
@@ -541,7 +541,7 @@ export function TournamentTab({
         <div className="space-y-3">
           <div className="bg-background border border-border/50 rounded-xl divide-y divide-border/40 overflow-hidden">
             {/* Track scores */}
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-start justify-between gap-4 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] font-semibold text-foreground">Track scores</p>
                 <p className="text-[11px] text-muted mt-0.5">Enter the score on each match; winner is set automatically.</p>
@@ -550,7 +550,7 @@ export function TournamentTab({
             </div>
 
             {/* Doubles */}
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-start justify-between gap-4 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] font-semibold text-foreground">Doubles</p>
                 <p className="text-[11px] text-muted mt-0.5">Each match is 2v2.</p>
@@ -564,7 +564,7 @@ export function TournamentTab({
 
             {/* Rotate partners (only meaningful with doubles) */}
             {doubles && (
-              <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-semibold text-foreground">Rotate partners</p>
                   <p className="text-[11px] text-muted mt-0.5">
