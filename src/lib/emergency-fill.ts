@@ -90,7 +90,15 @@ export async function sendEmergencyFill(activityId: string) {
 
     let smsSid: string | null = null
     if (!(await hasReachablePush(user.id))) {
-      const result = await sendFillInvite(phone, creatorName, activity.activity_name, dateTimeStr || 'TBD', spotsOpen, activity.image_url || undefined)
+      const result = await sendFillInvite(
+        phone,
+        creatorName,
+        activity.activity_name,
+        dateTimeStr || 'TBD',
+        spotsOpen,
+        activity.image_url || undefined,
+        activity.tournament_mode ? activity.tournament_format : null,
+      )
       if (result.success) smsSid = result.sid ?? null
     }
 
@@ -106,12 +114,19 @@ export async function sendEmergencyFill(activityId: string) {
     })
 
     // In-app alert
-    const { title: pushTitle, body: pushBody } = await renderTemplate('fill_invite', 'push', {
+    const isTournament = !!activity.tournament_mode && !!activity.tournament_format
+    const pushEventId = isTournament ? 'tournament_fill_invite' : 'fill_invite'
+    const pushVars: Record<string, string> = {
       activity_name: activity.activity_name,
       spots_text: spotsText,
       inviter_name: creatorName,
       date_time: dateTimeStr || 'TBD',
-    })
+    }
+    if (isTournament) {
+      const { formatLabel } = await import('@/lib/tournament')
+      pushVars.tournament_format = formatLabel(activity.tournament_format)
+    }
+    const { title: pushTitle, body: pushBody } = await renderTemplate(pushEventId, 'push', pushVars)
     await createAlert({
       user_id: user.id,
       type: 'activity_invite',

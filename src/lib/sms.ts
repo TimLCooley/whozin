@@ -72,15 +72,29 @@ export async function sendSmsInvite(toPhone: string, inviterName: string) {
   return sendSms(actualTo, body + testNote)
 }
 
-/** Send an activity invite SMS/MMS — branded "Are you in?" */
+/** Send an activity invite SMS/MMS — branded "Are you in?"
+ * Pass `tournamentFormat` ('round_robin' | 'assigned') to use the
+ * tournament_activity_invite template instead of the default one. */
 export async function sendActivityInvite(
   toPhone: string,
   inviterName: string,
   activityName: string,
   dateTime: string,
-  imageUrl?: string
+  imageUrl?: string,
+  tournamentFormat?: 'assigned' | 'round_robin' | null,
 ) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
+  if (tournamentFormat) {
+    const { formatLabel } = await import('@/lib/tournament')
+    const { body } = await renderTemplate('tournament_activity_invite', 'sms', {
+      inviter_name: inviterName,
+      activity_name: activityName,
+      date_time: dateTime,
+      tournament_format: formatLabel(tournamentFormat),
+      download_link: DOWNLOAD_LINK,
+    })
+    return sendSms(actualTo, body + testNote, imageUrl)
+  }
   const { body } = await renderTemplate('activity_invite', 'sms', {
     inviter_name: inviterName,
     activity_name: activityName,
@@ -110,10 +124,22 @@ export async function sendFillInvite(
   activityName: string,
   dateTime: string,
   spotsNeeded: number,
-  imageUrl?: string
+  imageUrl?: string,
+  tournamentFormat?: 'assigned' | 'round_robin' | null,
 ) {
   const { actualTo, testNote } = resolveRecipient(toPhone)
   const spotsText = spotsNeeded === 1 ? '1 spot' : `${spotsNeeded} spots`
+  if (tournamentFormat) {
+    const { formatLabel } = await import('@/lib/tournament')
+    const { body } = await renderTemplate('tournament_fill_invite', 'sms', {
+      inviter_name: inviterName,
+      spots_text: spotsText,
+      activity_name: activityName,
+      date_time: dateTime,
+      tournament_format: formatLabel(tournamentFormat),
+    })
+    return sendSms(actualTo, body + testNote, imageUrl)
+  }
   const { body } = await renderTemplate('fill_invite', 'sms', {
     inviter_name: inviterName,
     spots_text: spotsText,

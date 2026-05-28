@@ -9,6 +9,13 @@
  *   * assigned — host adds matches manually; nothing to generate.
  */
 
+/** Human-readable label for the SMS / push text. Pass into templates. */
+export function formatLabel(format: 'assigned' | 'round_robin' | null | undefined): string {
+  if (format === 'round_robin') return 'Round Robin'
+  if (format === 'assigned') return 'Assigned'
+  return 'Tournament'
+}
+
 export interface MatchPairing {
   round_number: number
   player_a_id: string

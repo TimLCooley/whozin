@@ -224,7 +224,8 @@ export async function processActivityInvites(activityId: string) {
         creator?.first_name ?? 'Someone',
         activity.activity_name,
         dateTimeStr || 'TBD',
-        activity.image_url || undefined
+        activity.image_url || undefined,
+        activity.tournament_mode ? activity.tournament_format : null,
       )
       if (result.success) smsSid = result.sid ?? null
     }
@@ -240,12 +241,19 @@ export async function processActivityInvites(activityId: string) {
     })
 
     // In-app alert too
-    const { title: pushTitle, body: pushBody } = await renderTemplate('activity_invite', 'push', {
+    const isTournament = !!activity.tournament_mode && !!activity.tournament_format
+    const pushEventId = isTournament ? 'tournament_activity_invite' : 'activity_invite'
+    const pushVars: Record<string, string> = {
       activity_name: activity.activity_name,
       inviter_name: creator?.first_name ?? 'Someone',
       date_time: dateTimeStr || 'TBD',
       download_link: 'https://whozin.io/dl',
-    })
+    }
+    if (isTournament) {
+      const { formatLabel } = await import('@/lib/tournament')
+      pushVars.tournament_format = formatLabel(activity.tournament_format)
+    }
+    const { title: pushTitle, body: pushBody } = await renderTemplate(pushEventId, 'push', pushVars)
     await createAlert({
       user_id: user.id,
       type: 'activity_invite',

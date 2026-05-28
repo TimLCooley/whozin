@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, status, open_invite, activity_name, activity_date, activity_time, image_url, max_capacity, response_timer_minutes')
+    .select('creator_id, status, open_invite, activity_name, activity_date, activity_time, image_url, max_capacity, response_timer_minutes, tournament_mode, tournament_format')
     .eq('id', id)
     .single()
 
@@ -174,6 +174,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         dateTimeStr || 'TBD',
         spotsNeeded,
         activity.image_url || undefined,
+        activity.tournament_mode ? activity.tournament_format : null,
       )
       if (result.success) smsSid = result.sid ?? null
     }

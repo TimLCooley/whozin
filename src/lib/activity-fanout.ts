@@ -118,6 +118,7 @@ export async function fanOutActivityInvites(activityId: string): Promise<void> {
         dateTimeStr || 'TBD',
         spotsNeeded,
         activity.image_url || undefined,
+        activity.tournament_mode ? activity.tournament_format : null,
       )
       if (result.success) smsSid = result.sid ?? null
     }

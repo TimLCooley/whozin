@@ -207,6 +207,59 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
     },
   },
 
+  // -------- Tournament invites --------
+  // Used in place of activity_invite / fill_invite when the activity has
+  // tournament_mode = true, so recipients know up-front that this isn't a
+  // casual game.
+  {
+    id: 'tournament_activity_invite',
+    name: 'Tournament Invite',
+    category: 'Activities',
+    trigger: 'Member is invited to a tournament activity (priority batch)',
+    variables: [
+      { key: 'inviter_name', description: 'First name of the host', example: 'Sarah', required: true },
+      { key: 'activity_name', description: 'Activity title', example: 'Pickleball at Memorial', required: true },
+      { key: 'date_time', description: 'Formatted date/time of the activity', example: 'Sat May 10 at 6 PM' },
+      { key: 'tournament_format', description: 'Tournament format label', example: 'Round Robin', required: true },
+      { key: 'download_link', description: 'Short app download link', example: 'https://whozin.io/dl' },
+    ],
+    channels: {
+      sms: {
+        body: 'TOURNAMENT INVITE: {{inviter_name}} is hosting {{activity_name}} ({{tournament_format}}) on {{date_time}}. Are you in? Reply IN or OUT',
+        call_sites: ['src/lib/sms.ts (sendActivityInvite, tournament path)'],
+      },
+      push: {
+        title: 'Tournament invite: {{activity_name}}',
+        body: '{{inviter_name}} invited you to a {{tournament_format}}. Reply IN or OUT!',
+        call_sites: ['src/lib/invite-processor.ts (tournament path)'],
+      },
+    },
+  },
+  {
+    id: 'tournament_fill_invite',
+    name: 'Tournament Fill Invite',
+    category: 'Activities',
+    trigger: 'Emergency or batch fill request for a tournament activity',
+    variables: [
+      { key: 'inviter_name', description: 'First name of the host', example: 'Sarah', required: true },
+      { key: 'spots_text', description: 'Pluralized spot count', example: '2 spots', required: true },
+      { key: 'activity_name', description: 'Activity title', example: 'Pickleball at Memorial', required: true },
+      { key: 'date_time', description: 'Formatted date/time of the activity', example: 'Sat May 10 at 6 PM' },
+      { key: 'tournament_format', description: 'Tournament format label', example: 'Round Robin', required: true },
+    ],
+    channels: {
+      sms: {
+        body: 'TOURNAMENT INVITE: {{inviter_name}} needs to fill {{spots_text}} for {{activity_name}} ({{tournament_format}}) on {{date_time}}. Are you in? Reply IN',
+        call_sites: ['src/lib/sms.ts (sendFillInvite, tournament path)'],
+      },
+      push: {
+        title: 'Tournament: {{spots_text}} open!',
+        body: '{{inviter_name}} is filling a {{tournament_format}} — reply IN to claim it!',
+        call_sites: ['src/lib/emergency-fill.ts (tournament path)'],
+      },
+    },
+  },
+
   // -------- Spots --------
   {
     id: 'fill_invite',
