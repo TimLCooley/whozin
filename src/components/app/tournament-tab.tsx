@@ -442,7 +442,6 @@ export function TournamentTab({
                           match={m}
                           {...matchRowProps}
                           hiddenForRound={!activity.is_creator && m.round_number > currentRound}
-                          isActive={m.round_number === currentRound}
                         />
                       ))}
                     </div>
