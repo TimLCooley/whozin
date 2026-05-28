@@ -44,7 +44,10 @@ export default function CreateActivityPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const cloneId = searchParams.get('clone')
-  const [mode, setMode] = useState<Mode>(cloneId ? 'build' : 'select')
+  const editId = searchParams.get('edit')
+  const prefillFromId = editId ?? cloneId
+  const isEditMode = !!editId
+  const [mode, setMode] = useState<Mode>(prefillFromId ? 'build' : 'select')
   const [tab, setTab] = useState<Tab>('details')
   const [submitting, setSubmitting] = useState(false)
   const { isPro, requirePro } = usePaywall()
@@ -138,7 +141,7 @@ export default function CreateActivityPage() {
 
   // Set default date/time
   useEffect(() => {
-    if (cloneId) return // cloned activity will set its own date
+    if (prefillFromId) return // clone/edit will set its own date
     const now = new Date()
     const dateStr = now.toISOString().split('T')[0]
     const hours = String(now.getHours()).padStart(2, '0')
@@ -147,12 +150,12 @@ export default function CreateActivityPage() {
     const adjustedHours = roundedMin === 60 ? String((now.getHours() + 1) % 24).padStart(2, '0') : hours
     setActivityDate(dateStr)
     setActivityTime(`${adjustedHours}:${minutes}`)
-  }, [cloneId])
+  }, [prefillFromId])
 
-  // Load cloned activity data
+  // Load cloned / edited activity data
   useEffect(() => {
-    if (!cloneId) return
-    fetch(`/api/activities/${cloneId}`)
+    if (!prefillFromId) return
+    fetch(`/api/activities/${prefillFromId}`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.id) return
@@ -199,12 +202,19 @@ export default function CreateActivityPage() {
           setCustomMode('no_max')
         }
         if (data.group_id) setSelectedGroup(data.group_id)
-        // Set date to today, keep same time
-        const now = new Date()
-        setActivityDate(now.toISOString().split('T')[0])
-        setActivityTime(data.activity_time ?? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+        if (isEditMode) {
+          // Editing a draft — preserve its scheduled date so the host can
+          // tweak it; only reset on clone.
+          setActivityDate(data.activity_date ?? '')
+          setActivityTime(data.activity_time ?? '')
+        } else {
+          // Cloning — reset to today, keep the same time.
+          const now = new Date()
+          setActivityDate(now.toISOString().split('T')[0])
+          setActivityTime(data.activity_time ?? `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+        }
       })
-  }, [cloneId])
+  }, [prefillFromId, isEditMode])
 
   /**
    * Returns the owned groups, awaiting the in-flight fetch if it hasn't
@@ -320,45 +330,61 @@ export default function CreateActivityPage() {
     if (!activityName.trim()) return alert('Activity name is required')
     if (!selectedGroup) return alert('Please select a group')
 
+    const payload = {
+      group_id: selectedGroup,
+      activity_type: selectedPreset || 'other',
+      activity_name: activityName.trim(),
+      activity_date: activityDate || null,
+      activity_time: activityTime || null,
+      duration_hours: activityTime ? durationHours : null,
+      location: location.trim() || null,
+      address: address.trim() || null,
+      note: note.trim() || null,
+      cost_type: costType,
+      cost: costType !== 'free' ? parseFloat(costAmount) || null : null,
+      max_capacity: getEffectiveMaxCapacity(),
+      response_timer_minutes: responseTimer,
+      ...getInviteFields(),
+      chat_enabled: chatEnabled,
+      reminder_enabled: reminderEnabled,
+      auto_emergency_fill: autoEmergencyFill,
+      waitlist_enabled: waitlistEnabled,
+      open_invite: openInvite,
+      repeat_interval: repeatInterval,
+      image_url: imageUrl || null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }
+
     setSubmitting(true)
     try {
-      const res = await fetch('/api/activities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          group_id: selectedGroup,
-          activity_type: selectedPreset || 'other',
-          activity_name: activityName.trim(),
-          activity_date: activityDate || null,
-          activity_time: activityTime || null,
-          duration_hours: activityTime ? durationHours : null,
-          location: location.trim() || null,
-          address: address.trim() || null,
-          note: note.trim() || null,
-          cost_type: costType,
-          cost: costType !== 'free' ? parseFloat(costAmount) || null : null,
-          max_capacity: getEffectiveMaxCapacity(),
-          response_timer_minutes: responseTimer,
-          ...getInviteFields(),
-          chat_enabled: chatEnabled,
-          reminder_enabled: reminderEnabled,
-          auto_emergency_fill: autoEmergencyFill,
-          waitlist_enabled: waitlistEnabled,
-          open_invite: openInvite,
-          repeat_interval: repeatInterval,
-          image_url: imageUrl || null,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        }),
-      })
-
-      const data = await res.json()
-      if (res.ok && data.id) {
-        router.push(`/app/activities/${data.id}`)
+      if (isEditMode && editId) {
+        // PATCH the existing draft instead of creating a new activity.
+        const res = await fetch(`/api/activities/${editId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) {
+          router.push('/app')
+        } else {
+          alert(data.error || 'Failed to save draft')
+        }
       } else {
-        alert(data.error || 'Failed to create activity')
+        const res = await fetch('/api/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        const data = await res.json()
+        if (res.ok && data.id) {
+          router.push(`/app/activities/${data.id}`)
+        } else {
+          alert(data.error || 'Failed to create activity')
+        }
       }
     } catch {
-      alert('Failed to create activity')
+      alert(isEditMode ? 'Failed to save draft' : 'Failed to create activity')
     }
     setSubmitting(false)
   }
@@ -910,8 +936,8 @@ export default function CreateActivityPage() {
 
       {/* Title */}
       <div className="bg-background border-b border-border/40 px-4 py-3 text-center">
-        <h1 className="text-[17px] font-bold text-foreground">Create Activity</h1>
-        <p className="text-[12px] text-muted mt-0.5">Create an activity and choose the group you want to invite!</p>
+        <h1 className="text-[17px] font-bold text-foreground">{isEditMode ? 'Edit Draft' : 'Create Activity'}</h1>
+        <p className="text-[12px] text-muted mt-0.5">{isEditMode ? 'Tweak the next occurrence before approving.' : 'Create an activity and choose the group you want to invite!'}</p>
       </div>
 
       {/* Tabs */}
@@ -1719,7 +1745,9 @@ export default function CreateActivityPage() {
             disabled={submitting || !activityName.trim() || !selectedGroup}
             className="btn-primary w-full py-3.5 text-[14px] disabled:opacity-60"
           >
-            {submitting ? 'Creating...' : 'Create Activity'}
+            {submitting
+              ? (isEditMode ? 'Saving...' : 'Creating...')
+              : (isEditMode ? 'Save Draft' : 'Create Activity')}
           </button>
         )}
       </div>

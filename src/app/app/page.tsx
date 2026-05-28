@@ -258,7 +258,7 @@ export default function AppHome() {
               return (
                 <div
                   key={activity.id}
-                  onClick={() => router.push(`/app/activities/${activity.id}`)}
+                  onClick={() => router.push(isDraft ? `/app/activities/create?edit=${activity.id}` : `/app/activities/${activity.id}`)}
                   className={`rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] animate-enter cursor-pointer active:opacity-90 transition-all overflow-hidden ${
                     isDraft
                       ? 'border-[1.5px] border-dashed border-amber-300 opacity-75'
@@ -388,18 +388,18 @@ export default function AppHome() {
                         {isDraft ? (
                           <div className="flex gap-2 mt-3">
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
-                              disabled={draftBusy}
-                              className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)] disabled:opacity-60"
-                            >
-                              {draftBusy ? 'Approving...' : 'Approve'}
-                            </button>
-                            <button
                               onClick={(e) => { e.stopPropagation(); setDiscardConfirm({ id: activity.id, name: activity.activity_name }) }}
                               disabled={draftBusy}
                               className="px-4 py-2.5 rounded-lg bg-white/20 backdrop-blur-sm text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-60"
                             >
                               Discard
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
+                              disabled={draftBusy}
+                              className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)] disabled:opacity-60"
+                            >
+                              {draftBusy ? 'Approving...' : 'Approve'}
                             </button>
                           </div>
                         ) : activity.my_status === 'confirmed' ? (
@@ -600,18 +600,18 @@ export default function AppHome() {
                   {isDraft ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-amber-200">
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
-                        disabled={draftBusy}
-                        className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)] disabled:opacity-60"
-                      >
-                        {draftBusy ? 'Approving...' : 'Approve'}
-                      </button>
-                      <button
                         onClick={(e) => { e.stopPropagation(); setDiscardConfirm({ id: activity.id, name: activity.activity_name }) }}
                         disabled={draftBusy}
                         className="px-4 py-2.5 rounded-lg bg-surface text-foreground text-[13px] font-bold border border-border/50 active:opacity-80 transition-opacity disabled:opacity-60"
                       >
                         Discard
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
+                        disabled={draftBusy}
+                        className="flex-1 bg-[#00C853] text-white text-[13px] font-bold py-2.5 rounded-lg active:opacity-80 transition-opacity shadow-[0_2px_8px_rgba(0,200,83,0.3)] disabled:opacity-60"
+                      >
+                        {draftBusy ? 'Approving...' : 'Approve'}
                       </button>
                     </div>
                   ) : activity.my_status === 'confirmed' ? (

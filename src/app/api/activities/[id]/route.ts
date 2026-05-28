@@ -370,6 +370,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     updates.response_timer_minutes = body.response_timer_minutes
   }
   if (body.priority_invite !== undefined) updates.priority_invite = body.priority_invite
+  if (body.invite_batch_size !== undefined) updates.invite_batch_size = isPro ? body.invite_batch_size : null
+  if (body.invite_priority_mode !== undefined) {
+    updates.invite_priority_mode = isPro && body.invite_priority_mode === 'random' ? 'random' : 'top_down'
+  }
   if (body.chat_enabled !== undefined) updates.chat_enabled = isPro ? body.chat_enabled : false
   if (body.reminder_enabled !== undefined) updates.reminder_enabled = isPro ? body.reminder_enabled : false
   if (body.image_url !== undefined) updates.image_url = body.image_url || null
