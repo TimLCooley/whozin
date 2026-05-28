@@ -516,7 +516,7 @@ function MatchRowView({
   }
 
   return (
-    <div className={`px-4 py-3 ${isActive ? 'bg-primary/5' : ''}`}>
+    <div className="px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
