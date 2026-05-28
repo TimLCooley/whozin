@@ -2900,10 +2900,10 @@ function SettingsToggles({
                 if (!checked && locked) { requirePro(); return }
                 patch({ [r.key]: !checked } as Partial<ActivityDetail>)
               }}
-              className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-primary' : locked ? 'bg-border/60' : 'bg-border'}`}
+              className={`relative w-[46px] h-[28px] rounded-full transition-colors duration-200 flex-shrink-0 ${checked ? 'bg-primary' : 'bg-[#d5d9e2]'}`}
             >
               <span
-                className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${checked ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+                className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${checked ? 'translate-x-[18px]' : ''}`}
               />
             </button>
           </div>
