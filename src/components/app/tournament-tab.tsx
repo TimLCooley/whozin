@@ -278,28 +278,9 @@ export function TournamentTab({
           </p>
         </div>
 
-        <div className="bg-background border border-border/50 rounded-xl divide-y divide-border/40 overflow-hidden">
-          <div className="px-4 py-2 bg-surface/50">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Players ({confirmed.length})</p>
-          </div>
-          {confirmed.length === 0 ? (
-            <div className="px-4 py-6 text-center text-[13px] text-muted">No confirmed players yet.</div>
-          ) : (
-            confirmed.map((m) => (
-              <div key={m.user_id} className="px-4 py-3 flex items-center gap-3">
-                <Avatar player={m.user} />
-                <p className="text-[14px] font-semibold text-foreground">
-                  {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-
         {/* Pre-start settings (host only) — these are the same toggles that
-            normally live in the Settings sub-tab. Surfacing them here means
-            the host can tweak right before tapping Start without having to
-            navigate elsewhere. */}
+            normally live in the Settings sub-tab. Above Players so they stay
+            reachable without scrolling past a long roster. */}
         {activity.is_creator && (
           <div className="bg-background border border-border/50 rounded-xl divide-y divide-border/40 overflow-hidden">
             <div className="px-4 py-2 bg-surface/50">
@@ -334,6 +315,28 @@ export function TournamentTab({
             )}
           </div>
         )}
+
+        {/* Roster — capped at a max height with an inner scroller so very
+            long rosters don't push the Start button off-screen. */}
+        <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
+          <div className="px-4 py-2 bg-surface/50">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Players ({confirmed.length})</p>
+          </div>
+          {confirmed.length === 0 ? (
+            <div className="px-4 py-6 text-center text-[13px] text-muted">No confirmed players yet.</div>
+          ) : (
+            <div className="max-h-[40dvh] overflow-y-auto divide-y divide-border/40">
+              {confirmed.map((m) => (
+                <div key={m.user_id} className="px-4 py-3 flex items-center gap-3">
+                  <Avatar player={m.user} />
+                  <p className="text-[14px] font-semibold text-foreground">
+                    {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <button
           onClick={startTournament}
