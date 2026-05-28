@@ -64,6 +64,50 @@ export function generateRoundRobin(playerIds: string[]): MatchPairing[] {
   return pairings
 }
 
+export interface DoublesMatchPairing extends MatchPairing {
+  player_c_id: string
+  player_d_id: string
+}
+
+/**
+ * Round-robin among fixed doubles teams. Pairs `playerIds` sequentially into
+ * teams of two (caller is responsible for shuffling first if desired), then
+ * runs the circle method on teams. Throws if `playerIds.length` is odd or
+ * less than 4 — doubles needs at least 2 teams (4 players).
+ */
+export function generateRoundRobinDoubles(playerIds: string[]): DoublesMatchPairing[] {
+  if (playerIds.length < 4) return []
+  if (playerIds.length % 2 === 1) {
+    // Caller decides what to do about an odd number; doubles can't bye-a-player
+    // cleanly the way singles can.
+    throw new Error('Doubles requires an even number of players')
+  }
+
+  // Pair off into teams of two — order is preserved from the input so callers
+  // can shuffle the player list before calling.
+  const teams: Array<[string, string]> = []
+  for (let i = 0; i < playerIds.length; i += 2) {
+    teams.push([playerIds[i], playerIds[i + 1]])
+  }
+
+  // Build a synthetic team-ID list and run the regular round-robin algorithm
+  // on it. We index back into the teams array to recover the four players.
+  const teamIndices = teams.map((_, i) => String(i))
+  const teamPairings = generateRoundRobin(teamIndices)
+
+  return teamPairings.map((p) => {
+    const [a, c] = teams[parseInt(p.player_a_id, 10)]
+    const [b, d] = teams[parseInt(p.player_b_id, 10)]
+    return {
+      round_number: p.round_number,
+      player_a_id: a,
+      player_c_id: c,
+      player_b_id: b,
+      player_d_id: d,
+    }
+  })
+}
+
 export interface StandingsRow {
   player_id: string
   wins: number
@@ -74,13 +118,16 @@ export interface StandingsRow {
 export interface MatchRow {
   player_a_id: string
   player_b_id: string
+  player_c_id?: string | null
+  player_d_id?: string | null
   winner_id: string | null
   status: 'pending' | 'completed' | 'forfeit'
 }
 
 /**
- * Compute standings from a list of matches. Forfeits and completed matches
- * both contribute to wins/losses; pending matches do not.
+ * Compute standings from a list of matches. For doubles matches (player_c/
+ * player_d present), both winners get a win and both losers get a loss.
+ * Forfeits and completed matches contribute; pending matches do not.
  */
 export function computeStandings(matches: MatchRow[], playerIds: string[]): StandingsRow[] {
   const rows = new Map<string, StandingsRow>()
@@ -91,24 +138,33 @@ export function computeStandings(matches: MatchRow[], playerIds: string[]): Stan
   for (const m of matches) {
     if (m.status === 'pending') continue
     if (!m.winner_id) continue
-    const winner = rows.get(m.winner_id)
-    const loserId = m.winner_id === m.player_a_id ? m.player_b_id : m.player_a_id
-    const loser = rows.get(loserId)
-    if (winner) {
-      winner.wins += 1
-      winner.played += 1
+    const sideA: string[] = [m.player_a_id, ...(m.player_c_id ? [m.player_c_id] : [])]
+    const sideB: string[] = [m.player_b_id, ...(m.player_d_id ? [m.player_d_id] : [])]
+    const winnersAreA = sideA.includes(m.winner_id)
+    const winners = winnersAreA ? sideA : sideB
+    const losers = winnersAreA ? sideB : sideA
+    for (const id of winners) {
+      const row = rows.get(id)
+      if (row) { row.wins += 1; row.played += 1 }
     }
-    if (loser) {
-      loser.losses += 1
-      loser.played += 1
+    for (const id of losers) {
+      const row = rows.get(id)
+      if (row) { row.losses += 1; row.played += 1 }
     }
   }
 
-  // Sort by wins desc, then fewer losses, then more played (broke a tie via
-  // head-to-head later if needed; for v1 the wins ordering is enough).
   return Array.from(rows.values()).sort((x, y) => {
     if (y.wins !== x.wins) return y.wins - x.wins
     if (x.losses !== y.losses) return x.losses - y.losses
     return y.played - x.played
   })
+}
+
+export function shuffleArray<T>(arr: readonly T[]): T[] {
+  const out = [...arr]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
 }

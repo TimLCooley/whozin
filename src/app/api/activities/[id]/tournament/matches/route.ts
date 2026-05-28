@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, tournament_mode, tournament_format, tournament_started_at, tournament_current_round')
+    .select('creator_id, tournament_mode, tournament_format, tournament_started_at, tournament_current_round, tournament_track_scores, tournament_doubles')
     .eq('id', id)
     .single()
   if (!activity) return NextResponse.json({ error: 'Activity not found' }, { status: 404 })
@@ -39,7 +39,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: matches } = await admin
     .from('whozin_match')
-    .select('id, round_number, player_a_id, player_b_id, winner_id, status, recorded_by, recorded_at, created_at')
+    .select('id, round_number, player_a_id, player_b_id, player_c_id, player_d_id, winner_id, status, score_a, score_b, recorded_by, recorded_at, created_at')
     .eq('activity_id', id)
     .order('round_number', { ascending: true })
     .order('created_at', { ascending: true })
@@ -49,6 +49,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     tournament_format: activity.tournament_format,
     tournament_started_at: activity.tournament_started_at,
     tournament_current_round: activity.tournament_current_round ?? 0,
+    tournament_track_scores: activity.tournament_track_scores ?? false,
+    tournament_doubles: activity.tournament_doubles ?? false,
     matches: matches ?? [],
   })
 }

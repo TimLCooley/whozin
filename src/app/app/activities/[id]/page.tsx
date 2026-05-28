@@ -49,6 +49,8 @@ interface ActivityDetail {
   tournament_format: 'assigned' | 'round_robin' | null
   tournament_started_at: string | null
   tournament_current_round: number
+  tournament_track_scores: boolean
+  tournament_doubles: boolean
   repeat_interval: 'none' | 'weekly' | 'biweekly' | 'monthly'
   priority_invite: boolean
   response_timer_minutes: number

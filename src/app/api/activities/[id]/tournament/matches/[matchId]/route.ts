@@ -34,28 +34,68 @@ export async function PATCH(
 
   const { data: match } = await admin
     .from('whozin_match')
-    .select('id, activity_id, player_a_id, player_b_id, status')
+    .select('id, activity_id, player_a_id, player_b_id, player_c_id, player_d_id, status')
     .eq('id', matchId)
     .single()
   if (!match || match.activity_id !== id) {
     return NextResponse.json({ error: 'Match not found' }, { status: 404 })
   }
 
+  const sideA: string[] = [match.player_a_id, ...(match.player_c_id ? [match.player_c_id] : [])]
+  const sideB: string[] = [match.player_b_id, ...(match.player_d_id ? [match.player_d_id] : [])]
+  const validWinnerIds = new Set<string>([...sideA, ...sideB])
+
   const isHost = activity.creator_id === whozinUser.id
-  const isPlayer = whozinUser.id === match.player_a_id || whozinUser.id === match.player_b_id
+  const isPlayer = validWinnerIds.has(whozinUser.id)
   if (!isHost && !isPlayer) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
   const body = await req.json()
   const winner: unknown = body.winner_id
-  if (winner !== null && winner !== match.player_a_id && winner !== match.player_b_id) {
-    return NextResponse.json({ error: 'winner_id must be one of the match players or null' }, { status: 400 })
-  }
+  const scoreA: unknown = body.score_a
+  const scoreB: unknown = body.score_b
+  const hasScores = (typeof scoreA === 'number' && Number.isFinite(scoreA)) ||
+                    (typeof scoreB === 'number' && Number.isFinite(scoreB))
 
-  const update = winner === null
-    ? { winner_id: null, status: 'pending' as const, recorded_by: null, recorded_at: null }
-    : { winner_id: winner as string, status: 'completed' as const, recorded_by: whozinUser.id, recorded_at: new Date().toISOString() }
+  // Decide what to write. Three paths:
+  //   1. Clearing: winner_id = null, scores get cleared too
+  //   2. Scores provided: derive winner from higher score (tie rejected)
+  //   3. Just a winner: trust the caller's pick
+  let update: Record<string, unknown>
+  if (winner === null && !hasScores) {
+    update = { winner_id: null, status: 'pending', score_a: null, score_b: null, recorded_by: null, recorded_at: null }
+  } else if (hasScores) {
+    const a = typeof scoreA === 'number' ? Math.max(0, Math.floor(scoreA)) : null
+    const b = typeof scoreB === 'number' ? Math.max(0, Math.floor(scoreB)) : null
+    if (a === null || b === null) {
+      return NextResponse.json({ error: 'Both scores required' }, { status: 400 })
+    }
+    if (a === b) {
+      return NextResponse.json({ error: 'Scores can\u2019t be tied' }, { status: 400 })
+    }
+    // Set winner to the canonical first player on the winning side. Standings
+    // logic checks side membership, not exact id, so this is just a marker.
+    const winningId = a > b ? match.player_a_id : match.player_b_id
+    update = {
+      winner_id: winningId,
+      score_a: a,
+      score_b: b,
+      status: 'completed',
+      recorded_by: whozinUser.id,
+      recorded_at: new Date().toISOString(),
+    }
+  } else {
+    if (winner !== null && !validWinnerIds.has(winner as string)) {
+      return NextResponse.json({ error: 'winner_id must be one of the match players or null' }, { status: 400 })
+    }
+    update = {
+      winner_id: winner as string,
+      status: 'completed',
+      recorded_by: whozinUser.id,
+      recorded_at: new Date().toISOString(),
+    }
+  }
 
   const { data: updated, error } = await admin
     .from('whozin_match')

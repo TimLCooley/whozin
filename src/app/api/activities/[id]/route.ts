@@ -385,6 +385,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const v = body.tournament_format
     updates.tournament_format = isPro && (v === 'assigned' || v === 'round_robin') ? v : null
   }
+  if (body.tournament_track_scores !== undefined) {
+    updates.tournament_track_scores = isPro && !!body.tournament_track_scores
+  }
+  if (body.tournament_doubles !== undefined) {
+    updates.tournament_doubles = isPro && !!body.tournament_doubles
+  }
   if (body.repeat_interval !== undefined) {
     const v = body.repeat_interval
     updates.repeat_interval = isPro && ['weekly', 'biweekly', 'monthly'].includes(v) ? v : 'none'

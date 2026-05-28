@@ -272,6 +272,8 @@ export async function POST(req: NextRequest) {
     open_invite,
     tournament_mode,
     tournament_format,
+    tournament_track_scores,
+    tournament_doubles,
     repeat_interval,
     timezone,
   } = body
@@ -323,6 +325,9 @@ export async function POST(req: NextRequest) {
       tournament_format: isPro && tournament_mode && (tournament_format === 'assigned' || tournament_format === 'round_robin')
         ? tournament_format
         : null,
+      tournament_track_scores: isPro && tournament_mode && !!tournament_track_scores,
+      // Doubles is pickleball-only; ignore otherwise.
+      tournament_doubles: isPro && tournament_mode && activity_type === 'pickleball' && !!tournament_doubles,
       repeat_interval: isPro && ['weekly', 'biweekly', 'monthly'].includes(repeat_interval) ? repeat_interval : 'none',
       timezone: timezone || null,
       status: 'open',

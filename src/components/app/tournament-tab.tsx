@@ -17,12 +17,15 @@ interface ConfirmedMember {
 
 interface ActivityShape {
   id: string
+  activity_type?: string
   is_creator: boolean
   current_user_id: string
   tournament_mode: boolean
   tournament_format: 'assigned' | 'round_robin' | null
   tournament_started_at: string | null
   tournament_current_round?: number
+  tournament_track_scores?: boolean
+  tournament_doubles?: boolean
 }
 
 interface Match {
@@ -30,13 +33,17 @@ interface Match {
   round_number: number
   player_a_id: string
   player_b_id: string
+  player_c_id?: string | null
+  player_d_id?: string | null
   winner_id: string | null
   status: 'pending' | 'completed' | 'forfeit'
+  score_a?: number | null
+  score_b?: number | null
   recorded_by: string | null
   recorded_at: string | null
 }
 
-type SubTab = 'my' | 'bracket' | 'leaderboard'
+type SubTab = 'my' | 'bracket' | 'leaderboard' | 'settings'
 
 export function TournamentTab({
   activity,
@@ -49,6 +56,8 @@ export function TournamentTab({
 }) {
   const [matches, setMatches] = useState<Match[]>([])
   const [currentRound, setCurrentRound] = useState<number>(activity.tournament_current_round ?? 0)
+  const [trackScores, setTrackScores] = useState<boolean>(activity.tournament_track_scores ?? false)
+  const [doubles, setDoubles] = useState<boolean>(activity.tournament_doubles ?? false)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
   const [advancing, setAdvancing] = useState(false)
@@ -76,9 +85,29 @@ export function TournamentTab({
       const data = await res.json()
       setMatches(data.matches ?? [])
       setCurrentRound(data.tournament_current_round ?? 0)
+      setTrackScores(!!data.tournament_track_scores)
+      setDoubles(!!data.tournament_doubles)
     }
     setLoading(false)
   }, [activity.id])
+
+  async function updateSetting(field: 'tournament_track_scores' | 'tournament_doubles', value: boolean) {
+    // Optimistic flip
+    if (field === 'tournament_track_scores') setTrackScores(value)
+    if (field === 'tournament_doubles') setDoubles(value)
+    const res = await fetch(`/api/activities/${activity.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    })
+    if (!res.ok) {
+      // Revert on failure
+      if (field === 'tournament_track_scores') setTrackScores(!value)
+      if (field === 'tournament_doubles') setDoubles(!value)
+      const data = await res.json().catch(() => null)
+      alert(data?.error ?? 'Failed to update setting')
+    }
+  }
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -150,16 +179,23 @@ export function TournamentTab({
     }
   }
 
-  async function recordResult(matchId: string, winnerId: string | null) {
-    setMatches((prev) => prev.map((m) =>
-      m.id === matchId
-        ? { ...m, winner_id: winnerId, status: winnerId ? 'completed' : 'pending' }
-        : m
-    ))
+  async function recordResult(
+    matchId: string,
+    payload: { winner_id: string | null } | { score_a: number; score_b: number },
+  ) {
+    // Optimistic update
+    setMatches((prev) => prev.map((m) => {
+      if (m.id !== matchId) return m
+      if ('score_a' in payload) {
+        const winningId = payload.score_a > payload.score_b ? m.player_a_id : m.player_b_id
+        return { ...m, score_a: payload.score_a, score_b: payload.score_b, winner_id: winningId, status: 'completed' }
+      }
+      return { ...m, winner_id: payload.winner_id, status: payload.winner_id ? 'completed' : 'pending', score_a: null, score_b: null }
+    }))
     const res = await fetch(`/api/activities/${activity.id}/tournament/matches/${matchId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ winner_id: winnerId }),
+      body: JSON.stringify(payload),
     })
     if (!res.ok) {
       const data = await res.json().catch(() => null)
@@ -201,6 +237,18 @@ export function TournamentTab({
   }
 
   const started = !!activity.tournament_started_at
+
+  // Shared props passed to every MatchRowView render.
+  const matchRowProps = {
+    players,
+    meId: activity.current_user_id,
+    isHost: activity.is_creator,
+    trackScores,
+    isDoubles: doubles,
+    onRecord: (matchId: string, winnerId: string | null) => recordResult(matchId, { winner_id: winnerId }),
+    onRecordScore: (matchId: string, a: number, b: number) => recordResult(matchId, { score_a: a, score_b: b }),
+    onDelete: deleteMatch,
+  }
 
   // ── Pre-start view (host only — non-hosts can't see the tab yet) ─────────
   if (!started) {
@@ -276,10 +324,11 @@ export function TournamentTab({
       {/* Sub-tabs */}
       <div className="flex items-center gap-1 p-1 bg-surface rounded-xl border border-border/50">
         {([
-          { key: 'my', label: 'My Match' },
-          { key: 'bracket', label: 'Bracket' },
-          { key: 'leaderboard', label: 'Leaderboard' },
-        ] as const).map((opt) => {
+          { key: 'my', label: 'My Match', hostOnly: false },
+          { key: 'bracket', label: 'Bracket', hostOnly: false },
+          { key: 'leaderboard', label: 'Leaderboard', hostOnly: false },
+          { key: 'settings', label: 'Settings', hostOnly: true },
+        ] as const).filter((opt) => !opt.hostOnly || activity.is_creator).map((opt) => {
           const active = subTab === opt.key
           return (
             <button
@@ -308,14 +357,7 @@ export function TournamentTab({
                     {activity.tournament_format === 'round_robin' ? `Round ${currentRound} — active` : 'Your current match'}
                   </p>
                 </div>
-                <MatchRowView
-                  match={myCurrentRoundMatch}
-                  players={players}
-                  meId={activity.current_user_id}
-                  isHost={activity.is_creator}
-                  onRecord={recordResult}
-                  onDelete={deleteMatch}
-                />
+                <MatchRowView match={myCurrentRoundMatch} {...matchRowProps} />
               </div>
             ) : (
               <EmptyCard text={activity.tournament_format === 'round_robin' ? 'You sit this round out.' : 'No match for you right now.'} />
@@ -331,11 +373,7 @@ export function TournamentTab({
                     <MatchRowView
                       key={m.id}
                       match={m}
-                      players={players}
-                      meId={activity.current_user_id}
-                      isHost={activity.is_creator}
-                      onRecord={recordResult}
-                      onDelete={deleteMatch}
+                      {...matchRowProps}
                       hiddenForRound={!activity.is_creator && m.round_number > currentRound}
                       isActive={m.round_number === currentRound}
                     />
@@ -402,11 +440,7 @@ export function TournamentTab({
                         <MatchRowView
                           key={m.id}
                           match={m}
-                          players={players}
-                          meId={activity.current_user_id}
-                          isHost={activity.is_creator}
-                          onRecord={recordResult}
-                          onDelete={deleteMatch}
+                          {...matchRowProps}
                           hiddenForRound={!activity.is_creator && m.round_number > currentRound}
                           isActive={m.round_number === currentRound}
                         />
@@ -446,6 +480,45 @@ export function TournamentTab({
         </div>
       )}
 
+      {/* Settings (host only) */}
+      {subTab === 'settings' && activity.is_creator && (
+        <div className="space-y-3">
+          <div className="bg-background border border-border/50 rounded-xl divide-y divide-border/40 overflow-hidden">
+            {/* Track scores */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-foreground">Track scores</p>
+                <p className="text-[11px] text-muted mt-0.5">Enter the score on each match; winner is set automatically.</p>
+              </div>
+              <ToggleSwitch checked={trackScores} onChange={(v) => updateSetting('tournament_track_scores', v)} />
+            </div>
+
+            {/* Doubles — pickleball only */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-foreground">Doubles</p>
+                <p className="text-[11px] text-muted mt-0.5">
+                  {activity.activity_type === 'pickleball'
+                    ? 'Each match is 2v2. Partners are randomly shuffled at start.'
+                    : 'Doubles is currently available for Pickleball only.'}
+                </p>
+              </div>
+              <ToggleSwitch
+                checked={doubles}
+                onChange={(v) => updateSetting('tournament_doubles', v)}
+                disabled={activity.activity_type !== 'pickleball' || started}
+              />
+            </div>
+          </div>
+
+          {started && (
+            <p className="text-[11px] text-muted px-1">
+              Doubles is locked while the tournament is in progress.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Add-match modal (assigned format, host only) */}
       {showAddMatch && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => !addingMatch && setShowAddMatch(false)}>
@@ -469,6 +542,22 @@ export function TournamentTab({
   )
 }
 
+function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={`relative w-[46px] h-[28px] rounded-full transition-colors duration-200 flex-shrink-0 ${disabled ? 'opacity-40' : ''} ${checked ? 'bg-primary' : 'bg-[#d5d9e2]'}`}
+    >
+      <span
+        className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${checked ? 'translate-x-[18px]' : ''}`}
+      />
+    </button>
+  )
+}
+
 function EmptyCard({ text }: { text: string }) {
   return (
     <div className="bg-background border border-border/50 rounded-xl px-4 py-6 text-center text-[13px] text-muted">
@@ -482,7 +571,10 @@ function MatchRowView({
   players,
   meId,
   isHost,
+  trackScores,
+  isDoubles,
   onRecord,
+  onRecordScore,
   onDelete,
   hiddenForRound,
   isActive,
@@ -491,75 +583,96 @@ function MatchRowView({
   players: Map<string, Player>
   meId: string
   isHost: boolean
+  trackScores: boolean
+  isDoubles: boolean
   onRecord: (matchId: string, winnerId: string | null) => void
+  onRecordScore: (matchId: string, scoreA: number, scoreB: number) => void
   onDelete: (matchId: string) => void
   hiddenForRound?: boolean
   isActive?: boolean
 }) {
   const a = players.get(match.player_a_id)
   const b = players.get(match.player_b_id)
-  const iAmA = match.player_a_id === meId
-  const iAmB = match.player_b_id === meId
-  const canRecord = (iAmA || iAmB || isHost) && match.status === 'pending' && !hiddenForRound
+  const c = match.player_c_id ? players.get(match.player_c_id) ?? null : null
+  const d = match.player_d_id ? players.get(match.player_d_id) ?? null : null
+
+  const aName = (p: Player | null | undefined) => p?.first_name ?? 'Unknown'
+  const teamALabel = isDoubles ? `${aName(a)} + ${aName(c)}` : aName(a)
+  const teamBLabel = isDoubles ? `${aName(b)} + ${aName(d)}` : aName(b)
+
+  const sideAIds = [match.player_a_id, ...(match.player_c_id ? [match.player_c_id] : [])]
+  const sideBIds = [match.player_b_id, ...(match.player_d_id ? [match.player_d_id] : [])]
+  const iAmA = sideAIds.includes(meId)
+  const iAmB = sideBIds.includes(meId)
+
   const completed = match.status === 'completed' && match.winner_id
-  const aLabel = a ? `${a.first_name}` : 'Unknown'
-  const bLabel = b ? `${b.first_name}` : 'Unknown'
-  const aWon = completed && match.winner_id === match.player_a_id
-  const bWon = completed && match.winner_id === match.player_b_id
+  const aWon = !!completed && sideAIds.includes(match.winner_id!)
+  const bWon = !!completed && sideBIds.includes(match.winner_id!)
+  const canRecord = (iAmA || iAmB || isHost) && match.status === 'pending' && !hiddenForRound
 
   if (hiddenForRound) {
     return (
       <div className="px-4 py-3 text-[13px] text-muted/60 italic">
-        {aLabel} vs {bLabel} — revealed when host starts this round
+        {teamALabel} vs {teamBLabel} — revealed when host starts this round
       </div>
     )
   }
 
   return (
     <div className="px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {completed ? (
               <p className="text-[14px] font-semibold flex items-center gap-1.5 flex-wrap">
                 <span className="flex items-center gap-1">
-                  <span className={aWon ? 'text-[#00C853]' : 'text-foreground/60'}>{aLabel}</span>
+                  <span className={aWon ? 'text-[#00C853]' : 'text-foreground/60'}>{teamALabel}</span>
                   <span className={`text-[10px] px-1.5 rounded font-bold ${aWon ? 'bg-[#00C853]/10 text-[#00C853]' : 'bg-red-500/10 text-red-500'}`}>
                     {aWon ? 'W' : 'L'}
                   </span>
                 </span>
+                {match.score_a != null && match.score_b != null && (
+                  <span className="text-[12px] tabular-nums text-muted">{match.score_a}–{match.score_b}</span>
+                )}
                 <span className="text-muted">·</span>
                 <span className="flex items-center gap-1">
-                  <span className={bWon ? 'text-[#00C853]' : 'text-foreground/60'}>{bLabel}</span>
+                  <span className={bWon ? 'text-[#00C853]' : 'text-foreground/60'}>{teamBLabel}</span>
                   <span className={`text-[10px] px-1.5 rounded font-bold ${bWon ? 'bg-[#00C853]/10 text-[#00C853]' : 'bg-red-500/10 text-red-500'}`}>
                     {bWon ? 'W' : 'L'}
                   </span>
                 </span>
               </p>
             ) : (
-              <p className="text-[14px] font-semibold text-foreground truncate">
-                {aLabel} <span className="text-muted">vs</span> {bLabel}
+              <p className="text-[14px] font-semibold text-foreground">
+                {teamALabel} <span className="text-muted">vs</span> {teamBLabel}
               </p>
             )}
             {isActive && (
               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary text-white font-bold uppercase tracking-wide flex-shrink-0">Active</span>
             )}
           </div>
+
+          {/* Score entry form lives inline below the name line. */}
+          {canRecord && trackScores && (
+            <ScoreEntry matchId={match.id} onSubmit={onRecordScore} />
+          )}
         </div>
-        {canRecord ? (
+
+        {/* Right-side actions: W/L buttons or completed-state controls. */}
+        {canRecord && !trackScores ? (
           iAmA || iAmB ? (
             <div className="flex gap-1.5 flex-shrink-0">
               <button
-                onClick={() => onRecord(match.id, meId)}
+                onClick={() => onRecord(match.id, iAmA ? match.player_a_id : match.player_b_id)}
                 className="px-3 py-1.5 rounded-lg bg-[#00C853]/10 text-[#00C853] text-[12px] font-bold border border-[#00C853]/30 active:opacity-80"
               >
-                I won
+                {isDoubles ? 'We won' : 'I won'}
               </button>
               <button
                 onClick={() => onRecord(match.id, iAmA ? match.player_b_id : match.player_a_id)}
                 className="px-3 py-1.5 rounded-lg bg-surface text-muted text-[12px] font-bold border border-border/50 active:opacity-80"
               >
-                I lost
+                {isDoubles ? 'We lost' : 'I lost'}
               </button>
             </div>
           ) : (
@@ -568,13 +681,13 @@ function MatchRowView({
                 onClick={() => onRecord(match.id, match.player_a_id)}
                 className="px-2.5 py-1.5 rounded-lg bg-surface text-foreground text-[11px] font-bold border border-border/50 active:opacity-80"
               >
-                {aLabel} won
+                {teamALabel} won
               </button>
               <button
                 onClick={() => onRecord(match.id, match.player_b_id)}
                 className="px-2.5 py-1.5 rounded-lg bg-surface text-foreground text-[11px] font-bold border border-border/50 active:opacity-80"
               >
-                {bLabel} won
+                {teamBLabel} won
               </button>
             </div>
           )
@@ -597,17 +710,53 @@ function MatchRowView({
               </button>
             )}
           </div>
-        ) : (
-          isHost && (
-            <button
-              onClick={() => onDelete(match.id)}
-              className="text-[11px] font-semibold text-danger active:opacity-70 flex-shrink-0"
-            >
-              Delete
-            </button>
-          )
-        )}
+        ) : !canRecord && isHost ? (
+          <button
+            onClick={() => onDelete(match.id)}
+            className="text-[11px] font-semibold text-danger active:opacity-70 flex-shrink-0"
+          >
+            Delete
+          </button>
+        ) : null}
       </div>
+    </div>
+  )
+}
+
+function ScoreEntry({ matchId, onSubmit }: { matchId: string; onSubmit: (matchId: string, a: number, b: number) => void }) {
+  const [a, setA] = useState('')
+  const [b, setB] = useState('')
+  const nA = parseInt(a, 10)
+  const nB = parseInt(b, 10)
+  const valid = Number.isFinite(nA) && Number.isFinite(nB) && nA !== nB && nA >= 0 && nB >= 0
+  return (
+    <div className="flex items-center gap-2 mt-2">
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={a}
+        onChange={(e) => setA(e.target.value)}
+        placeholder="—"
+        className="w-14 h-9 px-2 rounded-lg border border-border bg-background text-[14px] text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30"
+      />
+      <span className="text-muted text-[12px]">–</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={b}
+        onChange={(e) => setB(e.target.value)}
+        placeholder="—"
+        className="w-14 h-9 px-2 rounded-lg border border-border bg-background text-[14px] text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30"
+      />
+      <button
+        onClick={() => valid && onSubmit(matchId, nA, nB)}
+        disabled={!valid}
+        className="px-3 h-9 rounded-lg bg-primary text-white text-[12px] font-bold disabled:opacity-40"
+      >
+        Save
+      </button>
     </div>
   )
 }
