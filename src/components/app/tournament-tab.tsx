@@ -502,10 +502,10 @@ function MatchRowView({
   const iAmB = match.player_b_id === meId
   const canRecord = (iAmA || iAmB || isHost) && match.status === 'pending' && !hiddenForRound
   const completed = match.status === 'completed' && match.winner_id
-  const winner = completed ? players.get(match.winner_id!) : null
-  const winnerLabel = winner ? `${winner.first_name}` : ''
   const aLabel = a ? `${a.first_name}` : 'Unknown'
   const bLabel = b ? `${b.first_name}` : 'Unknown'
+  const aWon = completed && match.winner_id === match.player_a_id
+  const bWon = completed && match.winner_id === match.player_b_id
 
   if (hiddenForRound) {
     return (
@@ -519,12 +519,22 @@ function MatchRowView({
     <div className="px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {completed ? (
-              <p className="text-[14px] text-foreground">
-                <span className="font-bold">{winnerLabel}</span>
-                <span className="text-muted"> beat </span>
-                <span>{match.winner_id === match.player_a_id ? bLabel : aLabel}</span>
+              <p className="text-[14px] font-semibold flex items-center gap-1.5 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <span className={aWon ? 'text-[#00C853]' : 'text-foreground/60'}>{aLabel}</span>
+                  <span className={`text-[10px] px-1.5 rounded font-bold ${aWon ? 'bg-[#00C853]/10 text-[#00C853]' : 'bg-red-500/10 text-red-500'}`}>
+                    {aWon ? 'W' : 'L'}
+                  </span>
+                </span>
+                <span className="text-muted">·</span>
+                <span className="flex items-center gap-1">
+                  <span className={bWon ? 'text-[#00C853]' : 'text-foreground/60'}>{bLabel}</span>
+                  <span className={`text-[10px] px-1.5 rounded font-bold ${bWon ? 'bg-[#00C853]/10 text-[#00C853]' : 'bg-red-500/10 text-red-500'}`}>
+                    {bWon ? 'W' : 'L'}
+                  </span>
+                </span>
               </p>
             ) : (
               <p className="text-[14px] font-semibold text-foreground truncate">
