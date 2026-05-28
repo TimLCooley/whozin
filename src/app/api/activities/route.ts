@@ -210,6 +210,8 @@ export async function GET(req: NextRequest) {
       reminder_enabled: a.reminder_enabled,
       waitlist_enabled: a.waitlist_enabled ?? false,
       open_invite: a.open_invite ?? false,
+      tournament_mode: a.tournament_mode ?? false,
+      tournament_format: a.tournament_format ?? null,
       repeat_interval: a.repeat_interval ?? 'none',
       timezone: a.timezone,
       image_url: a.image_url,
@@ -268,6 +270,8 @@ export async function POST(req: NextRequest) {
     auto_emergency_fill,
     waitlist_enabled,
     open_invite,
+    tournament_mode,
+    tournament_format,
     repeat_interval,
     timezone,
   } = body
@@ -315,6 +319,10 @@ export async function POST(req: NextRequest) {
       auto_emergency_fill: auto_emergency_fill ?? false,
       waitlist_enabled: isPro ? (waitlist_enabled ?? false) : false,
       open_invite: open_invite ?? false,
+      tournament_mode: isPro && !!tournament_mode,
+      tournament_format: isPro && tournament_mode && (tournament_format === 'assigned' || tournament_format === 'round_robin')
+        ? tournament_format
+        : null,
       repeat_interval: isPro && ['weekly', 'biweekly', 'monthly'].includes(repeat_interval) ? repeat_interval : 'none',
       timezone: timezone || null,
       status: 'open',

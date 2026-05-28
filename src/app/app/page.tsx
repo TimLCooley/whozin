@@ -22,6 +22,8 @@ interface ActivityCard {
   reminder_enabled: boolean
   waitlist_enabled: boolean
   open_invite: boolean
+  tournament_mode: boolean
+  tournament_format: 'assigned' | 'round_robin' | null
   repeat_interval: 'none' | 'weekly' | 'biweekly' | 'monthly'
   timezone: string | null
   image_url: string | null
@@ -30,6 +32,12 @@ interface ActivityCard {
   creator_name: string
   group_name: string
   confirmed_count: number
+}
+
+function tournamentLabel(format: 'assigned' | 'round_robin' | null): string {
+  if (format === 'round_robin') return 'Tournament \u00b7 Round Robin'
+  if (format === 'assigned') return 'Tournament \u00b7 Assigned'
+  return 'Tournament'
 }
 
 function formatDate(date: string | null, time: string | null, duration?: number | null) {
@@ -286,6 +294,11 @@ export default function AppHome() {
                             <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                             <span className="text-[10px] font-bold text-white uppercase tracking-wide">Response needed</span>
                           </div>
+                        ) : activity.tournament_mode ? (
+                          <div className="flex items-center gap-1 bg-amber-500/90 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                            <span className="text-[12px] leading-none">🏆</span>
+                            <span className="text-[10px] font-bold text-white uppercase tracking-wide">{tournamentLabel(activity.tournament_format)}</span>
+                          </div>
                         ) : (
                           <div />
                         )}
@@ -492,12 +505,17 @@ export default function AppHome() {
                     /* ── Standard card (no image) ── */
                     <div className="bg-background p-4">
                   {/* Needs response banner */}
-                  {needsResponse && (
+                  {needsResponse ? (
                     <div className="flex items-center gap-1.5 mb-2.5 pb-2.5 border-b border-primary/15">
                       <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                       <span className="text-[11px] font-bold text-primary uppercase tracking-wide">Response needed</span>
                     </div>
-                  )}
+                  ) : activity.tournament_mode ? (
+                    <div className="flex items-center gap-1.5 mb-2.5 pb-2.5 border-b border-amber-300/50">
+                      <span className="text-[14px] leading-none">🏆</span>
+                      <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wide">{tournamentLabel(activity.tournament_format)}</span>
+                    </div>
+                  ) : null}
 
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-3">

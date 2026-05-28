@@ -10,6 +10,7 @@ import { ensureImage } from '@/lib/pdf-to-image'
 import { isNative } from '@/lib/capacitor'
 import { usePaywall } from '@/hooks/use-pro-status'
 import ProBadge from '@/components/ui/pro-badge'
+import { TournamentTab } from '@/components/app/tournament-tab'
 
 interface MemberInfo {
   id: string
@@ -44,6 +45,9 @@ interface ActivityDetail {
   open_invite: boolean
   waitlist_enabled: boolean
   auto_emergency_fill: boolean
+  tournament_mode: boolean
+  tournament_format: 'assigned' | 'round_robin' | null
+  tournament_started_at: string | null
   repeat_interval: 'none' | 'weekly' | 'biweekly' | 'monthly'
   priority_invite: boolean
   response_timer_minutes: number
@@ -60,7 +64,7 @@ interface ActivityDetail {
   invite_starts_at: string | null
 }
 
-type Tab = 'details' | 'group' | 'chat'
+type Tab = 'details' | 'group' | 'chat' | 'mode'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   confirmed: { label: 'Confirmed', color: 'text-green-600', icon: 'check' },
@@ -753,10 +757,14 @@ export default function ActivityDetailPage() {
   const isFull = activity.max_capacity ? confirmed.length >= activity.max_capacity : false
 
   const showGroupTab = activity.is_creator || activity.my_status === 'confirmed'
+  const showModeTab = activity.tournament_mode && (
+    activity.is_creator || (activity.my_status === 'confirmed' && !!activity.tournament_started_at)
+  )
 
   const tabs: { key: Tab; label: string; pro?: boolean }[] = [
     { key: 'details', label: 'Activity Details' },
     ...(showGroupTab ? [{ key: 'group' as Tab, label: 'Group' }] : []),
+    ...(showModeTab ? [{ key: 'mode' as Tab, label: 'Mode' }] : []),
     ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
   ]
 
@@ -1205,6 +1213,10 @@ export default function ActivityDetailPage() {
 
         {tab === 'chat' && (
           <ActivityChat activity={activity} />
+        )}
+
+        {tab === 'mode' && (
+          <TournamentTab activity={activity} confirmed={confirmed} onChange={loadActivity} />
         )}
       </div>
 
