@@ -2261,9 +2261,20 @@ function StatusSection({
   onReorder?: (fromIdx: number, toIdx: number) => void
 }) {
   const config = STATUS_CONFIG[statusKey]
+  // "In" and "On Deck" are the sections you almost always care about, so they
+  // open by default. Everything else (Inviting, Wait List, Missed, Out)
+  // starts collapsed and acts like an accordion.
+  const [open, setOpen] = useState(statusKey === 'confirmed' || statusKey === 'tbd')
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 mb-2 w-full text-left active:opacity-70 transition-opacity"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={`text-muted flex-shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
         <h3 className="text-[15px] font-bold text-foreground">{title} ({count})</h3>
         {badge && (
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeColor}`}>
@@ -2275,8 +2286,8 @@ function StatusSection({
             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
           </svg>
         )}
-      </div>
-      {members.length > 0 ? (
+      </button>
+      {!open ? null : members.length > 0 ? (
         <div className="bg-background border border-border/50 rounded-xl overflow-hidden">
           {members.map((m, i) => {
             const tapProps = onMemberTap
