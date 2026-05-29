@@ -375,18 +375,23 @@ export default function CreateActivityPage() {
     setSubmitting(true)
     try {
       if (isEditMode && editId) {
-        // PATCH the existing draft instead of creating a new activity.
+        // Save the edits to the draft...
         const res = await fetch(`/api/activities/${editId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
         const data = await res.json().catch(() => ({}))
-        if (res.ok) {
-          router.push('/app')
-        } else {
-          alert(data.error || 'Failed to save draft')
+        if (!res.ok) {
+          alert(data.error || 'Failed to save')
+          setSubmitting(false)
+          return
         }
+        // ...then approve it so the invites actually go out. The approve
+        // endpoint flips status draft → open and runs the fan-out. If the
+        // activity is already past draft, approve no-ops and we just land on it.
+        await fetch(`/api/activities/${editId}/approve`, { method: 'POST' }).catch(() => {})
+        router.push(`/app/activities/${editId}`)
       } else {
         const res = await fetch('/api/activities', {
           method: 'POST',
@@ -401,7 +406,7 @@ export default function CreateActivityPage() {
         }
       }
     } catch {
-      alert(isEditMode ? 'Failed to save draft' : 'Failed to create activity')
+      alert('Failed to create activity')
     }
     setSubmitting(false)
   }
@@ -1824,8 +1829,8 @@ export default function CreateActivityPage() {
             className="btn-primary w-full py-3.5 text-[14px] disabled:opacity-60"
           >
             {submitting
-              ? (isEditMode ? 'Saving...' : 'Creating...')
-              : (isEditMode ? 'Save Draft' : 'Create Activity')}
+              ? (isEditMode ? 'Sending...' : 'Creating...')
+              : (isEditMode ? 'Approve & Send Invites' : 'Create Activity')}
           </button>
         )}
       </div>
