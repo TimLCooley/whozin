@@ -40,13 +40,13 @@ export async function GET(req: NextRequest) {
     if (repeatingPast && repeatingPast.length > 0) {
       const nowMsForSpawn = Date.now()
       for (const a of repeatingPast) {
-        // Only spawn once the activity has actually ended (date + time + duration)
+        // Spawn the next draft once the activity has STARTED, so next week's
+        // occurrence is already queued up while this one is happening
+        // ("we playing next week?" — it's already there).
         const time = a.activity_time ?? '23:59:00'
-        const duration = a.activity_time ? (a.duration_hours ?? 2) : 0
         const startMs = Date.parse(`${a.activity_date}T${time}Z`)
         if (isNaN(startMs)) continue
-        const endMs = startMs + duration * 60 * 60 * 1000
-        if (endMs < nowMsForSpawn) {
+        if (startMs < nowMsForSpawn) {
           await spawnNextDraft(a.id)
         }
       }
