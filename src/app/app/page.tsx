@@ -25,6 +25,7 @@ interface ActivityCard {
   tournament_mode: boolean
   tournament_format: 'assigned' | 'round_robin' | null
   repeat_interval: 'none' | 'weekly' | 'biweekly' | 'monthly'
+  has_spawned_child: boolean
   timezone: string | null
   image_url: string | null
   is_creator: boolean
@@ -323,7 +324,7 @@ export default function AppHome() {
                               <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
                             </svg>
                           )}
-                          {activity.is_creator && activity.repeat_interval !== 'none' && (
+                          {activity.is_creator && activity.repeat_interval !== 'none' && !activity.has_spawned_child && (
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" aria-label="Repeats">
                               <path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" />
                             </svg>
@@ -562,7 +563,7 @@ export default function AppHome() {
                           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
                         </svg>
                       )}
-                      {activity.is_creator && activity.repeat_interval !== 'none' && (
+                      {activity.is_creator && activity.repeat_interval !== 'none' && !activity.has_spawned_child && (
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-label="Repeats">
                           <path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" />
                         </svg>

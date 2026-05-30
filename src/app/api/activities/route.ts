@@ -189,6 +189,21 @@ export async function GET(req: NextRequest) {
 
   const groupMap = new Map((groups ?? []).map((g) => [g.id, g]))
 
+  // Which of these activities have already spawned a child (recurring clone).
+  // Once a recurring parent has spawned its next draft, it's done its job —
+  // the card hides the repeat icon and the new draft carries it instead.
+  const visibleIds = visibleActivities.map((a) => a.id)
+  const spawnedParentIds = new Set<string>()
+  if (visibleIds.length > 0) {
+    const { data: children } = await admin
+      .from('whozin_activity')
+      .select('parent_activity_id')
+      .in('parent_activity_id', visibleIds)
+    for (const c of (children ?? [])) {
+      if (c.parent_activity_id) spawnedParentIds.add(c.parent_activity_id)
+    }
+  }
+
   const result = visibleActivities.map((a) => {
     const creator = creatorMap.get(a.creator_id)
     const group = groupMap.get(a.group_id)
@@ -213,6 +228,7 @@ export async function GET(req: NextRequest) {
       tournament_mode: a.tournament_mode ?? false,
       tournament_format: a.tournament_format ?? null,
       repeat_interval: a.repeat_interval ?? 'none',
+      has_spawned_child: spawnedParentIds.has(a.id),
       timezone: a.timezone,
       image_url: a.image_url,
       note: a.note,
