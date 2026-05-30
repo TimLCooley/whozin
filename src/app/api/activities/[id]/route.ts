@@ -501,11 +501,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   // Stop the recurrence chain so the sweep doesn't respawn a draft after we
-  // delete this one. We clear repeat_interval on:
-  //   • every ancestor (walk up parent_activity_id) — covers the case where
-  //     an older occurrence higher in the chain still has repeat set
-  //   • this activity itself
-  //   • any descendant drafts spawned from this activity
+  // delete this one. This only clears repeat_interval (it doesn't delete
+  // anything else) on every ancestor (walk up parent_activity_id) plus this
+  // activity — covers the case where an older occurrence higher in the chain
+  // still has repeat set and would otherwise spawn a fresh draft.
   const idsToStop = new Set<string>([id])
 
   let cursor: string | null = activity.parent_activity_id
@@ -521,24 +520,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     guard++
   }
 
-  // Direct descendant drafts of this activity (if we're deleting a live
-  // recurring occurrence from its detail page).
-  const { data: childDrafts } = await admin
-    .from('whozin_activity')
-    .select('id')
-    .eq('parent_activity_id', id)
-    .eq('status', 'draft')
-
-  for (const c of (childDrafts ?? [])) idsToStop.add(c.id)
-
   await admin
     .from('whozin_activity')
     .update({ repeat_interval: 'none' })
     .in('id', Array.from(idsToStop))
 
-  // Delete this activity plus any descendant drafts so nothing dangles.
-  const deleteIds = [id, ...((childDrafts ?? []).map((c) => c.id))]
-  await admin.from('whozin_activity').delete().in('id', deleteIds)
+  // Delete only the activity being deleted — never its clones/occurrences.
+  await admin.from('whozin_activity').delete().eq('id', id)
 
   return NextResponse.json({ ok: true })
 }
