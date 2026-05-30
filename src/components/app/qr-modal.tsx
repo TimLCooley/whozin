@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { AvatarImg } from '@/components/ui/avatar-img'
+import { getPlatform } from '@/lib/capacitor'
 
 interface QRModalProps {
   open: boolean
@@ -82,13 +83,76 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
     }
   }, [open, tab, stopScanner, groupId])
 
-  // Auto-start scanner when switching to scan tab
+  // Android uses the native ML Kit scanner (a full-screen native UI launched
+  // from a button) because its WebView getUserMedia is unreliable. iOS keeps
+  // the embedded web scanner — WKWebView handles camera natively once
+  // NSCameraUsageDescription is set. Web obviously uses the web scanner too.
+  const useNativeScanner = getPlatform() === 'android'
+
+  // Auto-start the embedded web scanner when switching to the scan tab
+  // (everywhere except Android, which waits for the button tap).
   useEffect(() => {
+    if (useNativeScanner) return
     if (open && tab === 'scan' && !scanResult && !scanError && !scanning) {
       const t = setTimeout(() => startScanner(), 150)
       return () => clearTimeout(t)
     }
   }, [open, tab, scanResult, scanError]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Native QR scan via ML Kit. Opens a full-screen native camera UI that
+   * handles its own permission prompt — no WebView getUserMedia involved. */
+  async function scanNative() {
+    setScanError('')
+    setScanResult(null)
+    setSuccessName('')
+    try {
+      const { BarcodeScanner } = await import('@capacitor-mlkit/barcode-scanning')
+
+      // Native permission flow (not the WebView's).
+      const perm = await BarcodeScanner.checkPermissions()
+      if (perm.camera !== 'granted' && perm.camera !== 'limited') {
+        const req = await BarcodeScanner.requestPermissions()
+        if (req.camera !== 'granted' && req.camera !== 'limited') {
+          setScanError('Camera access was denied. Enable it in Settings → Apps → Whozin → Permissions → Camera.')
+          return
+        }
+      }
+
+      setScanning(true)
+      let result
+      try {
+        result = await BarcodeScanner.scan()
+      } catch (err) {
+        // On Android the ML Kit module may need a one-time download.
+        const msg = (err as { message?: string })?.message ?? ''
+        if (/module/i.test(msg) && typeof BarcodeScanner.installGoogleBarcodeScannerModule === 'function') {
+          await BarcodeScanner.installGoogleBarcodeScannerModule()
+          result = await BarcodeScanner.scan()
+        } else {
+          throw err
+        }
+      } finally {
+        setScanning(false)
+      }
+
+      const raw = result?.barcodes?.[0]?.rawValue
+      if (raw) {
+        handleScanSuccess(raw)
+      } else {
+        setScanError('No QR code detected. Try again.')
+      }
+    } catch (err) {
+      setScanning(false)
+      const msg = (err as { message?: string })?.message ?? String(err)
+      // The user cancelling the native scanner shows up as an error too —
+      // treat a cancel as a no-op rather than a scary message.
+      if (/cancel/i.test(msg)) {
+        setScanError('')
+        return
+      }
+      setScanError(`Could not scan (${msg})`)
+    }
+  }
 
   function describeMediaError(err: unknown): string {
     const e = err as { name?: string; message?: string } | null
@@ -285,7 +349,9 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
         setScanResult(null)
         setTimeout(() => {
           setSuccessName('')
-          startScanner()
+          // On Android, don't auto-relaunch the full-screen scanner; the user
+          // taps "Scan QR Code" again. Elsewhere, restart the embedded preview.
+          if (!useNativeScanner) startScanner()
         }, 1500)
       } else {
         const data = await res.json()
@@ -377,16 +443,37 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
               )}
 
               {!scanResult && !scanError && (
-                <>
-                  <p className="text-[13px] text-muted text-center">
-                    Scan a friend&apos;s QR code to add them
-                  </p>
-                  <div
-                    ref={scannerRef}
-                    id="qr-reader"
-                    className="w-full rounded-xl overflow-hidden bg-black min-h-[280px]"
-                  />
-                </>
+                useNativeScanner ? (
+                  <div className="flex flex-col items-center gap-4 py-6">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2" />
+                        <rect x="7" y="7" width="10" height="10" rx="1" />
+                      </svg>
+                    </div>
+                    <p className="text-[13px] text-muted text-center">
+                      Scan a friend&apos;s QR code to add them
+                    </p>
+                    <button
+                      onClick={scanNative}
+                      disabled={scanning}
+                      className="px-6 py-3 rounded-xl bg-primary text-white font-semibold text-[14px] disabled:opacity-60"
+                    >
+                      {scanning ? 'Opening camera…' : 'Scan QR Code'}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[13px] text-muted text-center">
+                      Scan a friend&apos;s QR code to add them
+                    </p>
+                    <div
+                      ref={scannerRef}
+                      id="qr-reader"
+                      className="w-full rounded-xl overflow-hidden bg-black min-h-[280px]"
+                    />
+                  </>
+                )
               )}
 
               {scanError && (
@@ -399,10 +486,10 @@ export function QRModal({ open, onClose, userId, userName, groupId, groupName }:
                   </div>
                   <p className="text-[14px] text-white font-medium">{scanError}</p>
                   <button
-                    onClick={requestCameraPermission}
+                    onClick={() => { setScanError(''); if (useNativeScanner) scanNative(); else requestCameraPermission() }}
                     className="mt-3 px-5 py-2.5 rounded-xl bg-primary text-white font-semibold text-[13px]"
                   >
-                    Allow Permissions
+                    {useNativeScanner ? 'Try Again' : 'Allow Permissions'}
                   </button>
                 </div>
               )}
