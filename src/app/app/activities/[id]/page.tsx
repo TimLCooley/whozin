@@ -2261,10 +2261,10 @@ function StatusSection({
   onReorder?: (fromIdx: number, toIdx: number) => void
 }) {
   const config = STATUS_CONFIG[statusKey]
-  // "In" and "On Deck" are the sections you almost always care about, so they
-  // open by default. Everything else (Inviting, Wait List, Missed, Out)
-  // starts collapsed and acts like an accordion.
-  const [open, setOpen] = useState(statusKey === 'confirmed' || statusKey === 'tbd')
+  // "In" and "Inviting" are the sections you almost always care about, so they
+  // open by default. Everything else (On Deck, Wait List, Missed, Out) starts
+  // collapsed and acts like an accordion.
+  const [open, setOpen] = useState(statusKey === 'confirmed' || statusKey === 'waiting')
   return (
     <div>
       <button
