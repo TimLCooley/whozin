@@ -492,7 +492,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, status, parent_activity_id')
+    .select('creator_id, status, parent_activity_id, repeat_interval')
     .eq('id', id)
     .single()
 
@@ -500,16 +500,45 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
-  // If a draft is being discarded, also stop the parent's repeat chain so
-  // the sweep doesn't immediately respawn a new draft from the same parent.
-  if (activity.status === 'draft' && activity.parent_activity_id) {
-    await admin
+  // Stop the recurrence chain so the sweep doesn't respawn a draft after we
+  // delete this one. We clear repeat_interval on:
+  //   • every ancestor (walk up parent_activity_id) — covers the case where
+  //     an older occurrence higher in the chain still has repeat set
+  //   • this activity itself
+  //   • any descendant drafts spawned from this activity
+  const idsToStop = new Set<string>([id])
+
+  let cursor: string | null = activity.parent_activity_id
+  let guard = 0
+  while (cursor && guard < 50) {
+    idsToStop.add(cursor)
+    const { data: anc } = await admin
       .from('whozin_activity')
-      .update({ repeat_interval: 'none' })
-      .eq('id', activity.parent_activity_id)
+      .select('parent_activity_id')
+      .eq('id', cursor)
+      .single()
+    cursor = anc?.parent_activity_id ?? null
+    guard++
   }
 
-  await admin.from('whozin_activity').delete().eq('id', id)
+  // Direct descendant drafts of this activity (if we're deleting a live
+  // recurring occurrence from its detail page).
+  const { data: childDrafts } = await admin
+    .from('whozin_activity')
+    .select('id')
+    .eq('parent_activity_id', id)
+    .eq('status', 'draft')
+
+  for (const c of (childDrafts ?? [])) idsToStop.add(c.id)
+
+  await admin
+    .from('whozin_activity')
+    .update({ repeat_interval: 'none' })
+    .in('id', Array.from(idsToStop))
+
+  // Delete this activity plus any descendant drafts so nothing dangles.
+  const deleteIds = [id, ...((childDrafts ?? []).map((c) => c.id))]
+  await admin.from('whozin_activity').delete().in('id', deleteIds)
 
   return NextResponse.json({ ok: true })
 }
