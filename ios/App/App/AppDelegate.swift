@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
 // Import plugin modules so the linker includes them in the binary.
 // Without these, NSClassFromString() can't find plugin classes at runtime
@@ -45,6 +46,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        // Clear the app icon badge whenever the app comes to the foreground.
+        // Every APNs push we send carries badge: 1, and iOS keeps that badge
+        // on the icon until the app explicitly resets it (unlike Android,
+        // which clears on open). Also clear delivered notifications from the
+        // Notification Center so the count doesn't re-accumulate.
+        clearBadge()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+    }
+
+    private func clearBadge() {
+        if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(0)
+        } else {
+            UIApplication.shared.applicationIconBadgeNumber = 0
+        }
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
