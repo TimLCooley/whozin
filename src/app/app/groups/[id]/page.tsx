@@ -28,6 +28,7 @@ interface GroupDetail {
   creator_id: string
   chat_enabled: boolean
   members_visible: boolean
+  shareable: boolean
   is_owner: boolean
   current_user_id: string
   creator_name: string | null
@@ -83,6 +84,7 @@ export default function GroupDetailPage() {
   const [groupName, setGroupName] = useState('')
   const [chatEnabled, setChatEnabled] = useState(false)
   const [membersVisible, setMembersVisible] = useState(true)
+  const [shareable, setShareable] = useState(false)
   const [saving, setSaving] = useState(false)
   const nameTimeout = useRef<ReturnType<typeof setTimeout>>(null)
 
@@ -137,6 +139,7 @@ export default function GroupDetailPage() {
       setGroupName(data.name)
       setChatEnabled(data.chat_enabled)
       setMembersVisible(data.members_visible ?? true)
+      setShareable(data.shareable ?? false)
       // Default tab: use URL param if present, else host sees details, non-host sees chat
       if (tab === null) {
         const urlTab = new URLSearchParams(window.location.search).get('tab') as Tab
@@ -165,17 +168,23 @@ export default function GroupDetailPage() {
     }, 800)
   }
 
-  async function saveGroupSettings(updates: { chat_enabled?: boolean; members_visible?: boolean }) {
+  async function saveGroupSettings(updates: { chat_enabled?: boolean; members_visible?: boolean; shareable?: boolean }) {
     const payload = {
       name: groupName,
       chat_enabled: updates.chat_enabled ?? chatEnabled,
       members_visible: updates.members_visible ?? membersVisible,
+      shareable: updates.shareable ?? shareable,
     }
     await fetch(`/api/groups/${groupId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
+  }
+
+  async function handleShareableToggle(value: boolean) {
+    setShareable(value)
+    saveGroupSettings({ shareable: value })
   }
 
   async function handleChatToggle(enabled: boolean) {
@@ -696,6 +705,25 @@ export default function GroupDetailPage() {
                 >
                   <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
                     membersVisible ? 'translate-x-[18px]' : ''
+                  }`} />
+                </button>
+              </div>
+
+              <div className="flex items-start justify-between gap-3 mt-3">
+                <span className="text-[13px] text-foreground">
+                  Shared group
+                  <span className="block text-[11px] text-muted mt-0.5">Let members host activities with this group and copy it as their own.</span>
+                </span>
+                <button
+                  role="switch"
+                  aria-checked={shareable}
+                  onClick={() => handleShareableToggle(!shareable)}
+                  className={`relative w-[46px] h-[28px] rounded-full transition-colors duration-200 flex-shrink-0 mt-0.5 ${
+                    shareable ? 'bg-primary' : 'bg-[#d5d9e2]'
+                  }`}
+                >
+                  <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                    shareable ? 'translate-x-[18px]' : ''
                   }`} />
                 </button>
               </div>

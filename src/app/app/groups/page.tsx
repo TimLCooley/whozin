@@ -11,6 +11,7 @@ interface GroupItem {
   name: string
   creator_id: string
   chat_enabled: boolean
+  shareable: boolean
   member_count: number
   is_owner: boolean
   has_unread_chat: boolean
@@ -23,6 +24,25 @@ export default function GroupsListPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('my')
   const [creating, setCreating] = useState(false)
+  const [copyingId, setCopyingId] = useState<string | null>(null)
+
+  async function handleCopyGroup(e: React.MouseEvent, groupId: string) {
+    e.stopPropagation()
+    if (copyingId) return
+    setCopyingId(groupId)
+    try {
+      const res = await fetch(`/api/groups/${groupId}/copy`, { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.id) {
+        router.push(`/app/groups/${data.id}`)
+      } else {
+        alert(data?.error ?? 'Failed to copy group')
+      }
+    } catch {
+      alert('Failed to copy group')
+    }
+    setCopyingId(null)
+  }
 
   const loadGroups = useCallback(async () => {
     const res = await fetch('/api/groups')
@@ -149,10 +169,26 @@ export default function GroupsListPage() {
                 </div>
 
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-[14px] font-semibold text-foreground truncate">{group.name}</p>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className="text-[14px] font-semibold text-foreground truncate">{group.name}</p>
+                    {group.shareable && (
+                      <span className="text-[9px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-1.5 py-0.5 rounded-full flex-shrink-0">Shared</span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {!group.is_owner && group.shareable && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => handleCopyGroup(e, group.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCopyGroup(e as unknown as React.MouseEvent, group.id) } }}
+                      className="text-[11px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-lg active:opacity-70 transition-opacity cursor-pointer"
+                    >
+                      {copyingId === group.id ? 'Copying…' : 'Copy'}
+                    </span>
+                  )}
                   {group.chat_enabled && (
                     group.has_unread_chat ? (
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="#4285F4" stroke="none">

@@ -299,6 +299,28 @@ export async function POST(req: NextRequest) {
   if (!group_id) return NextResponse.json({ error: 'Group is required' }, { status: 400 })
   if (!activity_name?.trim()) return NextResponse.json({ error: 'Activity name is required' }, { status: 400 })
 
+  // You can host with a group you own, or with a shareable group you belong to.
+  const { data: targetGroup } = await admin
+    .from('whozin_groups')
+    .select('creator_id, shareable')
+    .eq('id', group_id)
+    .single()
+  if (!targetGroup) return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+  if (targetGroup.creator_id !== whozinUser.id) {
+    if (!targetGroup.shareable) {
+      return NextResponse.json({ error: 'You can only host with your own groups' }, { status: 403 })
+    }
+    const { data: membership } = await admin
+      .from('whozin_group_members')
+      .select('id')
+      .eq('group_id', group_id)
+      .eq('user_id', whozinUser.id)
+      .maybeSingle()
+    if (!membership) {
+      return NextResponse.json({ error: 'You\u2019re not a member of this group' }, { status: 403 })
+    }
+  }
+
   const isPro = whozinUser.membership_tier === 'pro'
   const isTestUser = whozinUser.phone?.includes('999')
 

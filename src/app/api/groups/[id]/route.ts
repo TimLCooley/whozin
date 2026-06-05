@@ -90,16 +90,35 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = getAdminClient()
+
+  const { data: whozinUser } = await admin
+    .from('whozin_users')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .single()
+  if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  // Only the owner can change group settings.
+  const { data: group } = await admin
+    .from('whozin_groups')
+    .select('creator_id')
+    .eq('id', id)
+    .single()
+  if (!group || group.creator_id !== whozinUser.id) {
+    return NextResponse.json({ error: 'Only the group owner can change settings' }, { status: 403 })
+  }
+
   const body = await req.json()
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (body.name !== undefined) updates.name = body.name
+  if (body.chat_enabled !== undefined) updates.chat_enabled = body.chat_enabled
+  if (body.members_visible !== undefined) updates.members_visible = body.members_visible
+  if (body.shareable !== undefined) updates.shareable = !!body.shareable
 
   const { error } = await admin
     .from('whozin_groups')
-    .update({
-      name: body.name,
-      chat_enabled: body.chat_enabled,
-      members_visible: body.members_visible,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

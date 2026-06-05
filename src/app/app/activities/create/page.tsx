@@ -119,12 +119,13 @@ export default function CreateActivityPage() {
     groupsPromiseRef.current = fetch('/api/groups')
       .then((r) => r.json())
       .then((data): GroupOption[] => {
-        const owned = Array.isArray(data)
-          ? data.filter((g: GroupOption & { is_owner: boolean }) => g.is_owner)
+        // You can host with groups you own, plus any shareable group you're in.
+        const usable = Array.isArray(data)
+          ? data.filter((g: GroupOption & { is_owner: boolean; shareable?: boolean }) => g.is_owner || g.shareable)
           : []
-        setGroups(owned)
+        setGroups(usable)
         setGroupsLoading(false)
-        return owned
+        return usable
       })
       .catch(() => {
         setGroupsLoading(false)

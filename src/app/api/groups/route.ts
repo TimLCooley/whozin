@@ -59,6 +59,7 @@ export async function GET() {
     name: g.name,
     creator_id: g.creator_id,
     chat_enabled: g.chat_enabled,
+    shareable: g.shareable ?? false,
     member_count: g.whozin_group_members?.[0]?.count ?? 0,
     is_owner: g.creator_id === userId,
     has_unread_chat: unreadGroupIds.has(g.id),
