@@ -168,6 +168,28 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
     },
   },
   {
+    id: 'followup_invite',
+    name: 'Follow-up Invite',
+    category: 'Activities',
+    trigger: 'Last-call nudge ~24h before an activity that still has open spots, sent to anyone who hasn\u2019t replied IN or OUT',
+    variables: [
+      { key: 'inviter_name', description: 'First name of the host', example: 'Sarah', required: true },
+      { key: 'activity_name', description: 'Activity title', example: 'Pickleball at Memorial', required: true },
+      { key: 'date_time', description: 'Formatted date/time of the activity', example: 'Sat May 10 at 6 PM' },
+    ],
+    channels: {
+      sms: {
+        body: 'Last call! {{inviter_name}}\u2019s {{activity_name}} is {{date_time}} and still has spots. Reply IN to join or OUT to pass.',
+        call_sites: ['src/app/api/cron/process-reminders/route.ts'],
+      },
+      push: {
+        title: 'Last call: {{activity_name}}',
+        body: 'Still has room {{date_time}} — tap to join!',
+        call_sites: ['src/app/api/cron/process-reminders/route.ts'],
+      },
+    },
+  },
+  {
     id: 'activity_confirmed',
     name: 'Spot Confirmed',
     category: 'Activities',

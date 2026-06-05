@@ -95,6 +95,7 @@ export default function CreateActivityPage() {
   const [responseTimer, setResponseTimer] = useState(5)
   const [chatEnabled, setChatEnabled] = useState(false)
   const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
+  const [followupInvite, setFollowupInvite] = useState(false)
   const [waitlistEnabled, setWaitlistEnabled] = useState(false)
   const [openInvite, setOpenInvite] = useState(false)
   const [tournamentMode, setTournamentMode] = useState(false)
@@ -178,6 +179,7 @@ export default function CreateActivityPage() {
         setReminderEnabled(data.reminder_enabled ?? false)
         setChatEnabled(data.chat_enabled ?? false)
         setAutoEmergencyFill(data.auto_emergency_fill ?? false)
+        setFollowupInvite(data.followup_invite_enabled ?? false)
         setWaitlistEnabled(data.waitlist_enabled ?? false)
         if (['weekly', 'biweekly', 'monthly'].includes(data.repeat_interval)) {
           setRepeatInterval(data.repeat_interval)
@@ -360,6 +362,7 @@ export default function CreateActivityPage() {
       chat_enabled: chatEnabled,
       reminder_enabled: reminderEnabled,
       auto_emergency_fill: autoEmergencyFill,
+      followup_invite_enabled: followupInvite,
       waitlist_enabled: waitlistEnabled,
       open_invite: openInvite,
       tournament_mode: tournamentMode,
@@ -1667,6 +1670,25 @@ export default function CreateActivityPage() {
                 </p>
               </FieldCard>
             )}
+
+            {/* Follow-up Invites (Pro) */}
+            <FieldCard>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-foreground">Follow-up Invites</span>
+                  <ProBadge />
+                </div>
+                <Toggle
+                  checked={followupInvite}
+                  onChange={(v) => { if (v && !requirePro()) return; setFollowupInvite(v) }}
+                />
+              </div>
+              <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                {isPro
+                  ? '24 hours before the event, if there are still open spots, anyone who hasn\u2019t replied IN or OUT gets one last nudge to join.'
+                  : 'Upgrade to Pro to send a last-call nudge 24 hours before the event to anyone who hasn\u2019t responded.'}
+              </p>
+            </FieldCard>
 
             {/* Wait List (Pro) */}
             {!isAllMode && (

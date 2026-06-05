@@ -62,6 +62,14 @@ function resolveRecipient(toPhone: string) {
   return { actualTo, testNote }
 }
 
+/** Send an already-rendered SMS body to a recipient, applying the test-number
+ * remap + note. Use when the caller has rendered the template itself (e.g. the
+ * follow-up cron renders once and sends to many). */
+export async function sendActivitySms(toPhone: string, body: string, mediaUrl?: string) {
+  const { actualTo, testNote } = resolveRecipient(toPhone)
+  return sendSms(actualTo, body + testNote, mediaUrl)
+}
+
 /** Send a group invite SMS */
 export async function sendSmsInvite(toPhone: string, inviterName: string) {
   const { actualTo, testNote } = resolveRecipient(toPhone)

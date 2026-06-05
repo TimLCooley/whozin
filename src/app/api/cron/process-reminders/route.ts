@@ -142,5 +142,142 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent })
+  // ── Follow-up invites: ~24h before, nudge non-responders if not full ──────
+  const followupSent = await processFollowupInvites(admin, now)
+
+  return NextResponse.json({ ok: true, sent, followupSent })
+}
+
+/**
+ * Last-call follow-up. For activities with followup_invite_enabled that are
+ * still open (not full) and ~24h out, message everyone who hasn't decided
+ * (member status not confirmed/out) and give them a fresh pending invite so
+ * they can reply IN by SMS or in-app. Deduped per activity via an alert key.
+ */
+async function processFollowupInvites(
+  admin: ReturnType<typeof getAdminClient>,
+  now: Date,
+): Promise<number> {
+  let sent = 0
+
+  const { data: activities } = await admin
+    .from('whozin_activity')
+    .select('id, activity_name, activity_date, activity_time, timezone, max_capacity, creator_id, image_url')
+    .eq('followup_invite_enabled', true)
+    .eq('status', 'open') // 'full' is excluded by definition
+    .not('activity_date', 'is', null)
+    .not('activity_time', 'is', null)
+
+  if (!activities?.length) return 0
+
+  for (const activity of activities) {
+    const activityDateTime = parseActivityTime(activity.activity_date, activity.activity_time, activity.timezone)
+    if (isNaN(activityDateTime.getTime())) continue
+
+    const minutesUntil = (activityDateTime.getTime() - now.getTime()) / (1000 * 60)
+    // Fire in the 24h window: between 24h and 24h-5min before start.
+    if (!(minutesUntil <= 24 * 60 && minutesUntil > 24 * 60 - 5)) continue
+
+    // Dedupe — only one follow-up blast per activity.
+    const followupKey = `followup_${activity.id}`
+    const { data: alreadySent } = await admin
+      .from('whozin_alerts')
+      .select('id')
+      .eq('meta->>followup_key', followupKey)
+      .limit(1)
+      .maybeSingle()
+    if (alreadySent) continue
+
+    // Double-check there's still room.
+    const { count: confirmedCount } = await admin
+      .from('whozin_activity_member')
+      .select('id', { count: 'exact', head: true })
+      .eq('activity_id', activity.id)
+      .eq('status', 'confirmed')
+    const confirmed = confirmedCount ?? 0
+    if (activity.max_capacity && confirmed >= activity.max_capacity) continue
+
+    // Non-responders: everyone who isn't confirmed (in) or out.
+    const { data: members } = await admin
+      .from('whozin_activity_member')
+      .select('user_id, whozin_users!inner(phone, country_code)')
+      .eq('activity_id', activity.id)
+      .not('status', 'in', '(confirmed,out)')
+
+    if (!members?.length) continue
+
+    const { data: host } = await admin
+      .from('whozin_users')
+      .select('first_name')
+      .eq('id', activity.creator_id)
+      .single()
+    const hostName = host?.first_name ?? 'Someone'
+
+    let dateTimeStr = ''
+    if (activity.activity_date) {
+      const d = new Date(activity.activity_date + 'T00:00:00')
+      dateTimeStr = d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+      if (activity.activity_time) {
+        const [h, m] = activity.activity_time.split(':')
+        const hour = parseInt(h)
+        const ampm = hour >= 12 ? 'pm' : 'am'
+        const h12 = hour % 12 || 12
+        dateTimeStr += ` at ${h12}:${m} ${ampm}`
+      }
+    }
+
+    const { body: smsBody } = await renderTemplate('followup_invite', 'sms', {
+      inviter_name: hostName,
+      activity_name: activity.activity_name,
+      date_time: dateTimeStr || 'TBD',
+    })
+    const { title: pushTitle, body: pushBody } = await renderTemplate('followup_invite', 'push', {
+      inviter_name: hostName,
+      activity_name: activity.activity_name,
+      date_time: dateTimeStr || 'TBD',
+    })
+
+    const { sendActivitySms } = await import('@/lib/sms')
+
+    for (const member of members) {
+      // Fresh pending invite so an SMS "IN" reply maps to this activity.
+      await admin.from('whozin_invite').insert({
+        activity_id: activity.id,
+        user_id: member.user_id,
+        batch_number: 998, // follow-up sentinel
+        status: 'pending',
+        sent_at: now.toISOString(),
+        expires_at: activityDateTime.toISOString(),
+      })
+
+      await admin.from('whozin_alerts').insert({
+        user_id: member.user_id,
+        type: 'activity_invite',
+        title: pushTitle ?? `Last call: ${activity.activity_name}`,
+        body: pushBody,
+        link: `/app/activities/${activity.id}`,
+        meta: { followup_key: followupKey },
+      })
+
+      sendPush({
+        userId: member.user_id,
+        title: pushTitle ?? `Last call: ${activity.activity_name}`,
+        body: pushBody ?? 'Still has room — tap to join!',
+        link: `/app/activities/${activity.id}`,
+      }).catch(() => {})
+
+      const u = (member as unknown as { whozin_users?: { phone?: string; country_code?: string } }).whozin_users
+      if (u?.phone) {
+        ;(async () => {
+          if (await hasReachablePush(member.user_id)) return
+          const phone = u.phone!.startsWith('+') ? u.phone! : `+${u.country_code ?? '1'}${u.phone}`
+          sendActivitySms(phone, smsBody, activity.image_url || undefined).catch(() => {})
+        })().catch(() => {})
+      }
+
+      sent++
+    }
+  }
+
+  return sent
 }
