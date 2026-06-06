@@ -65,26 +65,25 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: error?.message ?? 'Failed to copy group' }, { status: 500 })
   }
 
-  // Copy the source roster, preserving priority order. Ensure the caller is in
-  // the new group even if they somehow weren't on the source roster.
+  // Copy the source roster. The copier must sit at priority_order 0 — the
+  // group detail UI treats the first member (index 0) as the owner, so the
+  // new owner has to lead the roster. Everyone else follows in their original
+  // order, shifted down by one.
   const { data: sourceMembers } = await admin
     .from('whozin_group_members')
     .select('user_id, priority_order')
     .eq('group_id', id)
     .order('priority_order', { ascending: true })
 
-  const memberRows = new Map<string, number>()
-  for (const m of (sourceMembers ?? [])) memberRows.set(m.user_id, m.priority_order)
-  if (!memberRows.has(whozinUser.id)) memberRows.set(whozinUser.id, 0)
+  const others = (sourceMembers ?? [])
+    .filter((m) => m.user_id !== whozinUser.id)
+    .sort((a, b) => a.priority_order - b.priority_order)
 
-  const inserts = Array.from(memberRows.entries()).map(([userId, order]) => ({
-    group_id: newGroup.id,
-    user_id: userId,
-    priority_order: order,
-  }))
-  if (inserts.length > 0) {
-    await admin.from('whozin_group_members').insert(inserts)
-  }
+  const inserts = [
+    { group_id: newGroup.id, user_id: whozinUser.id, priority_order: 0 },
+    ...others.map((m, i) => ({ group_id: newGroup.id, user_id: m.user_id, priority_order: i + 1 })),
+  ]
+  await admin.from('whozin_group_members').insert(inserts)
 
   return NextResponse.json({ id: newGroup.id })
 }
