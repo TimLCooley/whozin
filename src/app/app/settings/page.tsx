@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { AppHeader } from '@/components/app/header'
 import { AvatarCropModal } from '@/components/ui/avatar-crop-modal'
 
-type SectionKey = 'personal' | 'membership' | 'permissions' | 'privacy' | 'blocked'
+type SectionKey = 'personal' | 'membership' | 'ratings' | 'permissions' | 'privacy' | 'blocked'
 
 type CameraPermissionState = 'granted' | 'denied' | 'prompt' | 'unknown'
 
@@ -24,6 +24,8 @@ export default function SettingsPage() {
   const [membership, setMembership] = useState('free')
   const [pushNotifications, setPushNotifications] = useState(false)
   const [cameraPermission, setCameraPermission] = useState<CameraPermissionState>('unknown')
+  const [pickleballRating, setPickleballRating] = useState('')
+  const [golfHandicap, setGolfHandicap] = useState('')
   const [hideFromSearch, setHideFromSearch] = useState(false)
   const [showPhone, setShowPhone] = useState(false)
   const [showLastName, setShowLastName] = useState(true)
@@ -46,6 +48,7 @@ export default function SettingsPage() {
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     personal: true,
     membership: true,
+    ratings: false,
     permissions: true,
     privacy: true,
     blocked: false,
@@ -124,6 +127,8 @@ export default function SettingsPage() {
           setHideFromSearch(profile.hide_from_invites ?? false)
           setShowPhone(profile.show_phone ?? false)
           setShowLastName(profile.show_last_name ?? true)
+          setPickleballRating(profile.pickleball_rating != null ? String(profile.pickleball_rating) : '')
+          setGolfHandicap(profile.golf_handicap != null ? String(profile.golf_handicap) : '')
           setProfileLoaded(true)
         }
       })
@@ -390,6 +395,52 @@ export default function SettingsPage() {
                 </button>
               </>
             )}
+          </div>
+        </Section>
+
+        {/* Ratings */}
+        <Section
+          title="Ratings"
+          open={openSections.ratings}
+          onToggle={() => toggleSection('ratings')}
+          delay={2}
+        >
+          <div className="space-y-4">
+            <p className="text-[12px] text-muted leading-relaxed">
+              Optional. Used to balance teams in skill-matched tournaments. Leave blank if you don&apos;t have one.
+            </p>
+            <div>
+              <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Pickleball rating (DUPR)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.25"
+                min={1}
+                max={8}
+                value={pickleballRating}
+                onChange={(e) => setPickleballRating(e.target.value)}
+                onBlur={() => saveProfile({ pickleball_rating: pickleballRating === '' ? null : Number(pickleballRating) })}
+                placeholder="e.g. 3.75"
+                className="w-full h-11 px-4 rounded-xl border border-border bg-background text-[15px] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <p className="text-[11px] text-muted mt-1">Typical range 2.0–8.0.</p>
+            </div>
+            <div>
+              <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Golf handicap</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                min={-10}
+                max={54}
+                value={golfHandicap}
+                onChange={(e) => setGolfHandicap(e.target.value)}
+                onBlur={() => saveProfile({ golf_handicap: golfHandicap === '' ? null : Number(golfHandicap) })}
+                placeholder="e.g. 12.4"
+                className="w-full h-11 px-4 rounded-xl border border-border bg-background text-[15px] placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <p className="text-[11px] text-muted mt-1">Lower is better; can be negative for plus handicaps.</p>
+            </div>
           </div>
         </Section>
 
