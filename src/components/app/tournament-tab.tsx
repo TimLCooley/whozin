@@ -87,8 +87,8 @@ export function TournamentTab({
 
   const playerIds = useMemo(() => confirmed.map((m) => m.user_id), [confirmed])
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const refresh = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true)
     const res = await fetch(`/api/activities/${activity.id}/tournament/matches`)
     if (res.ok) {
       const data = await res.json()
@@ -99,8 +99,21 @@ export function TournamentTab({
       setPartnerRotation(!!data.tournament_partner_rotation)
       setTeams(Array.isArray(data.tournament_teams) ? data.tournament_teams : [])
     }
-    setLoading(false)
+    if (!silent) setLoading(false)
   }, [activity.id])
+
+  // Keep results/standings live: poll every 7s while mounted, and refresh
+  // immediately when the app regains focus. Silent so it doesn't flicker the
+  // loading state or disrupt an in-progress score entry.
+  useEffect(() => {
+    const interval = setInterval(() => { refresh({ silent: true }) }, 7000)
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh({ silent: true }) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refresh])
 
   async function updateSetting(
     field: 'tournament_track_scores' | 'tournament_doubles' | 'tournament_partner_rotation',
