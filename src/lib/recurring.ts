@@ -37,6 +37,27 @@ export function nextDateFor(date: string, interval: RepeatInterval): string | nu
 }
 
 /**
+ * Advance `date` by `interval` at least once, then keep advancing until the
+ * result is no earlier than `todayUtc`. Always lands on a future-or-today
+ * occurrence. Returns null for a non-recurring interval. Used for spawning the
+ * next draft, rolling a missed draft forward, and the host "skip" action.
+ */
+export function nextFutureDate(
+  date: string,
+  interval: RepeatInterval,
+  todayUtc: string,
+): string | null {
+  let d = nextDateFor(date, interval)
+  let guard = 0
+  // Guard caps the loop well past any realistic gap (≈ years of weeklies).
+  while (d && d < todayUtc && guard < 1000) {
+    d = nextDateFor(d, interval)
+    guard++
+  }
+  return d
+}
+
+/**
  * Spawn the next-occurrence draft for a parent activity. Idempotent:
  * returns null if the parent has no date, no repeat interval, or already
  * has a child draft.
@@ -54,7 +75,10 @@ export async function spawnNextDraft(parentId: string): Promise<string | null> {
   if (!parent.activity_date) return null
   if (parent.repeat_interval === 'none' || !parent.repeat_interval) return null
 
-  const nextDate = nextDateFor(parent.activity_date, parent.repeat_interval as RepeatInterval)
+  // Always queue the next occurrence in the future, even if the parent is
+  // several intervals stale (host hasn't opened the app in a while).
+  const todayUtc = new Date().toISOString().split('T')[0]
+  const nextDate = nextFutureDate(parent.activity_date, parent.repeat_interval as RepeatInterval, todayUtc)
   if (!nextDate) return null
 
   // Bail if any child already exists for this parent (draft OR already
@@ -118,36 +142,42 @@ export async function spawnNextDraft(parentId: string): Promise<string | null> {
 }
 
 /**
- * Delete any of the user's drafts whose event date has already passed
- * (host never approved before the date). Stops the chain — also marks each
- * deleted draft's parent as 'none' repeat so the sweep doesn't immediately
- * respawn another stale draft from the same parent.
+ * Handle the user's drafts whose event date has already passed (host never
+ * approved before the date).
+ *
+ * For a *recurring* draft we roll it forward to the next future occurrence
+ * rather than deleting it — a single missed week must NOT silently kill the
+ * whole series (that previously looked like "the recurring activity got
+ * deleted"). The host can still Discard a draft to stop the chain, or set the
+ * repeat to "none".
+ *
+ * A draft with no repeat interval is a true orphan (shouldn't normally happen,
+ * since drafts are only spawned for recurring activities) — delete it.
  */
 export async function cleanupStaleDrafts(userId: string, todayUtc: string): Promise<void> {
   const admin = getAdminClient()
 
   const { data: stale } = await admin
     .from('whozin_activity')
-    .select('id, parent_activity_id')
+    .select('id, activity_date, repeat_interval')
     .eq('creator_id', userId)
     .eq('status', 'draft')
     .lt('activity_date', todayUtc)
 
   if (!stale || stale.length === 0) return
 
-  const parentIds = stale
-    .map((s) => s.parent_activity_id)
-    .filter((p): p is string => !!p)
-
-  if (parentIds.length > 0) {
-    await admin
-      .from('whozin_activity')
-      .update({ repeat_interval: 'none' })
-      .in('id', parentIds)
+  for (const d of stale) {
+    const interval = (d.repeat_interval ?? 'none') as RepeatInterval
+    if (interval !== 'none' && d.activity_date) {
+      const next = nextFutureDate(d.activity_date, interval, todayUtc)
+      if (next) {
+        await admin
+          .from('whozin_activity')
+          .update({ activity_date: next })
+          .eq('id', d.id)
+        continue
+      }
+    }
+    await admin.from('whozin_activity').delete().eq('id', d.id)
   }
-
-  await admin
-    .from('whozin_activity')
-    .delete()
-    .in('id', stale.map((s) => s.id))
 }

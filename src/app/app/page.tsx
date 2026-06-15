@@ -192,6 +192,21 @@ export default function AppHome() {
     setDraftActioning(null)
   }
 
+  // Skip this occurrence: push the draft to the next interval. The series stays
+  // alive — the occurrence just comes back one cycle later.
+  async function handleSkipDraft(activityId: string) {
+    if (draftActioning) return
+    setDraftActioning(activityId)
+    const res = await fetch(`/api/activities/${activityId}/skip`, { method: 'POST' })
+    if (res.ok) {
+      await loadActivities()
+    } else {
+      const data = await res.json().catch(() => null)
+      alert(data?.error ?? 'Failed to skip')
+    }
+    setDraftActioning(null)
+  }
+
   return (
     <div className="relative h-full flex flex-col bg-surface overflow-hidden">
       <AppHeader />
@@ -413,6 +428,15 @@ export default function AppHome() {
                             >
                               Discard
                             </button>
+                            {activity.repeat_interval !== 'none' && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleSkipDraft(activity.id) }}
+                                disabled={draftBusy}
+                                className="px-4 py-2.5 rounded-lg bg-white/20 backdrop-blur-sm text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-60"
+                              >
+                                Skip
+                              </button>
+                            )}
                             <button
                               onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
                               disabled={draftBusy}
@@ -635,6 +659,15 @@ export default function AppHome() {
                       >
                         Discard
                       </button>
+                      {activity.repeat_interval !== 'none' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleSkipDraft(activity.id) }}
+                          disabled={draftBusy}
+                          className="px-4 py-2.5 rounded-lg bg-surface text-foreground text-[13px] font-bold border border-border/50 active:opacity-80 transition-opacity disabled:opacity-60"
+                        >
+                          Skip
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleApproveDraft(activity.id) }}
                         disabled={draftBusy}
