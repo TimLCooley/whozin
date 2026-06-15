@@ -101,7 +101,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Drop into the slot and rebuild.
   const next = teams.map((t) => t.slice() as DoublesTeam)
   next[team_index][slot_index] = targetUserId!
-  await rebuildDoublesFromTeams(id, next)
+  // Filling a slot only adds a newly-complete team's matches; existing games
+  // keep their recorded results.
+  await rebuildDoublesFromTeams(id, next, { preserveResults: true })
 
   return NextResponse.json({ teams: next, user_id: targetUserId })
 }

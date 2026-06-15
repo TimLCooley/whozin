@@ -574,7 +574,7 @@ export function TournamentTab({
       {/* My Match */}
       {subTab === 'my' && (
         myAllMatches.length === 0 ? (
-          <EmptyCard text="You\u2019re not in any matches yet." />
+          <EmptyCard text="You’re not in any matches yet." />
         ) : (
           <div className="space-y-3">
             {myCurrentRoundMatch ? (

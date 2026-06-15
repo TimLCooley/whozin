@@ -99,6 +99,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const body = await req.json()
   let teams: DoublesTeam[]
+  // reroll / skill_match genuinely change the matchups, so they wipe results.
+  // add_team / set only add or shuffle slots — keep results for unchanged games.
+  let preserveResults = false
 
   if (body.action === 'reroll') {
     if (roster.size < 4) {
@@ -120,6 +123,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .single()
     const current: DoublesTeam[] = Array.isArray(act?.tournament_teams) ? act!.tournament_teams : []
     teams = [...current, [null, null]]
+    preserveResults = true
   } else if (body.action === 'set') {
     const raw = body.teams
     if (!Array.isArray(raw)) {
@@ -153,10 +157,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
     teams = parsed
+    preserveResults = true
   } else {
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   }
 
-  await rebuildDoublesFromTeams(id, teams)
+  await rebuildDoublesFromTeams(id, teams, { preserveResults })
   return NextResponse.json({ teams })
 }
