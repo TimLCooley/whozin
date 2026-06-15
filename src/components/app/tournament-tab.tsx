@@ -631,7 +631,7 @@ export function TournamentTab({
           {activity.is_creator && (
             <div className="space-y-2">
               <p className="text-[12px] text-muted">
-                {swapPick ? 'Tap another player to swap them.' : 'Tap two players to swap teams, or auto-arrange below.'}
+                {swapPick ? 'Tap another player\u2019s swap icon to switch them.' : 'Use the swap icon to switch two players, or auto-arrange below.'}
               </p>
               <div className="flex gap-2">
                 <button
@@ -676,16 +676,12 @@ export function TournamentTab({
                     {team.map((pid) => {
                       const p = players.get(pid)
                       const picked = swapPick === pid
+                      const swapActive = swapPick !== null
                       const r = ratings[pid]
                       return (
-                        <button
+                        <div
                           key={pid}
-                          type="button"
-                          onClick={() => handlePlayerTap(pid)}
-                          disabled={!activity.is_creator || teamsBusy}
-                          className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
-                            picked ? 'bg-primary/10' : activity.is_creator ? 'active:bg-surface' : ''
-                          } ${!activity.is_creator ? 'cursor-default' : ''}`}
+                          className={`w-full px-4 py-3 flex items-center gap-3 transition-colors ${picked ? 'bg-primary/5' : ''}`}
                         >
                           <Avatar player={p ?? null} />
                           <div className="flex-1 min-w-0">
@@ -703,10 +699,39 @@ export function TournamentTab({
                               </p>
                             )}
                           </div>
-                          {picked && (
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-primary flex-shrink-0">Swap…</span>
+                          {activity.is_creator && (
+                            <button
+                              type="button"
+                              onClick={() => handlePlayerTap(pid)}
+                              disabled={teamsBusy}
+                              aria-label={picked ? 'Cancel swap' : 'Swap this player'}
+                              className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${
+                                picked
+                                  ? 'bg-primary text-white'
+                                  : swapActive
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'bg-surface text-muted active:bg-primary/10'
+                              }`}
+                            >
+                              {picked ? (
+                                // Selected → tap again to cancel
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
+                              ) : swapActive ? (
+                                // Another player is picked → this is a drop target
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              ) : (
+                                // Idle swap icon
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M7 10l-3 3 3 3" /><path d="M4 13h13" /><path d="M17 14l3-3-3-3" /><path d="M20 11H7" />
+                                </svg>
+                              )}
+                            </button>
                           )}
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
