@@ -57,6 +57,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .update({ status: 'out' })
     .eq('id', member.id)
 
+  // Keep the tournament bracket in sync — clear them from any team slot and
+  // regenerate matches so they don't linger as a "removed player".
+  const { removePlayerFromTeams } = await import('@/lib/tournament-server')
+  await removePlayerFromTeams(id, targetUserId)
+
   // If they were confirmed, update capacity and activity status
   if (wasConfirmed) {
     const { count: confirmedCount } = await admin

@@ -218,6 +218,28 @@ export function TournamentTab({
     if (subTab === 'teams' && doubles && !partnerRotation) loadRatings()
   }, [subTab, doubles, partnerRotation, loadRatings])
 
+  async function removePlayer(pid: string) {
+    const p = players.get(pid)
+    const name = p ? p.first_name : 'this player'
+    if (!confirm(`Remove ${name} from the tournament? Their slot reopens and matches regenerate.`)) return
+    setTeamsBusy(true)
+    const res = await fetch(`/api/activities/${activity.id}/remove-member`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: pid }),
+    })
+    setTeamsBusy(false)
+    setSwapPick(null)
+    if (res.ok) {
+      onChange()  // roster changed — refresh the parent's member list
+      refresh()
+      loadRatings()
+    } else {
+      const d = await res.json().catch(() => null)
+      alert(d?.error ?? 'Failed to remove player')
+    }
+  }
+
   async function addEmptyTeam() {
     setTeamsBusy(true)
     const res = await fetch(`/api/activities/${activity.id}/tournament/teams`, {
@@ -791,33 +813,48 @@ export function TournamentTab({
                             )}
                           </div>
                           {activity.is_creator && (
-                            <button
-                              type="button"
-                              onClick={() => handlePlayerTap(pid)}
-                              disabled={teamsBusy}
-                              aria-label={picked ? 'Cancel swap' : 'Swap this player'}
-                              className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${
-                                picked
-                                  ? 'bg-primary text-white'
-                                  : swapActive
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'bg-surface text-muted active:bg-primary/10'
-                              }`}
-                            >
-                              {picked ? (
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M18 6L6 18M6 6l12 12" />
-                                </svg>
-                              ) : swapActive ? (
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                              ) : (
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M7 10l-3 3 3 3" /><path d="M4 13h13" /><path d="M17 14l3-3-3-3" /><path d="M20 11H7" />
-                                </svg>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handlePlayerTap(pid)}
+                                disabled={teamsBusy}
+                                aria-label={picked ? 'Cancel swap' : 'Swap this player'}
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${
+                                  picked
+                                    ? 'bg-primary text-white'
+                                    : swapActive
+                                      ? 'bg-primary/10 text-primary'
+                                      : 'bg-surface text-muted active:bg-primary/10'
+                                }`}
+                              >
+                                {picked ? (
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M18 6L6 18M6 6l12 12" />
+                                  </svg>
+                                ) : swapActive ? (
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                ) : (
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M7 10l-3 3 3 3" /><path d="M4 13h13" /><path d="M17 14l3-3-3-3" /><path d="M20 11H7" />
+                                  </svg>
+                                )}
+                              </button>
+                              {!swapActive && (
+                                <button
+                                  type="button"
+                                  onClick={() => removePlayer(pid)}
+                                  disabled={teamsBusy}
+                                  aria-label="Remove from tournament"
+                                  className="w-9 h-9 rounded-lg flex items-center justify-center bg-surface text-muted active:bg-danger/10 active:text-danger transition-colors disabled:opacity-50"
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                                  </svg>
+                                </button>
                               )}
-                            </button>
+                            </div>
                           )}
                         </div>
                       )

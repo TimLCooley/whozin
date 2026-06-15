@@ -229,6 +229,34 @@ export async function advanceRound(activityId: string): Promise<number> {
 }
 
 /**
+ * Remove a player from the doubles teams (their slot reopens) and rebuild the
+ * matches. No-op if the activity has no teams or the player isn't on one.
+ * Returns true if anything changed.
+ */
+export async function removePlayerFromTeams(activityId: string, userId: string): Promise<boolean> {
+  const admin = getAdminClient()
+  const { data: activity } = await admin
+    .from('whozin_activity')
+    .select('tournament_mode, tournament_doubles, tournament_teams')
+    .eq('id', activityId)
+    .single()
+  if (!activity?.tournament_mode || !activity.tournament_doubles) return false
+  const teams: DoublesTeam[] = Array.isArray(activity.tournament_teams) ? activity.tournament_teams : []
+
+  let changed = false
+  const next: DoublesTeam[] = teams.map((t) => {
+    const slot = t.slice() as DoublesTeam
+    if (slot[0] === userId) { slot[0] = null; changed = true }
+    if (slot[1] === userId) { slot[1] = null; changed = true }
+    return slot
+  })
+  if (!changed) return false
+
+  await rebuildDoublesFromTeams(activityId, next)
+  return true
+}
+
+/**
  * After a match result lands, check whether every match in the current
  * round is now decided. If so, auto-advance. Returns the (possibly new)
  * current_round so the caller can return it in the response.
