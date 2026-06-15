@@ -97,40 +97,60 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq('status', 'confirmed')
   const roster = new Set((confirmed ?? []).map((m) => m.user_id))
 
-  if (roster.size < 4 || roster.size % 2 === 1) {
-    return NextResponse.json({ error: 'Doubles needs an even number of confirmed players (at least 4)' }, { status: 400 })
-  }
-
   const body = await req.json()
   let teams: DoublesTeam[]
 
   if (body.action === 'reroll') {
+    if (roster.size < 4) {
+      return NextResponse.json({ error: 'Doubles needs at least 4 confirmed players' }, { status: 400 })
+    }
     teams = formTeams(shuffleArray(Array.from(roster)))
   } else if (body.action === 'skill_match') {
+    if (roster.size < 4) {
+      return NextResponse.json({ error: 'Doubles needs at least 4 confirmed players' }, { status: 400 })
+    }
     const ratings = await computePlayerRatings(id, Array.from(roster))
     teams = skillMatchTeams(Array.from(roster), ratings)
+  } else if (body.action === 'add_team') {
+    // Append an empty team (two open slots) to the current arrangement.
+    const { data: act } = await admin
+      .from('whozin_activity')
+      .select('tournament_teams')
+      .eq('id', id)
+      .single()
+    const current: DoublesTeam[] = Array.isArray(act?.tournament_teams) ? act!.tournament_teams : []
+    teams = [...current, [null, null]]
   } else if (body.action === 'set') {
     const raw = body.teams
     if (!Array.isArray(raw)) {
       return NextResponse.json({ error: 'teams must be an array of pairs' }, { status: 400 })
     }
-    // Validate: every entry is a pair of distinct roster players, and every
-    // roster player appears exactly once.
+    // Validate: each entry is a pair (slots may be null = open); real players
+    // must be on the roster and used at most once.
     const seen = new Set<string>()
     const parsed: DoublesTeam[] = []
     for (const pair of raw) {
       if (!Array.isArray(pair) || pair.length !== 2) {
-        return NextResponse.json({ error: 'Each team must be a pair of players' }, { status: 400 })
+        return NextResponse.json({ error: 'Each team must have two slots' }, { status: 400 })
       }
-      const [a, b] = pair
-      if (a === b || !roster.has(a) || !roster.has(b) || seen.has(a) || seen.has(b)) {
-        return NextResponse.json({ error: 'Teams must use each confirmed player exactly once' }, { status: 400 })
+      const slot = (v: unknown): string | null => {
+        if (v == null) return null
+        if (typeof v !== 'string' || !roster.has(v) || seen.has(v)) {
+          throw new Error('Teams must use each confirmed player at most once')
+        }
+        seen.add(v)
+        return v
       }
-      seen.add(a); seen.add(b)
-      parsed.push([a, b])
-    }
-    if (seen.size !== roster.size) {
-      return NextResponse.json({ error: 'Every confirmed player must be on a team' }, { status: 400 })
+      try {
+        const a = slot(pair[0])
+        const b = slot(pair[1])
+        if (a != null && a === b) {
+          return NextResponse.json({ error: 'A team can\u2019t have the same player twice' }, { status: 400 })
+        }
+        parsed.push([a, b])
+      } catch (e) {
+        return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+      }
     }
     teams = parsed
   } else {

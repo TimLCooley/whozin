@@ -112,6 +112,8 @@ export function skillMatchTeams(
     lo++
     hi--
   }
+  // Odd count: the leftover middle player gets an open slot.
+  if (lo === hi) teams.push([sorted[lo], null])
   return teams
 }
 

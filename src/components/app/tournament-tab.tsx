@@ -46,7 +46,7 @@ interface Match {
 
 type SubTab = 'my' | 'bracket' | 'leaderboard' | 'teams' | 'settings'
 
-type Team = [string, string]
+type Team = [string | null, string | null]
 
 export function TournamentTab({
   activity,
@@ -66,6 +66,12 @@ export function TournamentTab({
   const [teamsBusy, setTeamsBusy] = useState(false)
   // Tap-to-swap: first tapped player id, then tap another to swap them.
   const [swapPick, setSwapPick] = useState<string | null>(null)
+  // Fill-slot sheet: which [teamIndex, slotIndex] is being filled.
+  const [fillSlot, setFillSlot] = useState<{ ti: number; si: number } | null>(null)
+  const [fillPhone, setFillPhone] = useState('')
+  const [fillFirst, setFillFirst] = useState('')
+  const [fillLast, setFillLast] = useState('')
+  const [fillBusy, setFillBusy] = useState(false)
   const [ratings, setRatings] = useState<Record<string, { pickleball_rating: number | null; group_wins: number; group_losses: number; effective: number }>>({})
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
@@ -211,6 +217,46 @@ export function TournamentTab({
   useEffect(() => {
     if (subTab === 'teams' && doubles && !partnerRotation) loadRatings()
   }, [subTab, doubles, partnerRotation, loadRatings])
+
+  async function addEmptyTeam() {
+    setTeamsBusy(true)
+    const res = await fetch(`/api/activities/${activity.id}/tournament/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add_team' }),
+    })
+    setTeamsBusy(false)
+    if (res.ok) { refresh(); loadRatings() }
+    else { const d = await res.json().catch(() => null); alert(d?.error ?? 'Failed to add team') }
+  }
+
+  async function submitFillSlot() {
+    if (!fillSlot) return
+    const digits = fillPhone.replace(/\D/g, '')
+    if (digits.length !== 10 || !fillFirst.trim()) return
+    setFillBusy(true)
+    const res = await fetch(`/api/activities/${activity.id}/tournament/teams/fill-slot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        team_index: fillSlot.ti,
+        slot_index: fillSlot.si,
+        phone: digits,
+        country_code: '1',
+        first_name: fillFirst.trim(),
+        last_name: fillLast.trim(),
+      }),
+    })
+    setFillBusy(false)
+    if (res.ok) {
+      setFillSlot(null)
+      setFillPhone(''); setFillFirst(''); setFillLast('')
+      refresh(); loadRatings()
+    } else {
+      const d = await res.json().catch(() => null)
+      alert(d?.error ?? 'Failed to add player')
+    }
+  }
 
   async function teamsAction(action: 'reroll' | 'skill_match') {
     const msg = action === 'reroll'
@@ -648,6 +694,16 @@ export function TournamentTab({
               </p>
               <div className="flex gap-2">
                 <button
+                  onClick={addEmptyTeam}
+                  disabled={teamsBusy}
+                  className="flex items-center gap-1.5 text-[12px] font-bold text-primary bg-primary/10 px-3 py-2 rounded-lg active:opacity-80 disabled:opacity-60"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Team
+                </button>
+                <button
                   onClick={() => teamsAction('skill_match')}
                   disabled={teamsBusy}
                   className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-bold text-white bg-primary px-3 py-2 rounded-lg active:opacity-80 disabled:opacity-60"
@@ -676,17 +732,39 @@ export function TournamentTab({
           ) : (
             <div className="space-y-2.5">
               {teams.map((team, ti) => {
-                const teamStrength = team.reduce((sum, pid) => sum + (ratings[pid]?.effective ?? 3.5), 0)
+                const teamStrength = team.reduce((sum, pid) => sum + (pid ? (ratings[pid]?.effective ?? 3.5) : 0), 0)
+                const filledCount = team.filter((pid) => pid != null).length
                 return (
                 <div key={ti} className="bg-background border border-border/50 rounded-xl overflow-hidden">
                   <div className="px-4 py-2 bg-surface/50 flex items-center justify-between">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Team {ti + 1}</p>
-                    {Object.keys(ratings).length > 0 && (
+                    {filledCount === 2 && Object.keys(ratings).length > 0 && (
                       <span className="text-[10px] font-semibold text-muted tabular-nums">{teamStrength.toFixed(1)} str</span>
                     )}
                   </div>
                   <div className="divide-y divide-border/40">
-                    {team.map((pid) => {
+                    {team.map((pid, si) => {
+                      // Open slot.
+                      if (pid == null) {
+                        return (
+                          <button
+                            key={`open-${si}`}
+                            type="button"
+                            disabled={!activity.is_creator || teamsBusy}
+                            onClick={() => { setFillSlot({ ti, si }); setFillPhone(''); setFillFirst(''); setFillLast('') }}
+                            className={`w-full px-4 py-3 flex items-center gap-3 text-left ${activity.is_creator ? 'active:bg-surface' : 'cursor-default'}`}
+                          >
+                            <div className="w-8 h-8 rounded-full border-2 border-dashed border-border flex items-center justify-center flex-shrink-0 text-muted">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                              </svg>
+                            </div>
+                            <p className="flex-1 text-[14px] font-semibold text-muted">
+                              {activity.is_creator ? 'Add player' : 'Open slot'}
+                            </p>
+                          </button>
+                        )
+                      }
                       const p = players.get(pid)
                       const picked = swapPick === pid
                       const swapActive = swapPick !== null
@@ -699,7 +777,7 @@ export function TournamentTab({
                           <Avatar player={p ?? null} />
                           <div className="flex-1 min-w-0">
                             <p className="text-[14px] font-semibold text-foreground truncate">
-                              {p ? `${p.first_name} ${p.last_name}` : 'Unknown'}
+                              {p ? `${p.first_name} ${p.last_name}` : 'Removed player'}
                             </p>
                             {r && (
                               <p className="text-[11px] text-muted">
@@ -727,17 +805,14 @@ export function TournamentTab({
                               }`}
                             >
                               {picked ? (
-                                // Selected → tap again to cancel
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M18 6L6 18M6 6l12 12" />
                                 </svg>
                               ) : swapActive ? (
-                                // Another player is picked → this is a drop target
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="20 6 9 17 4 12" />
                                 </svg>
                               ) : (
-                                // Idle swap icon
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M7 10l-3 3 3 3" /><path d="M4 13h13" /><path d="M17 14l3-3-3-3" /><path d="M20 11H7" />
                                 </svg>
@@ -807,6 +882,46 @@ export function TournamentTab({
               Doubles + partner rotation are locked while the tournament is in progress.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Fill-slot sheet — add a player to an open team slot */}
+      {fillSlot && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => !fillBusy && setFillSlot(null)}>
+          <div className="bg-background rounded-t-2xl p-6 pb-[env(safe-area-inset-bottom)] w-full max-w-lg shadow-2xl max-h-[85dvh] overflow-y-auto animate-enter" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-center mb-4"><div className="w-10 h-1 bg-border rounded-full" /></div>
+            <h3 className="text-[16px] font-bold text-foreground text-center mb-1">Add a player</h3>
+            <p className="text-[12px] text-muted text-center mb-5">They&apos;ll be confirmed and placed on Team {fillSlot.ti + 1}.</p>
+            <div className="mb-4">
+              <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Phone</label>
+              <input
+                type="text"
+                inputMode="tel"
+                value={fillPhone}
+                onChange={(e) => setFillPhone(e.target.value)}
+                placeholder="(555) 123-4567"
+                autoFocus
+                className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border"
+              />
+            </div>
+            <div className="flex gap-3 mb-5">
+              <div className="flex-1 min-w-0">
+                <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">First name</label>
+                <input type="text" value={fillFirst} onChange={(e) => setFillFirst(e.target.value)} placeholder="First" className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <label className="block text-[13px] font-medium text-foreground/70 mb-1.5">Last name</label>
+                <input type="text" value={fillLast} onChange={(e) => setFillLast(e.target.value)} placeholder="Last" className="w-full px-4 py-3 rounded-xl border border-border bg-surface text-[14px] text-foreground placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/30 box-border" />
+              </div>
+            </div>
+            <button
+              onClick={submitFillSlot}
+              disabled={fillBusy || fillPhone.replace(/\D/g, '').length !== 10 || !fillFirst.trim()}
+              className="btn-primary w-full py-3 text-[14px] disabled:opacity-50"
+            >
+              {fillBusy ? 'Adding…' : 'Add to Team'}
+            </button>
+          </div>
         </div>
       )}
 

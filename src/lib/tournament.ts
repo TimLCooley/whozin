@@ -69,32 +69,42 @@ export interface DoublesMatchPairing extends MatchPairing {
   player_d_id: string
 }
 
-export type DoublesTeam = [string, string]
+// A doubles team has two slots; either can be an empty "open slot" (null) that
+// the host fills later from the Teams tab. Only teams with both slots filled
+// play matches.
+export type DoublesTeam = [string | null, string | null]
+
+/** A team with both players assigned. */
+function isComplete(t: DoublesTeam): t is [string, string] {
+  return t[0] != null && t[1] != null
+}
 
 /**
  * Pair a player list into fixed doubles teams of two, in order. The caller
- * shuffles first if random teams are wanted. A trailing odd player is dropped
- * (doubles can't bye a single player cleanly).
+ * shuffles first if random teams are wanted. A trailing odd player gets an
+ * open slot ([player, null]) rather than being dropped.
  */
 export function formTeams(playerIds: string[]): DoublesTeam[] {
   const teams: DoublesTeam[] = []
-  for (let i = 0; i + 1 < playerIds.length; i += 2) {
-    teams.push([playerIds[i], playerIds[i + 1]])
+  for (let i = 0; i < playerIds.length; i += 2) {
+    teams.push([playerIds[i], playerIds[i + 1] ?? null])
   }
   return teams
 }
 
 /**
- * Round-robin among explicit doubles teams via the circle method. Each output
- * pairing is a team-vs-team match with all four player ids filled.
+ * Round-robin among the complete doubles teams (both slots filled) via the
+ * circle method. Open-slot teams sit out until filled. Each output pairing is
+ * a team-vs-team match with all four player ids set.
  */
 export function generateMatchesFromTeams(teams: DoublesTeam[]): DoublesMatchPairing[] {
-  if (teams.length < 2) return []
-  const teamIndices = teams.map((_, i) => String(i))
+  const complete = teams.filter(isComplete)
+  if (complete.length < 2) return []
+  const teamIndices = complete.map((_, i) => String(i))
   const teamPairings = generateRoundRobin(teamIndices)
   return teamPairings.map((p) => {
-    const [a, c] = teams[parseInt(p.player_a_id, 10)]
-    const [b, d] = teams[parseInt(p.player_b_id, 10)]
+    const [a, c] = complete[parseInt(p.player_a_id, 10)]
+    const [b, d] = complete[parseInt(p.player_b_id, 10)]
     return {
       round_number: p.round_number,
       player_a_id: a,

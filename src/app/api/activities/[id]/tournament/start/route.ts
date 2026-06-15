@@ -77,14 +77,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         )
       }
     } else if (activity.tournament_doubles) {
-      // Fixed-partner doubles needs an even player count.
-      if (playerIds.length < 4 || playerIds.length % 2 === 1) {
+      // Need at least 4 to make two teams. An odd player gets an open slot
+      // the host can fill later from the Teams tab.
+      if (playerIds.length < 4) {
         return NextResponse.json({
-          error: 'Doubles needs an even number of confirmed players (at least 4)',
+          error: 'Doubles needs at least 4 confirmed players',
         }, { status: 400 })
       }
-      // Form random teams, persist them, and generate the round-robin from
-      // them. The host can later rearrange/reroll on the Teams tab.
       const teams = formTeams(shuffleArray(playerIds))
       await rebuildDoublesFromTeams(id, teams)
     } else {
