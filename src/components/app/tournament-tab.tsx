@@ -361,6 +361,20 @@ export function TournamentTab({
                   ? `Pairs up ${confirmed.length} players into ${Math.floor(confirmed.length / 2)} fixed teams, then plays a round-robin between teams.`
                   : `Generates ${roundRobinMatchCount(confirmed.length)} matches across ${roundRobinRoundCount(confirmed.length)} rounds from your ${confirmed.length} confirmed player${confirmed.length === 1 ? '' : 's'}.`}
           </p>
+          {activity.is_creator && (
+            <>
+              <button
+                onClick={startTournament}
+                disabled={starting || confirmed.length < 2}
+                className="w-full mt-3 py-3 rounded-xl bg-primary text-white text-[14px] font-bold disabled:opacity-60 active:opacity-80 transition-opacity"
+              >
+                {starting ? 'Starting...' : 'Start Tournament'}
+              </button>
+              {confirmed.length < 2 && (
+                <p className="text-[11px] text-amber-800/70 text-center mt-1.5">Need at least 2 confirmed players.</p>
+              )}
+            </>
+          )}
         </div>
 
         {/* Pre-start settings (host only) — these are the same toggles that
@@ -422,17 +436,6 @@ export function TournamentTab({
             </div>
           )}
         </div>
-
-        <button
-          onClick={startTournament}
-          disabled={starting || confirmed.length < 2}
-          className="w-full py-3 rounded-xl bg-primary text-white text-[14px] font-bold disabled:opacity-60 active:opacity-80 transition-opacity"
-        >
-          {starting ? 'Starting...' : 'Start Tournament'}
-        </button>
-        {confirmed.length < 2 && (
-          <p className="text-[12px] text-muted text-center">Need at least 2 confirmed players.</p>
-        )}
       </div>
     )
   }
