@@ -724,6 +724,21 @@ export default function ActivityDetailPage() {
     setApproving(false)
   }
 
+  const [startingTournament, setStartingTournament] = useState(false)
+  async function handleStartTournament() {
+    if (startingTournament) return
+    setStartingTournament(true)
+    const res = await fetch(`/api/activities/${id}/tournament/start`, { method: 'POST' })
+    if (res.ok) {
+      await loadActivity()
+      setTab('match')
+    } else {
+      const data = await res.json().catch(() => null)
+      alert(data?.error ?? 'Failed to start tournament')
+    }
+    setStartingTournament(false)
+  }
+
   async function handleDelete() {
     setDeleting(true)
     const res = await fetch(`/api/activities/${id}`, { method: 'DELETE' })
@@ -801,6 +816,18 @@ export default function ActivityDetailPage() {
         </div>
         {(activity.is_creator || (activity.open_invite && activity.my_status === 'confirmed')) && (
           <div className="flex items-center gap-2 shrink-0">
+            {activity.is_creator && activity.tournament_mode && !activity.tournament_started_at && (
+              <button
+                onClick={handleStartTournament}
+                disabled={startingTournament}
+                className="flex items-center gap-1.5 text-[12px] font-bold text-white bg-primary hover:bg-primary-dark px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                {startingTournament ? '…' : 'Start'}
+              </button>
+            )}
             <button
               onClick={() => setAddModal('add-menu')}
               className="flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
