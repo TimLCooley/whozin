@@ -44,7 +44,9 @@ interface Match {
   recorded_at: string | null
 }
 
-type SubTab = 'my' | 'bracket' | 'leaderboard' | 'settings'
+type SubTab = 'my' | 'bracket' | 'leaderboard' | 'teams' | 'settings'
+
+type Team = [string, string]
 
 export function TournamentTab({
   activity,
@@ -60,6 +62,10 @@ export function TournamentTab({
   const [trackScores, setTrackScores] = useState<boolean>(activity.tournament_track_scores ?? false)
   const [doubles, setDoubles] = useState<boolean>(activity.tournament_doubles ?? false)
   const [partnerRotation, setPartnerRotation] = useState<boolean>(activity.tournament_partner_rotation ?? false)
+  const [teams, setTeams] = useState<Team[]>([])
+  const [teamsBusy, setTeamsBusy] = useState(false)
+  // Tap-to-swap: first tapped player id, then tap another to swap them.
+  const [swapPick, setSwapPick] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
   const [advancing, setAdvancing] = useState(false)
@@ -90,6 +96,7 @@ export function TournamentTab({
       setTrackScores(!!data.tournament_track_scores)
       setDoubles(!!data.tournament_doubles)
       setPartnerRotation(!!data.tournament_partner_rotation)
+      setTeams(Array.isArray(data.tournament_teams) ? data.tournament_teams : [])
     }
     setLoading(false)
   }, [activity.id])
@@ -175,6 +182,64 @@ export function TournamentTab({
     } else {
       const data = await res.json().catch(() => null)
       alert(data?.error ?? 'Failed to start tournament')
+    }
+  }
+
+  async function rerollTeams() {
+    if (!confirm('Reroll teams? This regenerates the matches and clears any recorded results.')) return
+    setTeamsBusy(true)
+    const res = await fetch(`/api/activities/${activity.id}/tournament/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reroll' }),
+    })
+    setTeamsBusy(false)
+    setSwapPick(null)
+    if (res.ok) {
+      refresh()
+    } else {
+      const d = await res.json().catch(() => null)
+      alert(d?.error ?? 'Failed to reroll teams')
+    }
+  }
+
+  // Tap one player, then another, to swap their team slots. Persists the new
+  // arrangement (which regenerates matches).
+  async function handlePlayerTap(playerId: string) {
+    if (!activity.is_creator) return
+    if (!swapPick) { setSwapPick(playerId); return }
+    if (swapPick === playerId) { setSwapPick(null); return }
+
+    // Build the swapped arrangement.
+    const next: Team[] = teams.map((t) => t.slice() as Team)
+    let posA: [number, number] | null = null
+    let posB: [number, number] | null = null
+    for (let i = 0; i < next.length; i++) {
+      for (let j = 0; j < 2; j++) {
+        if (next[i][j] === swapPick) posA = [i, j]
+        if (next[i][j] === playerId) posB = [i, j]
+      }
+    }
+    if (!posA || !posB) { setSwapPick(null); return }
+    const tmp = next[posA[0]][posA[1]]
+    next[posA[0]][posA[1]] = next[posB[0]][posB[1]]
+    next[posB[0]][posB[1]] = tmp
+
+    setSwapPick(null)
+    setTeams(next) // optimistic
+    setTeamsBusy(true)
+    const res = await fetch(`/api/activities/${activity.id}/tournament/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'set', teams: next }),
+    })
+    setTeamsBusy(false)
+    if (res.ok) {
+      refresh()
+    } else {
+      const d = await res.json().catch(() => null)
+      alert(d?.error ?? 'Failed to update teams')
+      refresh()
     }
   }
 
@@ -383,11 +448,12 @@ export function TournamentTab({
       {/* Sub-tabs */}
       <div className="flex items-center gap-1 p-1 bg-surface rounded-xl border border-border/50">
         {([
-          { key: 'my', label: 'My Match', hostOnly: false },
-          { key: 'bracket', label: 'Bracket', hostOnly: false },
-          { key: 'leaderboard', label: 'Leaderboard', hostOnly: false },
-          { key: 'settings', label: 'Settings', hostOnly: true },
-        ] as const).filter((opt) => !opt.hostOnly || activity.is_creator).map((opt) => {
+          { key: 'my', label: 'My Match', show: true },
+          { key: 'teams', label: 'Teams', show: doubles && !partnerRotation },
+          { key: 'bracket', label: 'Bracket', show: true },
+          { key: 'leaderboard', label: 'Leaderboard', show: true },
+          { key: 'settings', label: 'Settings', show: activity.is_creator },
+        ] as const).filter((opt) => opt.show).map((opt) => {
           const active = subTab === opt.key
           return (
             <button
@@ -535,6 +601,68 @@ export function TournamentTab({
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Teams (doubles, non-rotation) */}
+      {subTab === 'teams' && (
+        <div className="space-y-3">
+          {activity.is_creator && (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[12px] text-muted">
+                {swapPick ? 'Tap another player to swap them.' : 'Tap two players to swap their teams.'}
+              </p>
+              <button
+                onClick={rerollTeams}
+                disabled={teamsBusy}
+                className="flex items-center gap-1.5 text-[12px] font-bold text-primary bg-primary/10 px-3 py-1.5 rounded-lg active:opacity-80 disabled:opacity-60"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" />
+                </svg>
+                {teamsBusy ? '…' : 'Reroll'}
+              </button>
+            </div>
+          )}
+
+          {teams.length === 0 ? (
+            <EmptyCard text="Teams will appear once the doubles tournament starts." />
+          ) : (
+            <div className="space-y-2.5">
+              {teams.map((team, ti) => (
+                <div key={ti} className="bg-background border border-border/50 rounded-xl overflow-hidden">
+                  <div className="px-4 py-2 bg-surface/50">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Team {ti + 1}</p>
+                  </div>
+                  <div className="divide-y divide-border/40">
+                    {team.map((pid) => {
+                      const p = players.get(pid)
+                      const picked = swapPick === pid
+                      return (
+                        <button
+                          key={pid}
+                          type="button"
+                          onClick={() => handlePlayerTap(pid)}
+                          disabled={!activity.is_creator || teamsBusy}
+                          className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${
+                            picked ? 'bg-primary/10' : activity.is_creator ? 'active:bg-surface' : ''
+                          } ${!activity.is_creator ? 'cursor-default' : ''}`}
+                        >
+                          <Avatar player={p ?? null} />
+                          <p className="flex-1 text-[14px] font-semibold text-foreground truncate">
+                            {p ? `${p.first_name} ${p.last_name}` : 'Unknown'}
+                          </p>
+                          {picked && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-primary">Swap…</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

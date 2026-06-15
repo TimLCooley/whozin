@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('creator_id, tournament_mode, tournament_format, tournament_started_at, tournament_current_round, tournament_track_scores, tournament_doubles, tournament_partner_rotation')
+    .select('creator_id, tournament_mode, tournament_format, tournament_started_at, tournament_current_round, tournament_track_scores, tournament_doubles, tournament_partner_rotation, tournament_teams')
     .eq('id', id)
     .single()
   if (!activity) return NextResponse.json({ error: 'Activity not found' }, { status: 404 })
@@ -52,6 +52,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     tournament_track_scores: activity.tournament_track_scores ?? false,
     tournament_doubles: activity.tournament_doubles ?? false,
     tournament_partner_rotation: activity.tournament_partner_rotation ?? false,
+    tournament_teams: activity.tournament_teams ?? null,
     matches: matches ?? [],
   })
 }

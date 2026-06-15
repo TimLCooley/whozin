@@ -1,5 +1,36 @@
 import { getAdminClient } from '@/lib/supabase/admin'
-import { generateRotatingRoundDoubles } from '@/lib/tournament'
+import { generateRotatingRoundDoubles, generateMatchesFromTeams, type DoublesTeam } from '@/lib/tournament'
+
+/**
+ * Persist the given fixed-partner doubles teams and rebuild the activity's
+ * round-robin from them, wiping any existing matches (and their results — the
+ * matchups are different now). Resets current_round to 1. Used by start,
+ * reroll, and manual swap on the Teams tab.
+ */
+export async function rebuildDoublesFromTeams(activityId: string, teams: DoublesTeam[]): Promise<void> {
+  const admin = getAdminClient()
+
+  await admin.from('whozin_match').delete().eq('activity_id', activityId)
+
+  const pairings = generateMatchesFromTeams(teams)
+  if (pairings.length > 0) {
+    await admin.from('whozin_match').insert(
+      pairings.map((p) => ({
+        activity_id: activityId,
+        round_number: p.round_number,
+        player_a_id: p.player_a_id,
+        player_b_id: p.player_b_id,
+        player_c_id: p.player_c_id,
+        player_d_id: p.player_d_id,
+      })),
+    )
+  }
+
+  await admin
+    .from('whozin_activity')
+    .update({ tournament_teams: teams, tournament_current_round: 1 })
+    .eq('id', activityId)
+}
 
 /**
  * Bump tournament_current_round for an activity. If the activity is in

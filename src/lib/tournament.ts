@@ -69,32 +69,29 @@ export interface DoublesMatchPairing extends MatchPairing {
   player_d_id: string
 }
 
-/**
- * Round-robin among fixed doubles teams. Pairs `playerIds` sequentially into
- * teams of two (caller is responsible for shuffling first if desired), then
- * runs the circle method on teams. Throws if `playerIds.length` is odd or
- * less than 4 — doubles needs at least 2 teams (4 players).
- */
-export function generateRoundRobinDoubles(playerIds: string[]): DoublesMatchPairing[] {
-  if (playerIds.length < 4) return []
-  if (playerIds.length % 2 === 1) {
-    // Caller decides what to do about an odd number; doubles can't bye-a-player
-    // cleanly the way singles can.
-    throw new Error('Doubles requires an even number of players')
-  }
+export type DoublesTeam = [string, string]
 
-  // Pair off into teams of two — order is preserved from the input so callers
-  // can shuffle the player list before calling.
-  const teams: Array<[string, string]> = []
-  for (let i = 0; i < playerIds.length; i += 2) {
+/**
+ * Pair a player list into fixed doubles teams of two, in order. The caller
+ * shuffles first if random teams are wanted. A trailing odd player is dropped
+ * (doubles can't bye a single player cleanly).
+ */
+export function formTeams(playerIds: string[]): DoublesTeam[] {
+  const teams: DoublesTeam[] = []
+  for (let i = 0; i + 1 < playerIds.length; i += 2) {
     teams.push([playerIds[i], playerIds[i + 1]])
   }
+  return teams
+}
 
-  // Build a synthetic team-ID list and run the regular round-robin algorithm
-  // on it. We index back into the teams array to recover the four players.
+/**
+ * Round-robin among explicit doubles teams via the circle method. Each output
+ * pairing is a team-vs-team match with all four player ids filled.
+ */
+export function generateMatchesFromTeams(teams: DoublesTeam[]): DoublesMatchPairing[] {
+  if (teams.length < 2) return []
   const teamIndices = teams.map((_, i) => String(i))
   const teamPairings = generateRoundRobin(teamIndices)
-
   return teamPairings.map((p) => {
     const [a, c] = teams[parseInt(p.player_a_id, 10)]
     const [b, d] = teams[parseInt(p.player_b_id, 10)]
@@ -106,6 +103,14 @@ export function generateRoundRobinDoubles(playerIds: string[]): DoublesMatchPair
       player_d_id: d,
     }
   })
+}
+
+/**
+ * Convenience: form teams from a (pre-shuffled) player list and generate the
+ * round-robin in one call.
+ */
+export function generateRoundRobinDoubles(playerIds: string[]): DoublesMatchPairing[] {
+  return generateMatchesFromTeams(formTeams(playerIds))
 }
 
 export interface StandingsRow {

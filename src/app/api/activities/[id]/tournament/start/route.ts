@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { generateRoundRobin, generateRoundRobinDoubles, generateRotatingRoundDoubles, shuffleArray } from '@/lib/tournament'
+import { generateRoundRobin, generateRotatingRoundDoubles, formTeams, shuffleArray } from '@/lib/tournament'
+import { rebuildDoublesFromTeams } from '@/lib/tournament-server'
 
 // POST — start the tournament. Host only. For round_robin: generates every
 // pairing from the current confirmed roster. For assigned: just marks the
@@ -82,20 +83,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           error: 'Doubles needs an even number of confirmed players (at least 4)',
         }, { status: 400 })
       }
-      const shuffled = shuffleArray(playerIds)
-      const pairings = generateRoundRobinDoubles(shuffled)
-      if (pairings.length > 0) {
-        await admin.from('whozin_match').insert(
-          pairings.map((p) => ({
-            activity_id: id,
-            round_number: p.round_number,
-            player_a_id: p.player_a_id,
-            player_b_id: p.player_b_id,
-            player_c_id: p.player_c_id,
-            player_d_id: p.player_d_id,
-          })),
-        )
-      }
+      // Form random teams, persist them, and generate the round-robin from
+      // them. The host can later rearrange/reroll on the Teams tab.
+      const teams = formTeams(shuffleArray(playerIds))
+      await rebuildDoublesFromTeams(id, teams)
     } else {
       const pairings = generateRoundRobin(playerIds)
       if (pairings.length > 0) {
