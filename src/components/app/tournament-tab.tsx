@@ -66,6 +66,7 @@ export function TournamentTab({
   const [teamsBusy, setTeamsBusy] = useState(false)
   // Tap-to-swap: first tapped player id, then tap another to swap them.
   const [swapPick, setSwapPick] = useState<string | null>(null)
+  const [ratings, setRatings] = useState<Record<string, { pickleball_rating: number | null; group_wins: number; group_losses: number; effective: number }>>({})
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
   const [advancing, setAdvancing] = useState(false)
@@ -185,21 +186,38 @@ export function TournamentTab({
     }
   }
 
-  async function rerollTeams() {
-    if (!confirm('Reroll teams? This regenerates the matches and clears any recorded results.')) return
+  const loadRatings = useCallback(async () => {
+    const res = await fetch(`/api/activities/${activity.id}/tournament/teams`)
+    if (res.ok) {
+      const data = await res.json()
+      setRatings(data.ratings ?? {})
+    }
+  }, [activity.id])
+
+  // Load ratings when the Teams tab is opened.
+  useEffect(() => {
+    if (subTab === 'teams' && doubles && !partnerRotation) loadRatings()
+  }, [subTab, doubles, partnerRotation, loadRatings])
+
+  async function teamsAction(action: 'reroll' | 'skill_match') {
+    const msg = action === 'reroll'
+      ? 'Reroll teams? This regenerates the matches and clears any recorded results.'
+      : 'Skill match teams? This balances teams by rating and regenerates the matches, clearing any recorded results.'
+    if (!confirm(msg)) return
     setTeamsBusy(true)
     const res = await fetch(`/api/activities/${activity.id}/tournament/teams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'reroll' }),
+      body: JSON.stringify({ action }),
     })
     setTeamsBusy(false)
     setSwapPick(null)
     if (res.ok) {
       refresh()
+      loadRatings()
     } else {
       const d = await res.json().catch(() => null)
-      alert(d?.error ?? 'Failed to reroll teams')
+      alert(d?.error ?? 'Failed to update teams')
     }
   }
 
@@ -608,20 +626,32 @@ export function TournamentTab({
       {subTab === 'teams' && (
         <div className="space-y-3">
           {activity.is_creator && (
-            <div className="flex items-center justify-between gap-2">
+            <div className="space-y-2">
               <p className="text-[12px] text-muted">
-                {swapPick ? 'Tap another player to swap them.' : 'Tap two players to swap their teams.'}
+                {swapPick ? 'Tap another player to swap them.' : 'Tap two players to swap teams, or auto-arrange below.'}
               </p>
-              <button
-                onClick={rerollTeams}
-                disabled={teamsBusy}
-                className="flex items-center gap-1.5 text-[12px] font-bold text-primary bg-primary/10 px-3 py-1.5 rounded-lg active:opacity-80 disabled:opacity-60"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" />
-                </svg>
-                {teamsBusy ? '…' : 'Reroll'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => teamsAction('skill_match')}
+                  disabled={teamsBusy}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-[12px] font-bold text-white bg-primary px-3 py-2 rounded-lg active:opacity-80 disabled:opacity-60"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M3 12h18M3 18h18" /><circle cx="8" cy="6" r="2" fill="currentColor" /><circle cx="16" cy="12" r="2" fill="currentColor" /><circle cx="9" cy="18" r="2" fill="currentColor" />
+                  </svg>
+                  {teamsBusy ? '…' : 'Skill Match'}
+                </button>
+                <button
+                  onClick={() => teamsAction('reroll')}
+                  disabled={teamsBusy}
+                  className="flex items-center gap-1.5 text-[12px] font-bold text-primary bg-primary/10 px-3 py-2 rounded-lg active:opacity-80 disabled:opacity-60"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 014-4h14" /><path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 01-4 4H3" />
+                  </svg>
+                  {teamsBusy ? '…' : 'Reroll'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -629,15 +659,21 @@ export function TournamentTab({
             <EmptyCard text="Teams will appear once the doubles tournament starts." />
           ) : (
             <div className="space-y-2.5">
-              {teams.map((team, ti) => (
+              {teams.map((team, ti) => {
+                const teamStrength = team.reduce((sum, pid) => sum + (ratings[pid]?.effective ?? 3.5), 0)
+                return (
                 <div key={ti} className="bg-background border border-border/50 rounded-xl overflow-hidden">
-                  <div className="px-4 py-2 bg-surface/50">
+                  <div className="px-4 py-2 bg-surface/50 flex items-center justify-between">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Team {ti + 1}</p>
+                    {Object.keys(ratings).length > 0 && (
+                      <span className="text-[10px] font-semibold text-muted tabular-nums">{teamStrength.toFixed(1)} str</span>
+                    )}
                   </div>
                   <div className="divide-y divide-border/40">
                     {team.map((pid) => {
                       const p = players.get(pid)
                       const picked = swapPick === pid
+                      const r = ratings[pid]
                       return (
                         <button
                           key={pid}
@@ -649,18 +685,31 @@ export function TournamentTab({
                           } ${!activity.is_creator ? 'cursor-default' : ''}`}
                         >
                           <Avatar player={p ?? null} />
-                          <p className="flex-1 text-[14px] font-semibold text-foreground truncate">
-                            {p ? `${p.first_name} ${p.last_name}` : 'Unknown'}
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[14px] font-semibold text-foreground truncate">
+                              {p ? `${p.first_name} ${p.last_name}` : 'Unknown'}
+                            </p>
+                            {r && (
+                              <p className="text-[11px] text-muted">
+                                {r.pickleball_rating != null
+                                  ? `DUPR ${r.pickleball_rating.toFixed(2)}`
+                                  : 'No DUPR'}
+                                {(r.group_wins + r.group_losses) > 0 && (
+                                  <span> · {r.group_wins}-{r.group_losses} in group</span>
+                                )}
+                              </p>
+                            )}
+                          </div>
                           {picked && (
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-primary">Swap…</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-primary flex-shrink-0">Swap…</span>
                           )}
                         </button>
                       )
                     })}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

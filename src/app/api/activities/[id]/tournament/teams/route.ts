@@ -2,7 +2,54 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { formTeams, shuffleArray, type DoublesTeam } from '@/lib/tournament'
-import { rebuildDoublesFromTeams } from '@/lib/tournament-server'
+import { rebuildDoublesFromTeams, computePlayerRatings, skillMatchTeams } from '@/lib/tournament-server'
+
+// GET — per-player ratings for the Teams tab (DUPR + group W/L + effective).
+// Available to the host and confirmed members.
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const admin = getAdminClient()
+  const { data: whozinUser } = await admin
+    .from('whozin_users')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .single()
+  if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  const { data: activity } = await admin
+    .from('whozin_activity')
+    .select('creator_id')
+    .eq('id', id)
+    .single()
+  if (!activity) return NextResponse.json({ error: 'Activity not found' }, { status: 404 })
+
+  const isHost = activity.creator_id === whozinUser.id
+  if (!isHost) {
+    const { data: me } = await admin
+      .from('whozin_activity_member')
+      .select('status')
+      .eq('activity_id', id)
+      .eq('user_id', whozinUser.id)
+      .single()
+    if (me?.status !== 'confirmed') {
+      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+    }
+  }
+
+  const { data: confirmed } = await admin
+    .from('whozin_activity_member')
+    .select('user_id')
+    .eq('activity_id', id)
+    .eq('status', 'confirmed')
+  const playerIds = (confirmed ?? []).map((m) => m.user_id)
+
+  const ratings = await computePlayerRatings(id, playerIds)
+  return NextResponse.json({ ratings: Object.fromEntries(ratings) })
+}
 
 // POST — host edits the doubles teams. Body:
 //   { action: 'reroll' }                 → re-randomize teams from the roster
@@ -59,6 +106,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (body.action === 'reroll') {
     teams = formTeams(shuffleArray(Array.from(roster)))
+  } else if (body.action === 'skill_match') {
+    const ratings = await computePlayerRatings(id, Array.from(roster))
+    teams = skillMatchTeams(Array.from(roster), ratings)
   } else if (body.action === 'set') {
     const raw = body.teams
     if (!Array.isArray(raw)) {

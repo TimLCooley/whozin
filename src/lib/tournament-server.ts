@@ -1,6 +1,120 @@
 import { getAdminClient } from '@/lib/supabase/admin'
 import { generateRotatingRoundDoubles, generateMatchesFromTeams, type DoublesTeam } from '@/lib/tournament'
 
+export interface PlayerRating {
+  pickleball_rating: number | null
+  group_wins: number
+  group_losses: number
+  /** Single comparable number used by the skill-match draft, on a DUPR-like
+   * 2–8 scale: real DUPR if set, else estimated from the player's group win
+   * rate, else a neutral default. */
+  effective: number
+}
+
+/**
+ * Per-player ratings for the skill-match: each player's self-reported DUPR plus
+ * a win/loss record computed across every completed tournament match in the
+ * activity's group (not just this one tournament — "best in the group").
+ *
+ * Effective rating priority: DUPR → estimate from group win rate (2.5 + rate*3,
+ * so a 50% player ≈ 4.0) → 3.5 neutral default.
+ */
+export async function computePlayerRatings(
+  activityId: string,
+  playerIds: string[],
+): Promise<Map<string, PlayerRating>> {
+  const admin = getAdminClient()
+  const out = new Map<string, PlayerRating>()
+  for (const id of playerIds) {
+    out.set(id, { pickleball_rating: null, group_wins: 0, group_losses: 0, effective: 3.5 })
+  }
+  if (playerIds.length === 0) return out
+
+  // DUPR ratings.
+  const { data: users } = await admin
+    .from('whozin_users')
+    .select('id, pickleball_rating')
+    .in('id', playerIds)
+  for (const u of (users ?? [])) {
+    const row = out.get(u.id)
+    if (row && u.pickleball_rating != null) row.pickleball_rating = Number(u.pickleball_rating)
+  }
+
+  // All activities in this activity's group → all their completed matches.
+  const { data: activity } = await admin
+    .from('whozin_activity')
+    .select('group_id')
+    .eq('id', activityId)
+    .single()
+
+  if (activity?.group_id) {
+    const { data: groupActivities } = await admin
+      .from('whozin_activity')
+      .select('id')
+      .eq('group_id', activity.group_id)
+    const activityIds = (groupActivities ?? []).map((a) => a.id)
+
+    if (activityIds.length > 0) {
+      const { data: matches } = await admin
+        .from('whozin_match')
+        .select('player_a_id, player_b_id, player_c_id, player_d_id, winner_id, status')
+        .in('activity_id', activityIds)
+        .eq('status', 'completed')
+
+      for (const m of (matches ?? [])) {
+        if (!m.winner_id) continue
+        const sideA = [m.player_a_id, ...(m.player_c_id ? [m.player_c_id] : [])]
+        const sideB = [m.player_b_id, ...(m.player_d_id ? [m.player_d_id] : [])]
+        const winnersAreA = sideA.includes(m.winner_id)
+        const winners = winnersAreA ? sideA : sideB
+        const losers = winnersAreA ? sideB : sideA
+        for (const id of winners) { const r = out.get(id); if (r) r.group_wins++ }
+        for (const id of losers) { const r = out.get(id); if (r) r.group_losses++ }
+      }
+    }
+  }
+
+  // Effective rating.
+  for (const r of out.values()) {
+    if (r.pickleball_rating != null) {
+      r.effective = r.pickleball_rating
+    } else {
+      const played = r.group_wins + r.group_losses
+      if (played > 0) {
+        const rate = r.group_wins / played
+        r.effective = 2.5 + rate * 3 // 2.5–5.5
+      } else {
+        r.effective = 3.5
+      }
+    }
+  }
+
+  return out
+}
+
+/**
+ * Balance players into doubles teams by pairing the strongest with the
+ * weakest (sorted by effective rating, team[i] = best[i] + worst[i]). This
+ * minimizes the spread of combined team strength.
+ */
+export function skillMatchTeams(
+  playerIds: string[],
+  ratings: Map<string, PlayerRating>,
+): DoublesTeam[] {
+  const sorted = [...playerIds].sort(
+    (a, b) => (ratings.get(b)?.effective ?? 3.5) - (ratings.get(a)?.effective ?? 3.5),
+  )
+  const teams: DoublesTeam[] = []
+  let lo = 0
+  let hi = sorted.length - 1
+  while (lo < hi) {
+    teams.push([sorted[lo], sorted[hi]])
+    lo++
+    hi--
+  }
+  return teams
+}
+
 /**
  * Persist the given fixed-partner doubles teams and rebuild the activity's
  * round-robin from them, wiping any existing matches (and their results — the
