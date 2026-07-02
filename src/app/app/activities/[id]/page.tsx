@@ -11,6 +11,7 @@ import { isNative } from '@/lib/capacitor'
 import { usePaywall } from '@/hooks/use-pro-status'
 import ProBadge from '@/components/ui/pro-badge'
 import { TournamentTab } from '@/components/app/tournament-tab'
+import { InConfirmModal } from '@/components/app/in-confirm-modal'
 
 interface MemberInfo {
   id: string
@@ -116,6 +117,7 @@ export default function ActivityDetailPage() {
   const initialTab = (searchParams.get('tab') as Tab) || 'details'
   const [tab, setTab] = useState<Tab>(initialTab)
   const [responding, setResponding] = useState(false)
+  const [showInConfirm, setShowInConfirm] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
@@ -702,7 +704,12 @@ export default function ActivityDetailPage() {
       body: JSON.stringify({ response }),
     })
     if (res.ok) {
+      const data = await res.json().catch(() => null)
       await loadActivity()
+      // They got a spot → confirm + offer add-to-calendar.
+      if (response === 'in' && data?.status === 'confirmed') {
+        setShowInConfirm(true)
+      }
     } else if (res.status === 409) {
       alert('This activity is full. The host can add you if a spot opens up.')
       await loadActivity()
@@ -774,6 +781,13 @@ export default function ActivityDetailPage() {
   const out = activity.members.filter((m) => m.status === 'out')
 
   const isFull = activity.max_capacity ? confirmed.length >= activity.max_capacity : false
+
+  // The current user's live position on the wait list (1-based, earliest first).
+  const myWaitlistPosition = activity.my_status === 'waitlist'
+    ? [...waitlist]
+        .sort((a, b) => (a.responded_at ?? '').localeCompare(b.responded_at ?? ''))
+        .findIndex((m) => m.user_id === activity.current_user_id) + 1
+    : 0
 
   const showGroupTab = activity.is_creator || activity.my_status === 'confirmed'
   const showMatchTab = activity.tournament_mode && (
@@ -1092,6 +1106,17 @@ export default function ActivityDetailPage() {
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
 
                 {/* Response buttons */}
+                {activity.my_status === 'waitlist' && myWaitlistPosition > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2.5">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <p className="text-[13px] font-semibold text-amber-800">
+                      You’re on the wait list — {myWaitlistPosition} of {waitlist.length}
+                    </p>
+                  </div>
+                )}
                 {activity.my_status && activity.my_status !== 'tbd' && (
                   <div className="bg-background border border-border/50 rounded-xl p-4">
                     <p className="text-[13px] font-medium text-foreground/70 mb-3">Your Response</p>
@@ -2042,6 +2067,23 @@ export default function ActivityDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showInConfirm && (
+        <InConfirmModal
+          activityName={activity.activity_name}
+          mode="confirm"
+          event={{
+            title: activity.activity_name,
+            date: activity.activity_date,
+            time: activity.activity_time,
+            durationHours: activity.duration_hours,
+            location: activity.address || activity.location,
+            description: `${activity.group_name} · organized by ${activity.creator_name}`,
+            uid: activity.id,
+          }}
+          onClose={() => setShowInConfirm(false)}
+        />
       )}
 
       {showOutModal && (

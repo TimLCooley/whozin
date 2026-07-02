@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
+import { InConfirmModal } from '@/components/app/in-confirm-modal'
 
 interface ActivityCard {
   id: string
@@ -33,6 +34,8 @@ interface ActivityCard {
   creator_name: string
   group_name: string
   confirmed_count: number
+  waitlist_count: number
+  my_waitlist_position: number | null
 }
 
 function tournamentLabel(format: 'assigned' | 'round_robin' | null): string {
@@ -90,6 +93,7 @@ export default function AppHome() {
   const [activities, setActivities] = useState<ActivityCard[]>([])
   const [loading, setLoading] = useState(true)
   const [outConfirm, setOutConfirm] = useState<{ id: string; name: string } | null>(null)
+  const [inConfirm, setInConfirm] = useState<{ activity: ActivityCard; mode: 'confirm' | 'calendar' } | null>(null)
 
   const loadActivities = useCallback(async () => {
     setLoading(true)
@@ -105,6 +109,9 @@ export default function AppHome() {
 
   async function handleResponse(activityId: string, response: 'in' | 'out') {
     let predicted: 'confirmed' | 'out' | 'waitlist' = response === 'in' ? 'confirmed' : 'out'
+    // Snapshot before the optimistic update so the confirmation modal has the
+    // activity's details for the calendar.
+    const snapshot = activities.find((a) => a.id === activityId) ?? null
 
     // Optimistic update
     setActivities((prev) =>
@@ -141,8 +148,15 @@ export default function AppHome() {
     })
 
     const data = await res.json().catch(() => null)
-    if (!res.ok || (data?.status && data.status !== predicted)) {
+    // Reload on mismatch, error, or any wait-list result (so the live position
+    // and count populate rather than staying stale from the optimistic guess).
+    if (!res.ok || (data?.status && data.status !== predicted) || data?.status === 'waitlist') {
       loadActivities()
+    }
+
+    // They actually got a spot → celebrate + offer add-to-calendar.
+    if (res.ok && response === 'in' && data?.status === 'confirmed' && snapshot) {
+      setInConfirm({ activity: snapshot, mode: 'confirm' })
     }
   }
 
@@ -279,6 +293,14 @@ export default function AppHome() {
               const showWaitlistJoin = activity.waitlist_enabled && activity.my_status === 'missed' && isFull
               const isDraft = activity.status === 'draft' && activity.is_creator
               const draftBusy = draftActioning === activity.id
+              // Host sees the live wait-list count next to "You're In".
+              const confirmedLabel = activity.is_creator && activity.waitlist_count > 0
+                ? `You're In (${activity.waitlist_count} on waitlist)`
+                : "You're In"
+              // Non-host wait-listers see their live position.
+              const waitlistLabel = activity.my_waitlist_position && activity.waitlist_count
+                ? `On Wait List (${activity.my_waitlist_position} of ${activity.waitlist_count})`
+                : 'On Wait List'
               return (
                 <div
                   key={activity.id}
@@ -447,12 +469,15 @@ export default function AppHome() {
                           </div>
                         ) : activity.my_status === 'confirmed' ? (
                           <div className="flex gap-2 mt-3">
-                            <div className="flex-1 bg-[#00C853]/90 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setInConfirm({ activity, mode: 'calendar' }) }}
+                              className="flex-1 bg-[#00C853]/90 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5 active:opacity-80 transition-opacity"
+                            >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M20 6L9 17l-5-5" />
                               </svg>
-                              You&apos;re In
-                            </div>
+                              {confirmedLabel}
+                            </button>
                           </div>
                         ) : activity.my_status === 'out' ? (
                           <div className="flex gap-2 mt-3">
@@ -491,7 +516,7 @@ export default function AppHome() {
                                 <circle cx="12" cy="12" r="10" />
                                 <polyline points="12 6 12 12 16 14" />
                               </svg>
-                              On Wait List
+                              {waitlistLabel}
                             </div>
                             <button
                               onClick={(e) => handleOutClick(e, activity)}
@@ -678,12 +703,15 @@ export default function AppHome() {
                     </div>
                   ) : activity.my_status === 'confirmed' ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/30">
-                      <div className="flex-1 bg-[#00C853]/10 text-[#00C853] text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setInConfirm({ activity, mode: 'calendar' }) }}
+                        className="flex-1 bg-[#00C853]/10 text-[#00C853] text-[13px] font-bold py-2.5 rounded-lg text-center flex items-center justify-center gap-1.5 active:opacity-80 transition-opacity"
+                      >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
                           <path d="M20 6L9 17l-5-5" />
                         </svg>
-                        You&apos;re In
-                      </div>
+                        {confirmedLabel}
+                      </button>
                     </div>
                   ) : activity.my_status === 'out' ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/30">
@@ -722,7 +750,7 @@ export default function AppHome() {
                           <circle cx="12" cy="12" r="10" />
                           <polyline points="12 6 12 12 16 14" />
                         </svg>
-                        On Wait List
+                        {waitlistLabel}
                       </div>
                       <button
                         onClick={(e) => handleOutClick(e, activity)}
@@ -763,7 +791,7 @@ export default function AppHome() {
                     /* Footer for host/no-status cards */
                     <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border/30">
                       <button
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); setInConfirm({ activity, mode: 'calendar' }) }}
                         className="flex items-center gap-1.5 text-muted text-[11px] active:text-primary transition-colors"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -794,6 +822,24 @@ export default function AppHome() {
           </div>
         )}
       </div>
+
+      {/* You're In + Add to Calendar Modal */}
+      {inConfirm && (
+        <InConfirmModal
+          activityName={inConfirm.activity.activity_name}
+          mode={inConfirm.mode}
+          event={{
+            title: inConfirm.activity.activity_name,
+            date: inConfirm.activity.activity_date,
+            time: inConfirm.activity.activity_time,
+            durationHours: inConfirm.activity.duration_hours,
+            location: inConfirm.activity.address || inConfirm.activity.location,
+            description: `${inConfirm.activity.group_name} · organized by ${inConfirm.activity.creator_name}`,
+            uid: inConfirm.activity.id,
+          }}
+          onClose={() => setInConfirm(null)}
+        />
+      )}
 
       {/* OUT Confirmation Modal */}
       {outConfirm && (

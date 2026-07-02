@@ -158,17 +158,33 @@ export async function GET(req: NextRequest) {
     return true
   })
 
-  // Get confirmed counts per activity
+  // Get confirmed counts per activity, plus wait-list counts and the current
+  // user's wait-list position (1-based, ordered by when they joined it).
   const { data: allMemberStatuses } = await admin
     .from('whozin_activity_member')
-    .select('activity_id, status')
+    .select('activity_id, status, user_id, responded_at')
     .in('activity_id', Array.from(activityIds))
 
   const confirmedCountMap = new Map<string, number>()
+  const waitlistCountMap = new Map<string, number>()
+  const waitlistByActivity = new Map<string, { user_id: string; responded_at: string | null }[]>()
   for (const m of (allMemberStatuses ?? [])) {
     if (m.status === 'confirmed') {
       confirmedCountMap.set(m.activity_id, (confirmedCountMap.get(m.activity_id) ?? 0) + 1)
+    } else if (m.status === 'waitlist') {
+      waitlistCountMap.set(m.activity_id, (waitlistCountMap.get(m.activity_id) ?? 0) + 1)
+      const arr = waitlistByActivity.get(m.activity_id) ?? []
+      arr.push({ user_id: m.user_id, responded_at: m.responded_at })
+      waitlistByActivity.set(m.activity_id, arr)
     }
+  }
+
+  // My position within each wait list (earliest responded_at = position 1).
+  const myWaitlistPositionMap = new Map<string, number>()
+  for (const [activityId, members] of waitlistByActivity) {
+    const ordered = [...members].sort((a, b) => (a.responded_at ?? '').localeCompare(b.responded_at ?? ''))
+    const idx = ordered.findIndex((m) => m.user_id === whozinUser.id)
+    if (idx >= 0) myWaitlistPositionMap.set(activityId, idx + 1)
   }
 
   // Get creator names
@@ -236,6 +252,8 @@ export async function GET(req: NextRequest) {
       is_creator: a.creator_id === whozinUser.id,
       my_status: statusMap.get(a.id) ?? null,
       confirmed_count: confirmedCountMap.get(a.id) ?? 0,
+      waitlist_count: waitlistCountMap.get(a.id) ?? 0,
+      my_waitlist_position: myWaitlistPositionMap.get(a.id) ?? null,
       creator_name: creator ? `${creator.first_name} ${creator.last_name}` : 'Unknown',
       group_name: group?.name ?? 'Unknown',
       group_id: a.group_id,
