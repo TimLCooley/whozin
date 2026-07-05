@@ -45,6 +45,7 @@ interface ActivityDetail {
   reminder_enabled: boolean
   open_invite: boolean
   waitlist_enabled: boolean
+  waitlist_visible: boolean
   auto_emergency_fill: boolean
   tournament_mode: boolean
   tournament_format: 'assigned' | 'round_robin' | null
@@ -1106,14 +1107,16 @@ export default function ActivityDetailPage() {
                 <InfoRow icon="dollar" label="Cost" value={formatCost(activity.cost_type, activity.cost)} />
 
                 {/* Response buttons */}
-                {activity.my_status === 'waitlist' && myWaitlistPosition > 0 && (
+                {activity.my_status === 'waitlist' && (
                   <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2.5">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b45309" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10" />
                       <polyline points="12 6 12 12 16 14" />
                     </svg>
                     <p className="text-[13px] font-semibold text-amber-800">
-                      You’re on the wait list — {myWaitlistPosition} of {waitlist.length}
+                      {activity.waitlist_visible && myWaitlistPosition > 0
+                        ? `You’re on the wait list — ${myWaitlistPosition} of ${waitlist.length}`
+                        : 'You’re on the wait list'}
                     </p>
                   </div>
                 )}
@@ -2956,23 +2959,24 @@ function SettingsToggles({
   requirePro: () => boolean
   patch: (p: Partial<ActivityDetail>) => void
 }) {
-  const rows: { key: keyof ActivityDetail; label: string; pro?: boolean }[] = [
+  const rows: { key: keyof ActivityDetail; label: string; pro?: boolean; indent?: boolean; showWhen?: (a: ActivityDetail) => boolean }[] = [
     { key: 'open_invite', label: 'Open Invite' },
     { key: 'chat_enabled', label: 'Allow Chat', pro: true },
     { key: 'reminder_enabled', label: 'Reminders', pro: true },
     { key: 'waitlist_enabled', label: 'Wait List', pro: true },
+    { key: 'waitlist_visible', label: 'Show wait list to members', indent: true, showWhen: (a) => !!a.waitlist_enabled },
     { key: 'auto_emergency_fill', label: 'Auto-Fill Dropouts' },
   ]
 
   return (
     <div className="bg-background border border-border/50 rounded-xl divide-y divide-border/40 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-      {rows.map((r) => {
+      {rows.filter((r) => !r.showWhen || r.showWhen(activity)).map((r) => {
         const checked = !!activity[r.key]
         const locked = r.pro && !isPro
         return (
-          <div key={String(r.key)} className="flex items-center justify-between px-4 py-3">
+          <div key={String(r.key)} className={`flex items-center justify-between py-3 pr-4 ${r.indent ? 'pl-8' : 'pl-4'}`}>
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[14px] font-semibold text-foreground truncate">{r.label}</span>
+              <span className={`text-[14px] truncate ${r.indent ? 'font-medium text-foreground/80' : 'font-semibold text-foreground'}`}>{r.label}</span>
               {r.pro && (
                 <span className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold uppercase">Pro</span>
               )}

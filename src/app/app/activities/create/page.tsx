@@ -97,6 +97,7 @@ export default function CreateActivityPage() {
   const [autoEmergencyFill, setAutoEmergencyFill] = useState(false)
   const [followupInvite, setFollowupInvite] = useState(false)
   const [waitlistEnabled, setWaitlistEnabled] = useState(false)
+  const [waitlistVisible, setWaitlistVisible] = useState(true)
   const [openInvite, setOpenInvite] = useState(false)
   const [tournamentMode, setTournamentMode] = useState(false)
   const [tournamentTrackScores, setTournamentTrackScores] = useState(false)
@@ -182,6 +183,7 @@ export default function CreateActivityPage() {
         setAutoEmergencyFill(data.auto_emergency_fill ?? false)
         setFollowupInvite(data.followup_invite_enabled ?? false)
         setWaitlistEnabled(data.waitlist_enabled ?? false)
+        setWaitlistVisible(data.waitlist_visible ?? true)
         if (['weekly', 'biweekly', 'monthly'].includes(data.repeat_interval)) {
           setRepeatInterval(data.repeat_interval)
         }
@@ -365,6 +367,7 @@ export default function CreateActivityPage() {
       auto_emergency_fill: autoEmergencyFill,
       followup_invite_enabled: followupInvite,
       waitlist_enabled: waitlistEnabled,
+      waitlist_visible: waitlistVisible,
       open_invite: openInvite,
       tournament_mode: tournamentMode,
       tournament_format: tournamentMode ? tournamentFormat : null,
@@ -1709,6 +1712,20 @@ export default function CreateActivityPage() {
                     ? 'When the activity is full, anyone replying IN is added to a wait list. If a spot opens, the next person is auto-confirmed and notified.'
                     : 'Upgrade to Pro to enable a wait list when the activity fills up.'}
                 </p>
+
+                {waitlistEnabled && (
+                  <div className="mt-3 pt-3 border-t border-border/40">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[14px] font-semibold text-foreground">Show wait list to members</span>
+                      <Toggle checked={waitlistVisible} onChange={setWaitlistVisible} />
+                    </div>
+                    <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                      {waitlistVisible
+                        ? 'Members can see how many people are waiting and their own spot in line.'
+                        : 'Only you can see the wait list. Members just see that they’re on it.'}
+                    </p>
+                  </div>
+                )}
               </FieldCard>
             )}
 

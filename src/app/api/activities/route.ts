@@ -223,6 +223,10 @@ export async function GET(req: NextRequest) {
   const result = visibleActivities.map((a) => {
     const creator = creatorMap.get(a.creator_id)
     const group = groupMap.get(a.group_id)
+    // Only the host sees the wait list when the host has hidden it. Everyone
+    // else gets no count/position (they'll just see "On Wait List").
+    const waitlistVisible = a.waitlist_visible ?? true
+    const canSeeWaitlist = a.creator_id === whozinUser.id || waitlistVisible
     return {
       id: a.id,
       activity_type: a.activity_type,
@@ -240,6 +244,7 @@ export async function GET(req: NextRequest) {
       chat_enabled: a.chat_enabled,
       reminder_enabled: a.reminder_enabled,
       waitlist_enabled: a.waitlist_enabled ?? false,
+      waitlist_visible: waitlistVisible,
       open_invite: a.open_invite ?? false,
       tournament_mode: a.tournament_mode ?? false,
       tournament_format: a.tournament_format ?? null,
@@ -252,8 +257,8 @@ export async function GET(req: NextRequest) {
       is_creator: a.creator_id === whozinUser.id,
       my_status: statusMap.get(a.id) ?? null,
       confirmed_count: confirmedCountMap.get(a.id) ?? 0,
-      waitlist_count: waitlistCountMap.get(a.id) ?? 0,
-      my_waitlist_position: myWaitlistPositionMap.get(a.id) ?? null,
+      waitlist_count: canSeeWaitlist ? (waitlistCountMap.get(a.id) ?? 0) : 0,
+      my_waitlist_position: canSeeWaitlist ? (myWaitlistPositionMap.get(a.id) ?? null) : null,
       creator_name: creator ? `${creator.first_name} ${creator.last_name}` : 'Unknown',
       group_name: group?.name ?? 'Unknown',
       group_id: a.group_id,
@@ -304,6 +309,7 @@ export async function POST(req: NextRequest) {
     auto_emergency_fill,
     followup_invite_enabled,
     waitlist_enabled,
+    waitlist_visible,
     open_invite,
     tournament_mode,
     tournament_format,
@@ -379,6 +385,7 @@ export async function POST(req: NextRequest) {
       auto_emergency_fill: auto_emergency_fill ?? false,
       followup_invite_enabled: isPro ? (followup_invite_enabled ?? false) : false,
       waitlist_enabled: isPro ? (waitlist_enabled ?? false) : false,
+      waitlist_visible: waitlist_visible ?? true,
       open_invite: open_invite ?? false,
       tournament_mode: isPro && !!tournament_mode,
       tournament_format: isPro && tournament_mode && (tournament_format === 'assigned' || tournament_format === 'round_robin')

@@ -22,6 +22,7 @@ interface ActivityCard {
   chat_enabled: boolean
   reminder_enabled: boolean
   waitlist_enabled: boolean
+  waitlist_visible: boolean
   open_invite: boolean
   tournament_mode: boolean
   tournament_format: 'assigned' | 'round_robin' | null
@@ -95,17 +96,34 @@ export default function AppHome() {
   const [outConfirm, setOutConfirm] = useState<{ id: string; name: string } | null>(null)
   const [inConfirm, setInConfirm] = useState<{ activity: ActivityCard; mode: 'confirm' | 'calendar' } | null>(null)
 
-  const loadActivities = useCallback(async () => {
-    setLoading(true)
+  const loadActivities = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
     const res = await fetch(`/api/activities?tab=${activeTab}`)
     if (res.ok) {
       const data = await res.json()
       if (Array.isArray(data)) setActivities(sortActivities(data))
     }
-    setLoading(false)
+    if (!opts?.silent) setLoading(false)
   }, [activeTab])
 
   useEffect(() => { loadActivities() }, [loadActivities])
+
+  // Keep wait-list counts/positions live: silently refresh every 12s (and on
+  // refocus) whenever a wait-list-relevant card is on screen — someone on a
+  // wait list watching their spot, or a host watching the count grow.
+  const pollWaitlist = activeTab === 'upcoming' && activities.some(
+    (a) => a.my_status === 'waitlist' || (a.is_creator && a.waitlist_enabled),
+  )
+  useEffect(() => {
+    if (!pollWaitlist) return
+    const interval = setInterval(() => { loadActivities({ silent: true }) }, 12000)
+    const onVisible = () => { if (document.visibilityState === 'visible') loadActivities({ silent: true }) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [pollWaitlist, loadActivities])
 
   async function handleResponse(activityId: string, response: 'in' | 'out') {
     let predicted: 'confirmed' | 'out' | 'waitlist' = response === 'in' ? 'confirmed' : 'out'

@@ -380,6 +380,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.auto_emergency_fill !== undefined) updates.auto_emergency_fill = body.auto_emergency_fill
   if (body.followup_invite_enabled !== undefined) updates.followup_invite_enabled = isPro ? !!body.followup_invite_enabled : false
   if (body.waitlist_enabled !== undefined) updates.waitlist_enabled = isPro ? body.waitlist_enabled : false
+  if (body.waitlist_visible !== undefined) updates.waitlist_visible = body.waitlist_visible !== false
   if (body.open_invite !== undefined) updates.open_invite = !!body.open_invite
   if (body.tournament_mode !== undefined) updates.tournament_mode = isPro && !!body.tournament_mode
   if (body.tournament_format !== undefined) {
