@@ -138,6 +138,32 @@ export async function spawnNextDraft(parentId: string): Promise<string | null> {
     priority_order: 0,
   })
 
+  // Bring the group through into the draft right away (as 'tbd'), so the host
+  // sees who's lined up the moment the occurrence appears — not an empty card
+  // with only themselves. NOTHING is sent here: invites go out only when the
+  // host approves (fanOutActivityInvites, run by POST /approve). This just
+  // mirrors the pre-invite roster of a freshly created activity.
+  if (parent.group_id) {
+    const { data: groupMembers } = await admin
+      .from('whozin_group_members')
+      .select('user_id, priority_order')
+      .eq('group_id', parent.group_id)
+      .neq('user_id', parent.creator_id)
+      .order('priority_order', { ascending: true })
+
+    if (groupMembers && groupMembers.length > 0) {
+      await admin.from('whozin_activity_member').upsert(
+        groupMembers.map((m) => ({
+          activity_id: draft.id,
+          user_id: m.user_id,
+          status: 'tbd' as const,
+          priority_order: m.priority_order,
+        })),
+        { onConflict: 'activity_id,user_id' },
+      )
+    }
+  }
+
   return draft.id
 }
 
