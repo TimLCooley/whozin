@@ -77,6 +77,23 @@ export async function addToWaitlist(activityId: string, userId: string) {
 export async function promoteFromWaitlist(activityId: string): Promise<boolean> {
   const admin = getAdminClient()
 
+  // Never promote past capacity. This is the last line of defense against
+  // over-filling — callers should already only promote when a spot opened, but
+  // guarding here keeps the invariant no matter who calls.
+  const { data: cap } = await admin
+    .from('whozin_activity')
+    .select('max_capacity')
+    .eq('id', activityId)
+    .single()
+  if (cap?.max_capacity) {
+    const { count: confirmedCount } = await admin
+      .from('whozin_activity_member')
+      .select('id', { count: 'exact', head: true })
+      .eq('activity_id', activityId)
+      .eq('status', 'confirmed')
+    if ((confirmedCount ?? 0) >= cap.max_capacity) return false
+  }
+
   const { data: nextUp } = await admin
     .from('whozin_activity_member')
     .select('id, user_id')

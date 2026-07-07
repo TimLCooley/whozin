@@ -152,6 +152,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ? (confirmedBeforeCount ?? 0) >= activityBefore.max_capacity
     : false
 
+  // Did this user actually hold a confirmed spot before responding? Only a
+  // *confirmed* member marking out frees a spot. A wait-list / tbd / missed
+  // member marking out must NOT trigger a promotion or emergency fill.
+  const { data: myMemberBefore } = await admin
+    .from('whozin_activity_member')
+    .select('status')
+    .eq('activity_id', id)
+    .eq('user_id', whozinUser.id)
+    .single()
+  const wasConfirmed = myMemberBefore?.status === 'confirmed'
+
   // Wait list: a missed/out user replying IN on a full activity goes to wait list
   // (only when waitlist is enabled and the user isn't the host)
   if (
@@ -273,17 +284,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }).catch(() => {})
   }
 
-  // Emergency fill: someone dropped out of a FULL activity
-  if (response === 'out' && wasFull && activityBefore) {
-    // First try the wait list — auto-promote earliest waitlist member
-    let filledFromWaitlist = false
-    if (activityBefore.waitlist_enabled) {
-      const { promoteFromWaitlist } = await import('@/lib/waitlist')
-      filledFromWaitlist = await promoteFromWaitlist(id)
-    }
+  // Emergency fill: a CONFIRMED member dropped out of a FULL activity, freeing a
+  // real spot. (A wait-list/tbd/missed member marking out frees nothing, so this
+  // is gated on wasConfirmed — otherwise we'd wrongly promote someone and blow
+  // past capacity.) The wait-list backfill above already promoted the next
+  // person if one was waiting; only if the spot is STILL open do we fall back to
+  // an emergency fill / host notification.
+  if (response === 'out' && wasConfirmed && wasFull && activityBefore) {
+    const { count: confirmedNowCount } = await admin
+      .from('whozin_activity_member')
+      .select('id', { count: 'exact', head: true })
+      .eq('activity_id', id)
+      .eq('status', 'confirmed')
+    const spotStillOpen = activityBefore.max_capacity
+      ? (confirmedNowCount ?? 0) < activityBefore.max_capacity
+      : true
 
-    if (!filledFromWaitlist) {
-      // Get the name of who dropped out
+    if (spotStillOpen) {
+      // No one was on the wait list to backfill — notify to fill the spot.
       const { data: dropout } = await admin
         .from('whozin_users')
         .select('first_name, last_name')
