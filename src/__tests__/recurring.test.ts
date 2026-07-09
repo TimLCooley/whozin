@@ -141,6 +141,53 @@ describe('spawnNextDraft', () => {
     expect(draft.activity_date as string > '2026-01-01').toBe(true) // future
   })
 
+  test('copies EVERY setting field to the new occurrence (no dropped fields)', async () => {
+    // A parent with every carry-over setting at a distinctive value.
+    const parent: Record<string, unknown> = {
+      id: 'parent-1', creator_id: 'host-1', group_id: 'group-1',
+      activity_type: 'sport', activity_name: 'Pickleball',
+      activity_date: '2026-01-01', activity_time: '18:30:00', duration_hours: 3,
+      location: 'The Courts', address: '123 Main St', note: 'Bring water',
+      cost_type: 'fixed', cost: 12.5, max_capacity: 8, response_timer_minutes: 15,
+      priority_invite: true, invite_batch_size: 4, invite_priority_mode: 'random',
+      chat_enabled: true, reminder_enabled: true, image_url: 'https://x/y.png',
+      auto_emergency_fill: true, followup_invite_enabled: true,
+      waitlist_enabled: true, waitlist_visible: false, open_invite: true,
+      tournament_mode: true, tournament_format: 'round_robin',
+      tournament_track_scores: true, tournament_doubles: true, tournament_partner_rotation: true,
+      timezone: 'America/Los_Angeles', repeat_interval: 'weekly', status: 'full',
+      // Runtime state that must NOT carry over to a fresh occurrence:
+      tournament_started_at: '2026-01-01T00:00:00Z', tournament_current_round: 2,
+      tournament_teams: [['a', 'b']], capacity_current: 8, invite_starts_at: '2026-01-01T00:00:00Z',
+    }
+    db['whozin_activity'] = [parent]
+    db['whozin_group_members'] = [{ group_id: 'group-1', user_id: 'host-1', priority_order: 0 }]
+    db['whozin_activity_member'] = []
+
+    const draftId = (await spawnNextDraft('parent-1'))!
+    const draft = db['whozin_activity'].find((a) => a.id === draftId)!
+
+    const carryOver = [
+      'creator_id', 'group_id', 'activity_type', 'activity_name', 'activity_time', 'duration_hours',
+      'location', 'address', 'note', 'cost_type', 'cost', 'max_capacity', 'response_timer_minutes',
+      'priority_invite', 'invite_batch_size', 'invite_priority_mode', 'chat_enabled', 'reminder_enabled',
+      'image_url', 'auto_emergency_fill', 'followup_invite_enabled', 'waitlist_enabled', 'waitlist_visible',
+      'open_invite', 'tournament_mode', 'tournament_format', 'tournament_track_scores', 'tournament_doubles',
+      'tournament_partner_rotation', 'timezone', 'repeat_interval',
+    ]
+    for (const f of carryOver) {
+      expect(`${f}=${JSON.stringify(draft[f])}`).toBe(`${f}=${JSON.stringify(parent[f])}`)
+    }
+
+    // Fresh-occurrence resets: new draft, future date, runtime state cleared.
+    expect(draft.status).toBe('draft')
+    expect(draft.parent_activity_id).toBe('parent-1')
+    expect(draft.activity_date as string > '2026-01-01').toBe(true)
+    for (const runtime of ['tournament_started_at', 'tournament_current_round', 'tournament_teams', 'capacity_current', 'invite_starts_at']) {
+      expect(`${runtime}=${draft[runtime]}`).toBe(`${runtime}=undefined`)
+    }
+  })
+
   test('brings the group through into the draft (creator confirmed + group tbd)', async () => {
     seedRecurringParent()
     const draftId = (await spawnNextDraft('parent-1'))!

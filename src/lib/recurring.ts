@@ -118,8 +118,18 @@ export async function spawnNextDraft(parentId: string): Promise<string | null> {
       reminder_enabled: parent.reminder_enabled,
       image_url: parent.image_url,
       auto_emergency_fill: parent.auto_emergency_fill,
+      followup_invite_enabled: parent.followup_invite_enabled,
       waitlist_enabled: parent.waitlist_enabled,
+      waitlist_visible: parent.waitlist_visible,
       open_invite: parent.open_invite,
+      // Tournament *configuration* carries over; runtime state (started_at,
+      // current_round, teams) intentionally resets — the new occurrence hasn't
+      // been played yet.
+      tournament_mode: parent.tournament_mode,
+      tournament_format: parent.tournament_format,
+      tournament_track_scores: parent.tournament_track_scores,
+      tournament_doubles: parent.tournament_doubles,
+      tournament_partner_rotation: parent.tournament_partner_rotation,
       timezone: parent.timezone,
       repeat_interval: parent.repeat_interval,
       parent_activity_id: parent.id,
