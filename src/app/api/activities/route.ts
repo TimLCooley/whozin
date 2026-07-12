@@ -160,10 +160,27 @@ export async function GET(req: NextRequest) {
 
   // Get confirmed counts per activity, plus wait-list counts and the current
   // user's wait-list position (1-based, ordered by when they joined it).
-  const { data: allMemberStatuses } = await admin
-    .from('whozin_activity_member')
-    .select('activity_id, status, user_id, responded_at')
-    .in('activity_id', Array.from(activityIds))
+  //
+  // Scope to only the activities we're actually returning, and page through the
+  // results. A user with a long history can be in 100+ activities whose member
+  // rows total >1000 — PostgREST caps a single query at 1000 rows, which would
+  // silently drop members and under-count "confirmed" (e.g. showing 1/8 for a
+  // full activity, which then looks not-full in the UI).
+  const countedIds = visibleActivities.map((a) => a.id)
+  const allMemberStatuses: { activity_id: string; status: string; user_id: string; responded_at: string | null }[] = []
+  if (countedIds.length > 0) {
+    const PAGE = 1000
+    for (let from = 0; ; from += PAGE) {
+      const { data: page } = await admin
+        .from('whozin_activity_member')
+        .select('activity_id, status, user_id, responded_at')
+        .in('activity_id', countedIds)
+        .range(from, from + PAGE - 1)
+      if (!page || page.length === 0) break
+      allMemberStatuses.push(...page)
+      if (page.length < PAGE) break
+    }
+  }
 
   const confirmedCountMap = new Map<string, number>()
   const waitlistCountMap = new Map<string, number>()
