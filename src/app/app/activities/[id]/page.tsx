@@ -1205,7 +1205,8 @@ export default function ActivityDetailPage() {
                 value={memberQuery}
                 onChange={(e) => setMemberQuery(e.target.value)}
                 placeholder="Search members…"
-                className="input-field w-full pl-9 pr-9"
+                className="input-field w-full"
+                style={{ paddingLeft: '2.25rem', paddingRight: '2.25rem' }}
               />
               {memberQuery && (
                 <button
