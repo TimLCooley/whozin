@@ -84,11 +84,6 @@ export function GroupMembersModal({
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-semibold text-foreground truncate">{name}</p>
                   </div>
-                  {m.status === 'invited' && (
-                    <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                      Invited
-                    </span>
-                  )}
                 </div>
               )
             })
