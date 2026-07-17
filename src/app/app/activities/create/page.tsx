@@ -72,6 +72,10 @@ export default function CreateActivityPage() {
   const [reminderEnabled, setReminderEnabled] = useState(false)
   const [costType, setCostType] = useState<CostType>('free')
   const [costAmount, setCostAmount] = useState('')
+  // Split-a-total calculator (fills costAmount with the per-person price).
+  const [splitOpen, setSplitOpen] = useState(false)
+  const [splitTotal, setSplitTotal] = useState('')
+  const [splitPeople, setSplitPeople] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [uploadingImage, setUploadingImage] = useState(false)
   const [generatingImage, setGeneratingImage] = useState(false)
@@ -1330,7 +1334,7 @@ export default function CreateActivityPage() {
               </div>
               {costType !== 'free' && (
                 <div className="animate-enter">
-                  <FieldLabel>Price</FieldLabel>
+                  <FieldLabel>Price <span className="text-muted font-normal">(per person)</span></FieldLabel>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-[14px]">$</span>
                     <input
@@ -1344,6 +1348,82 @@ export default function CreateActivityPage() {
                       style={{ paddingLeft: '2rem' }}
                     />
                   </div>
+
+                  {/* Split-a-total calculator */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!splitOpen) {
+                        const m = getEffectiveMaxCapacity()
+                        setSplitPeople(m ? String(m) : '')
+                      }
+                      setSplitOpen((v) => !v)
+                    }}
+                    className="mt-2 flex items-center gap-1.5 text-primary text-[12px] font-semibold active:opacity-70"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3M6 21a3 3 0 003-3V6a3 3 0 00-3-3M15 12H3" />
+                    </svg>
+                    {splitOpen ? 'Hide split calculator' : 'Split a total across the group'}
+                  </button>
+
+                  {splitOpen && (() => {
+                    const total = parseFloat(splitTotal) || 0
+                    const people = parseInt(splitPeople) || 0
+                    const perPerson = total > 0 && people > 0 ? total / people : 0
+                    const perPersonStr = perPerson > 0 ? perPerson.toFixed(2) : '0.00'
+                    const uneven = perPerson > 0 && Math.round(perPerson * 100) / 100 * people !== Math.round(total * 100) / 100
+                    return (
+                      <div className="mt-2 p-3 rounded-xl bg-surface border border-border/50 space-y-2.5 animate-enter">
+                        <p className="text-[11px] text-muted leading-snug">Enter the total and how many are splitting — we’ll set the per-person price above.</p>
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <label className="block text-[11px] font-semibold text-muted mb-1">Total</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-[13px]">$</span>
+                              <input
+                                type="number"
+                                value={splitTotal}
+                                onChange={(e) => setSplitTotal(e.target.value)}
+                                placeholder="0.00"
+                                step="0.01"
+                                min="0"
+                                className="input-field"
+                                style={{ paddingLeft: '1.75rem' }}
+                              />
+                            </div>
+                          </div>
+                          <span className="text-muted text-[16px] font-semibold pb-2.5">÷</span>
+                          <div className="w-24">
+                            <label className="block text-[11px] font-semibold text-muted mb-1">People</label>
+                            <input
+                              type="number"
+                              value={splitPeople}
+                              onChange={(e) => setSplitPeople(e.target.value)}
+                              placeholder="0"
+                              step="1"
+                              min="1"
+                              className="input-field text-center"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[13px] text-foreground">
+                            = <span className="font-bold">${perPersonStr}</span> <span className="text-muted">each</span>
+                            {uneven && <span className="text-muted text-[11px]"> (rounded)</span>}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={perPerson <= 0}
+                            onClick={() => setCostAmount(perPersonStr)}
+                            className="px-4 py-2 rounded-lg bg-primary text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50"
+                          >
+                            Split
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </FieldCard>
