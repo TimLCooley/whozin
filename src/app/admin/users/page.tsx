@@ -13,6 +13,7 @@ interface UserRow {
   created_at: string
   auth_user_id: string | null
   push_token: string | null
+  events_created?: number
 }
 
 type FilterMode = 'all' | 'active' | 'invited'
@@ -295,6 +296,8 @@ export default function UsersPage() {
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-xs text-muted">
                     Joined {new Date(user.created_at).toLocaleDateString()}
+                    <span className="mx-1.5">·</span>
+                    <span className="font-medium text-foreground">{user.events_created ?? 0}</span> event{(user.events_created ?? 0) === 1 ? '' : 's'}
                   </p>
                   <div className="flex gap-1">
                     {user.auth_user_id && (
@@ -328,6 +331,7 @@ export default function UsersPage() {
                   <th className="px-4 py-3 font-medium text-muted">Email</th>
                   <th className="px-4 py-3 font-medium text-muted text-center">Status</th>
                   <th className="px-4 py-3 font-medium text-muted text-center">Tier</th>
+                  <th className="px-4 py-3 font-medium text-muted text-center">Events</th>
                   <th className="px-4 py-3 font-medium text-muted">Joined</th>
                   <th className="px-4 py-3 font-medium text-muted text-center">Actions</th>
                 </tr>
@@ -362,6 +366,7 @@ export default function UsersPage() {
                         {user.membership_tier}
                       </button>
                     </td>
+                    <td className="px-4 py-3 text-center font-medium tabular-nums">{user.events_created ?? 0}</td>
                     <td className="px-4 py-3 text-muted">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">

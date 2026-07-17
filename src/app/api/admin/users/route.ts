@@ -13,7 +13,28 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data ?? [])
+  // Count activities created per user. Paginate so the tally can't be silently
+  // capped at the default 1000 rows.
+  const eventsByCreator = new Map<string, number>()
+  const pageSize = 1000
+  for (let from = 0; ; from += pageSize) {
+    const { data: batch } = await admin
+      .from('whozin_activity')
+      .select('creator_id')
+      .range(from, from + pageSize - 1)
+    if (!batch || batch.length === 0) break
+    for (const a of batch) {
+      if (a.creator_id) eventsByCreator.set(a.creator_id, (eventsByCreator.get(a.creator_id) ?? 0) + 1)
+    }
+    if (batch.length < pageSize) break
+  }
+
+  const withCounts = (data ?? []).map((u) => ({
+    ...u,
+    events_created: eventsByCreator.get(u.id) ?? 0,
+  }))
+
+  return NextResponse.json(withCounts)
 }
 
 export async function PATCH(req: NextRequest) {
