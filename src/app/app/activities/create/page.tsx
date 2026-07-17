@@ -7,6 +7,7 @@ import { PlacesAutocomplete } from '@/components/ui/places-autocomplete'
 import { usePaywall } from '@/hooks/use-pro-status'
 import ProBadge from '@/components/ui/pro-badge'
 import { ensureImage } from '@/lib/pdf-to-image'
+import { GroupMembersModal } from '@/components/app/group-members-modal'
 
 interface Preset {
   id: string
@@ -82,6 +83,12 @@ export default function CreateActivityPage() {
   // Group Details
   const [groups, setGroups] = useState<GroupOption[]>([])
   const [groupsLoading, setGroupsLoading] = useState(true)
+  // Group members preview (eyeball) — confirm you picked the right group.
+  const [previewGroup, setPreviewGroup] = useState<{ id: string; name: string } | null>(null)
+  const openGroupPreview = () => {
+    const g = groups.find((x) => x.id === selectedGroup)
+    if (g) setPreviewGroup({ id: g.id, name: g.name })
+  }
   const groupsPromiseRef = useRef<Promise<GroupOption[]> | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<string>('')
   const [maxCapacity, setMaxCapacity] = useState<number | 'custom'>(2)
@@ -718,12 +725,15 @@ export default function CreateActivityPage() {
             {/* Group */}
             <FieldCard>
               <FieldLabel>Which group?</FieldLabel>
-              <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="input-field w-full">
-                <option value="">Select Group</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name} ({g.member_count} {g.member_count === 1 ? 'person' : 'people'})</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select value={selectedGroup} onChange={(e) => setSelectedGroup(e.target.value)} className="input-field flex-1">
+                  <option value="">Select Group</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name} ({g.member_count} {g.member_count === 1 ? 'person' : 'people'})</option>
+                  ))}
+                </select>
+                <GroupEyeButton show={!!selectedGroup} onClick={openGroupPreview} />
+              </div>
             </FieldCard>
 
             {/* How many spots */}
@@ -1365,6 +1375,7 @@ export default function CreateActivityPage() {
                     </option>
                   ))}
                 </select>
+                <GroupEyeButton show={!!selectedGroup} onClick={openGroupPreview} />
               </div>
             </FieldCard>
 
@@ -1875,11 +1886,38 @@ export default function CreateActivityPage() {
         )}
       </div>
 
+      {previewGroup && (
+        <GroupMembersModal
+          groupId={previewGroup.id}
+          groupName={previewGroup.name}
+          onClose={() => setPreviewGroup(null)}
+        />
+      )}
+
     </div>
   )
 }
 
 /* -- Reusable components -- */
+
+// Eyeball button that opens the group-members preview. Shown once a group is
+// picked, so the host can confirm they selected the right one.
+function GroupEyeButton({ show, onClick }: { show: boolean; onClick: () => void }) {
+  if (!show) return null
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.preventDefault(); onClick() }}
+      className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center active:bg-primary/20 transition-colors"
+      aria-label="View group members"
+      title="View members"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4285F4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" />
+      </svg>
+    </button>
+  )
+}
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return <h2 className="text-[16px] font-bold text-foreground">{children}</h2>
