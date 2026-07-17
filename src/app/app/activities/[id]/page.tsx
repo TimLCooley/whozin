@@ -120,6 +120,7 @@ export default function ActivityDetailPage() {
   const [responding, setResponding] = useState(false)
   const [showInConfirm, setShowInConfirm] = useState(false)
   const [memberQuery, setMemberQuery] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
@@ -1293,36 +1294,53 @@ export default function ActivityDetailPage() {
             )}
 
             <div className="pt-4 space-y-3">
-              <SettingsToggles
-                activity={activity}
-                isPro={isPro}
-                requirePro={requirePro}
-                patch={async (patch) => {
-                  const prev = activity
-                  setActivity({ ...activity, ...patch } as ActivityDetail)
-                  const res = await fetch(`/api/activities/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(patch),
-                  })
-                  if (!res.ok) setActivity(prev)
-                }}
-              />
-              <RepeatSetting
-                value={activity.repeat_interval ?? 'none'}
-                isPro={isPro}
-                requirePro={requirePro}
-                onChange={async (next) => {
-                  const prev = activity
-                  setActivity({ ...activity, repeat_interval: next })
-                  const res = await fetch(`/api/activities/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ repeat_interval: next }),
-                  })
-                  if (!res.ok) setActivity(prev)
-                }}
-              />
+              {/* Event Settings — collapsed by default to keep the roster tidy */}
+              <button
+                type="button"
+                onClick={() => setSettingsOpen((v) => !v)}
+                className="flex items-center gap-2 w-full text-left active:opacity-70 transition-opacity"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={`text-muted flex-shrink-0 transition-transform ${settingsOpen ? '' : '-rotate-90'}`}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                <h3 className="text-[15px] font-bold text-foreground">Event Settings</h3>
+              </button>
+
+              {settingsOpen && (
+                <div className="space-y-3">
+                  <SettingsToggles
+                    activity={activity}
+                    isPro={isPro}
+                    requirePro={requirePro}
+                    patch={async (patch) => {
+                      const prev = activity
+                      setActivity({ ...activity, ...patch } as ActivityDetail)
+                      const res = await fetch(`/api/activities/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(patch),
+                      })
+                      if (!res.ok) setActivity(prev)
+                    }}
+                  />
+                  <RepeatSetting
+                    value={activity.repeat_interval ?? 'none'}
+                    isPro={isPro}
+                    requirePro={requirePro}
+                    onChange={async (next) => {
+                      const prev = activity
+                      setActivity({ ...activity, repeat_interval: next })
+                      const res = await fetch(`/api/activities/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ repeat_interval: next }),
+                      })
+                      if (!res.ok) setActivity(prev)
+                    }}
+                  />
+                </div>
+              )}
+
               <button
                 onClick={() => setShowDeleteModal(true)}
                 className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
@@ -2960,6 +2978,23 @@ function InfoRow({ icon, label, value, secondary, link, trailing, onClick, onEdi
 }
 
 /* -- Repeat picker (host's group tab) -- */
+// Canonical on/off switch — used by every settings toggle so they look
+// identical (previously RepeatSetting had a smaller, lighter variant whose
+// "off" state read as ambiguous).
+function Toggle({ checked, onClick }: { checked: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onClick}
+      className={`relative w-[46px] h-[28px] rounded-full transition-colors duration-200 flex-shrink-0 ${checked ? 'bg-primary' : 'bg-[#d5d9e2]'}`}
+    >
+      <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${checked ? 'translate-x-[18px]' : ''}`} />
+    </button>
+  )
+}
+
 function RepeatSetting({
   value,
   isPro,
@@ -2979,17 +3014,13 @@ function RepeatSetting({
           <span className="text-[14px] font-semibold text-foreground">Repeat</span>
           <span className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold uppercase">Pro</span>
         </div>
-        <button
-          role="switch"
-          aria-checked={enabled}
+        <Toggle
+          checked={enabled}
           onClick={() => {
             if (!enabled && !isPro) { requirePro(); return }
             onChange(enabled ? 'none' : 'weekly')
           }}
-          className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-primary' : isPro ? 'bg-border' : 'bg-border/60'}`}
-        >
-          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${enabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
-        </button>
+        />
       </div>
       {enabled && (
         <div className="flex gap-2 mt-3">
@@ -3058,19 +3089,13 @@ function SettingsToggles({
                 <span className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold uppercase">Pro</span>
               )}
             </div>
-            <button
-              role="switch"
-              aria-checked={checked}
+            <Toggle
+              checked={checked}
               onClick={() => {
                 if (!checked && locked) { requirePro(); return }
                 patch({ [r.key]: !checked } as Partial<ActivityDetail>)
               }}
-              className={`relative w-[46px] h-[28px] rounded-full transition-colors duration-200 flex-shrink-0 ${checked ? 'bg-primary' : 'bg-[#d5d9e2]'}`}
-            >
-              <span
-                className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-white rounded-full shadow-sm transition-transform duration-200 ${checked ? 'translate-x-[18px]' : ''}`}
-              />
-            </button>
+            />
           </div>
         )
       })}
