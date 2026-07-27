@@ -348,7 +348,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: existing } = await admin
     .from('whozin_activity')
-    .select('creator_id')
+    .select('creator_id, status')
     .eq('id', id)
     .single()
 
@@ -444,9 +444,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const confirmed = confirmedCount ?? 0
     const newCap = updates.max_capacity as number | null
     const isFull = newCap ? confirmed >= newCap : false
+    // Never un-draft here — only POST /approve promotes a draft to open (which
+    // runs the fan-out + 2-minute countdown). Editing a draft's capacity must
+    // leave it a draft, otherwise /approve bails and invites fire immediately.
+    const nextStatus = existing.status === 'draft' ? 'draft' : (isFull ? 'full' : 'open')
     await admin
       .from('whozin_activity')
-      .update({ capacity_current: confirmed, status: isFull ? 'full' : 'open' })
+      .update({ capacity_current: confirmed, status: nextStatus })
       .eq('id', id)
 
     if (!isFull) {
