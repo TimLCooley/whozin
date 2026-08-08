@@ -124,6 +124,7 @@ export default function ActivityDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [cancelEndSeries, setCancelEndSeries] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -787,7 +788,11 @@ export default function ActivityDetailPage() {
 
   async function handleCancel() {
     setCancelling(true)
-    const res = await fetch(`/api/activities/${id}/cancel`, { method: 'POST' })
+    const res = await fetch(`/api/activities/${id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ end_series: cancelEndSeries }),
+    })
     setCancelling(false)
     if (res.ok) {
       setShowCancelModal(false)
@@ -1151,7 +1156,7 @@ export default function ActivityDetailPage() {
                 {/* Cancel / Delete */}
                 {canCancel && (
                   <button
-                    onClick={() => setShowCancelModal(true)}
+                    onClick={() => { setCancelEndSeries(false); setShowCancelModal(true) }}
                     className="w-full bg-danger/5 border border-danger/30 rounded-xl px-4 py-3 flex items-center justify-center gap-2 active:bg-danger/10 transition-colors"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -1409,7 +1414,7 @@ export default function ActivityDetailPage() {
 
               {canCancel && (
                 <button
-                  onClick={() => setShowCancelModal(true)}
+                  onClick={() => { setCancelEndSeries(false); setShowCancelModal(true) }}
                   className="w-full bg-danger/5 border border-danger/30 rounded-xl px-4 py-3 flex items-center justify-center gap-2 active:bg-danger/10 transition-colors"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -1646,10 +1651,35 @@ export default function ActivityDetailPage() {
               <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
                 <span className="font-semibold">{activity.activity_name}</span> will be marked cancelled and
                 {cancelNotifyCount > 0
-                  ? <> everyone who&apos;s in, invited, or on the wait list — <span className="font-semibold">{cancelNotifyCount} {cancelNotifyCount === 1 ? 'person' : 'people'}</span> — will be notified by <span className="font-semibold">push and text</span>.</>
+                  ? <> everyone who&apos;s in, invited, or on the wait list — <span className="font-semibold">{cancelNotifyCount} {cancelNotifyCount === 1 ? 'person' : 'people'}</span> — will be <span className="font-semibold">notified</span> (push for app users, text for everyone else).</>
                   : <> no one needs to be notified (no one&apos;s in it yet).</>}
               </p>
             </div>
+
+            {/* Recurring: cancel just this one, or end the whole series? */}
+            {activity.repeat_interval && activity.repeat_interval !== 'none' && (
+              <div className="mb-5">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted mb-2">This is a repeating event</p>
+                <div className="space-y-2">
+                  {([
+                    { end: false, title: 'Cancel just this one', desc: 'The series keeps going — the next occurrence still comes around.' },
+                    { end: true, title: 'End the whole series', desc: 'Cancel this one and stop it from repeating going forward.' },
+                  ] as const).map((opt) => (
+                    <button
+                      key={String(opt.end)}
+                      onClick={() => setCancelEndSeries(opt.end)}
+                      className={`w-full text-left px-3.5 py-2.5 rounded-xl border transition-colors ${
+                        cancelEndSeries === opt.end ? 'border-primary bg-primary/5' : 'border-border/50 bg-surface'
+                      }`}
+                    >
+                      <p className="text-[13px] font-bold text-foreground">{opt.title}</p>
+                      <p className="text-[11px] text-muted leading-snug mt-0.5">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCancelModal(false)}
