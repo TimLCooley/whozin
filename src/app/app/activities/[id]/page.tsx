@@ -122,6 +122,8 @@ export default function ActivityDetailPage() {
   const [memberQuery, setMemberQuery] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -783,6 +785,19 @@ export default function ActivityDetailPage() {
     setDeleting(false)
   }
 
+  async function handleCancel() {
+    setCancelling(true)
+    const res = await fetch(`/api/activities/${id}/cancel`, { method: 'POST' })
+    setCancelling(false)
+    if (res.ok) {
+      setShowCancelModal(false)
+      await loadActivity()
+    } else {
+      const d = await res.json().catch(() => null)
+      alert(d?.error ?? 'Failed to cancel activity')
+    }
+  }
+
   if (loading) {
     return (
       <div className="h-full flex flex-col bg-surface">
@@ -820,6 +835,10 @@ export default function ActivityDetailPage() {
   const out = activity.members.filter((m) => m.status === 'out')
 
   const isFull = activity.max_capacity ? confirmed.length >= activity.max_capacity : false
+
+  // Cancel is for a live activity with people to notify; Delete is for empties.
+  const canCancel = activity.status === 'open' || activity.status === 'full'
+  const cancelNotifyCount = confirmed.length + waiting.length + waitlist.length
 
   // The current user's live position on the wait list (1-based, earliest first).
   const myWaitlistPosition = activity.my_status === 'waitlist'
@@ -933,6 +952,15 @@ export default function ActivityDetailPage() {
           }}
         />
       </div>
+
+      {activity.status === 'cancelled' && (
+        <div className="flex items-center justify-center gap-2 bg-red-50 border-b border-red-200 px-4 py-2.5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+          </svg>
+          <span className="text-[13px] font-bold text-red-600">This activity was cancelled</span>
+        </div>
+      )}
 
       {/* Content */}
       <div ref={contentRef} className={`flex-1 ${tab === 'chat' ? 'flex flex-col min-h-0' : 'overflow-y-auto pb-4'}`}>
@@ -1120,12 +1148,23 @@ export default function ActivityDetailPage() {
                   </button>
                 )}
 
-                {/* Delete button */}
+                {/* Cancel / Delete */}
+                {canCancel && (
+                  <button
+                    onClick={() => setShowCancelModal(true)}
+                    className="w-full bg-danger/5 border border-danger/30 rounded-xl px-4 py-3 flex items-center justify-center gap-2 active:bg-danger/10 transition-colors"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+                    </svg>
+                    <span className="text-[14px] font-bold text-danger">Cancel Activity</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setShowDeleteModal(true)}
-                  className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70 transition-opacity"
+                  className="w-full text-center text-muted text-[13px] font-semibold py-2 active:opacity-70 transition-opacity"
                 >
-                  Delete Activity
+                  {canCancel ? 'Delete without notifying' : 'Delete Activity'}
                 </button>
               </>
             )}
@@ -1368,11 +1407,22 @@ export default function ActivityDetailPage() {
                 </div>
               )}
 
+              {canCancel && (
+                <button
+                  onClick={() => setShowCancelModal(true)}
+                  className="w-full bg-danger/5 border border-danger/30 rounded-xl px-4 py-3 flex items-center justify-center gap-2 active:bg-danger/10 transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+                  </svg>
+                  <span className="text-[14px] font-bold text-danger">Cancel Activity</span>
+                </button>
+              )}
               <button
                 onClick={() => setShowDeleteModal(true)}
-                className="w-full text-center text-danger text-[14px] font-semibold py-2 active:opacity-70"
+                className="w-full text-center text-muted text-[13px] font-semibold py-2 active:opacity-70"
               >
-                Delete Activity
+                {canCancel ? 'Delete without notifying' : 'Delete Activity'}
               </button>
             </div>
           </div>
@@ -1581,6 +1631,45 @@ export default function ActivityDetailPage() {
         </div>
       )}
 
+      {/* Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => !cancelling && setShowCancelModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-red-50 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-bold text-foreground">Cancel this activity?</h3>
+              <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
+                <span className="font-semibold">{activity.activity_name}</span> will be marked cancelled and
+                {cancelNotifyCount > 0
+                  ? <> everyone who&apos;s in, invited, or on the wait list — <span className="font-semibold">{cancelNotifyCount} {cancelNotifyCount === 1 ? 'person' : 'people'}</span> — will be notified by <span className="font-semibold">push and text</span>.</>
+                  : <> no one needs to be notified (no one&apos;s in it yet).</>}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                disabled={cancelling}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                Keep it
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white active:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                {cancelling ? 'Cancelling…' : 'Cancel Activity'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setShowDeleteModal(false)}>
@@ -1599,7 +1688,8 @@ export default function ActivityDetailPage() {
               </div>
               <h3 className="text-[17px] font-bold text-foreground">Delete Activity?</h3>
               <p className="text-[14px] text-foreground/70 mt-2 leading-relaxed">
-                This will permanently delete <span className="font-semibold">{activity.activity_name}</span> and notify all members. This cannot be undone.
+                This permanently removes <span className="font-semibold">{activity.activity_name}</span> for everyone, with <span className="font-semibold">no notification sent</span>. This cannot be undone.
+                {canCancel && cancelNotifyCount > 0 && <span className="block text-[13px] text-muted mt-1.5">People are in this one — use Cancel Activity if you want them notified.</span>}
               </p>
             </div>
             <div className="flex gap-3">
