@@ -1,4 +1,4 @@
-import { nextDateFor, nextFutureDate, spawnNextDraft, cleanupStaleDrafts } from '@/lib/recurring'
+import { nextDateFor, nextFutureDate, previousDateFor, spawnNextDraft, cleanupStaleDrafts } from '@/lib/recurring'
 
 // ── In-memory fake of the Supabase admin client ─────────────────────────────
 // Supports just the chainable operations the recurring code uses, backed by
@@ -98,6 +98,16 @@ describe('nextDateFor', () => {
   test('monthly keeps day-of-month', () => expect(nextDateFor('2026-07-15', 'monthly')).toBe('2026-08-15'))
   test('monthly clamps to end of shorter month', () => expect(nextDateFor('2026-01-31', 'monthly')).toBe('2026-02-28'))
   test('none returns null', () => expect(nextDateFor('2026-07-01', 'none')).toBeNull())
+})
+
+describe('previousDateFor', () => {
+  test('weekly subtracts 7 days', () => expect(previousDateFor('2026-08-12', 'weekly')).toBe('2026-08-05'))
+  test('biweekly subtracts 14 days', () => expect(previousDateFor('2026-08-15', 'biweekly')).toBe('2026-08-01'))
+  test('monthly goes back a month', () => expect(previousDateFor('2026-08-15', 'monthly')).toBe('2026-07-15'))
+  test('monthly across year boundary', () => expect(previousDateFor('2026-01-15', 'monthly')).toBe('2025-12-15'))
+  test('none returns null', () => expect(previousDateFor('2026-08-12', 'none')).toBeNull())
+  test('is the inverse of nextDateFor for weekly', () =>
+    expect(previousDateFor(nextDateFor('2026-08-12', 'weekly')!, 'weekly')).toBe('2026-08-12'))
 })
 
 describe('nextFutureDate', () => {

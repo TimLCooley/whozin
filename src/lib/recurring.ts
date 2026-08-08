@@ -13,14 +13,14 @@ function addDays(date: string, days: number): string {
 }
 
 /**
- * Add 1 month while preserving day-of-month. If the next month has fewer
- * days (e.g. Jan 31 → Feb 28), clamp to the last day of the next month.
+ * Add `delta` months (may be negative) while preserving day-of-month. If the
+ * target month has fewer days (e.g. Jan 31 → Feb 28), clamp to its last day.
  */
-function addMonth(date: string): string {
+function addMonths(date: string, delta: number): string {
   const d = new Date(date + 'T00:00:00Z')
-  const targetMonth = d.getUTCMonth() + 1
+  const targetMonth = d.getUTCMonth() + delta
   const targetYear = d.getUTCFullYear() + Math.floor(targetMonth / 12)
-  const month = targetMonth % 12
+  const month = ((targetMonth % 12) + 12) % 12
   const day = d.getUTCDate()
   // Find last day of target month
   const lastDay = new Date(Date.UTC(targetYear, month + 1, 0)).getUTCDate()
@@ -32,7 +32,21 @@ function addMonth(date: string): string {
 export function nextDateFor(date: string, interval: RepeatInterval): string | null {
   if (interval === 'weekly') return addDays(date, 7)
   if (interval === 'biweekly') return addDays(date, 14)
-  if (interval === 'monthly') return addMonth(date)
+  if (interval === 'monthly') return addMonths(date, 1)
+  return null
+}
+
+/**
+ * The occurrence one interval BEFORE `date`. Used to decide when a spawned
+ * draft should surface: a draft becomes visible once we reach the previous
+ * occurrence (≈ when the last event happens). A skipped draft sits one extra
+ * interval out, so it naturally stays hidden until ~an interval before its new
+ * date, then re-appears. Returns null for a non-recurring interval.
+ */
+export function previousDateFor(date: string, interval: RepeatInterval): string | null {
+  if (interval === 'weekly') return addDays(date, -7)
+  if (interval === 'biweekly') return addDays(date, -14)
+  if (interval === 'monthly') return addMonths(date, -1)
   return null
 }
 

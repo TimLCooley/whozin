@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { previousDateFor, type RepeatInterval } from '@/lib/recurring'
 
 // GET activities for the current user (upcoming + past)
 export async function GET(req: NextRequest) {
@@ -128,8 +129,19 @@ export async function GET(req: NextRequest) {
 
   const dateFilteredActivities = (activities ?? []).filter((a) => {
     if (a.status === 'past' || a.status === 'cancelled') return tab === 'past'
-    // Drafts always belong to the upcoming tab regardless of timing.
-    if (a.status === 'draft') return tab === 'upcoming'
+    if (a.status === 'draft') {
+      if (tab !== 'upcoming') return false
+      // Hold a recurring draft until ~one interval before its date (around when
+      // the previous occurrence happens). This is what makes "skip" work: a
+      // skipped draft sits an extra interval out, so it stays hidden now and
+      // re-surfaces next cycle to ask again — instead of popping back instantly.
+      const interval = a.repeat_interval as RepeatInterval | null
+      if (interval && interval !== 'none' && a.activity_date) {
+        const surfaceOn = previousDateFor(a.activity_date, interval)
+        if (surfaceOn && todayUtc < surfaceOn) return false
+      }
+      return true
+    }
     const endMs = endTimestampMs(a)
     if (endMs === null) return tab === 'upcoming'
     return tab === 'upcoming' ? endMs >= nowMs : endMs < nowMs
