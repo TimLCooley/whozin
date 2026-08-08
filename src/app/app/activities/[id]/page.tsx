@@ -335,6 +335,33 @@ export default function ActivityDetailPage() {
   const [countdownSeconds, setCountdownSeconds] = useState(0)
   const [selectedMember, setSelectedMember] = useState<MemberInfo | null>(null)
   const [memberActioning, setMemberActioning] = useState(false)
+  // Transfer host
+  const [transferMember, setTransferMember] = useState<MemberInfo | null>(null)
+  const [transferLeaving, setTransferLeaving] = useState(false)
+  const [transferSpot, setTransferSpot] = useState<'defer' | 'auto' | 'open_invite'>('defer')
+  const [transferring, setTransferring] = useState(false)
+
+  async function handleTransferHost() {
+    if (!transferMember) return
+    setTransferring(true)
+    const res = await fetch(`/api/activities/${id}/transfer-host`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        new_host_id: transferMember.user_id,
+        leaving: transferLeaving,
+        spot_handling: transferLeaving ? transferSpot : undefined,
+      }),
+    })
+    setTransferring(false)
+    if (res.ok) {
+      setTransferMember(null)
+      await loadActivity()
+    } else {
+      const d = await res.json().catch(() => null)
+      alert(d?.error ?? 'Failed to transfer host')
+    }
+  }
 
   // Add member to activity
   type AddModal = null | 'add-menu' | 'add-phone' | 'add-friends' | 'add-google' | 'add-device' | 'add-group'
@@ -1403,6 +1430,26 @@ export default function ActivityDetailPage() {
                 </button>
               )}
 
+              {/* Make Host — hand off to another confirmed member */}
+              {activity.is_creator && selectedMember.status === 'confirmed' && selectedMember.user_id !== activity.current_user_id && (
+                <button
+                  onClick={() => {
+                    const m = selectedMember
+                    setSelectedMember(null)
+                    setTransferLeaving(false)
+                    setTransferSpot('defer')
+                    setTransferMember(m)
+                  }}
+                  disabled={memberActioning}
+                  className="w-full py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21 8 14 2 9.4h7.6L12 2z" />
+                  </svg>
+                  Make Host
+                </button>
+              )}
+
               {/* Remove & Notify — for confirmed members when activity is/was full */}
               {selectedMember.status === 'confirmed' && isFull && (
                 <button
@@ -1432,6 +1479,82 @@ export default function ActivityDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Transfer Host Modal */}
+      {transferMember && (() => {
+        const name = transferMember.user ? `${transferMember.user.first_name} ${transferMember.user.last_name}`.trim() : 'this member'
+        const firstName = transferMember.user?.first_name || 'they'
+        return (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center px-6" onClick={() => !transferring && setTransferMember(null)}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center mb-5">
+                <div className="w-14 h-14 mx-auto mb-3"><AvatarImg src={transferMember.user?.avatar_url} size="xl" /></div>
+                <h3 className="text-[17px] font-bold text-foreground">Make {name} host?</h3>
+                <p className="text-[13px] text-muted mt-1.5 leading-snug">{firstName} gets full host controls — inviting, managing the roster, and settings. You can&apos;t undo this yourself.</p>
+              </div>
+
+              {/* Your spot */}
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted mb-2">Your spot</p>
+              <div className="flex gap-2 mb-4">
+                {([{ v: false, label: 'Stay in' }, { v: true, label: 'Leave the event' }] as const).map((opt) => (
+                  <button
+                    key={String(opt.v)}
+                    onClick={() => setTransferLeaving(opt.v)}
+                    className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold border transition-colors ${
+                      transferLeaving === opt.v ? 'bg-primary text-white border-primary' : 'bg-surface text-muted border-border/50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* If leaving — how to handle the freed spot */}
+              {transferLeaving && (
+                <div className="mb-4 animate-enter">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted mb-2">The open spot</p>
+                  <div className="space-y-2">
+                    {([
+                      { v: 'defer', title: `Let ${firstName} decide`, desc: 'Notify the new host — they fill it however they want.' },
+                      { v: 'auto', title: 'Fill it now', desc: 'Pull from the wait list, then send invites per your settings.' },
+                      { v: 'open_invite', title: 'Open invite', desc: 'Anyone in the group can grab the open spot.' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.v}
+                        onClick={() => setTransferSpot(opt.v)}
+                        className={`w-full text-left px-3.5 py-2.5 rounded-xl border transition-colors ${
+                          transferSpot === opt.v ? 'border-primary bg-primary/5' : 'border-border/50 bg-surface'
+                        }`}
+                      >
+                        <p className="text-[13px] font-bold text-foreground">{opt.title}</p>
+                        <p className="text-[11px] text-muted leading-snug mt-0.5">{opt.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setTransferMember(null)}
+                  disabled={transferring}
+                  className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-surface text-foreground border border-border/50 active:opacity-80 transition-opacity disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTransferHost}
+                  disabled={transferring}
+                  className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-primary text-white active:opacity-80 transition-opacity disabled:opacity-50"
+                >
+                  {transferring ? 'Transferring…' : 'Transfer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Expanded Image Modal */}
       {imageExpanded && activity.image_url && (
