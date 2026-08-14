@@ -103,6 +103,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     is_creator: activityData.creator_id === whozinUser.id,
     current_user_id: whozinUser.id,
     my_status: myMember?.status ?? null,
+    my_chat_access: myMember?.chat_access ?? false,
     members: membersWithInfo,
     confirmed_count: (members ?? []).filter((m) => m.status === 'confirmed').length,
   })
@@ -315,8 +316,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (activityBefore.auto_emergency_fill) {
         // Auto mode: blast everyone immediately
         await sendEmergencyFill(id)
-      } else {
-        // Manual mode: notify host, they decide
+      } else if (whozinUser.id !== activityBefore.creator_id) {
+        // Manual mode: notify host, they decide. (Skip if the host is the one
+        // who dropped — they don't need a "you dropped out" ping to themselves.)
         await notifyHostOfDropout(id, dropoutName)
       }
     }

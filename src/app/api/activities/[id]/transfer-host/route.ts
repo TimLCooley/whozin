@@ -73,9 +73,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (leaving) {
     const wasFull = activity.status === 'full'
 
+    // Mark them out, but keep them in the chat so they can still help coordinate.
     await admin
       .from('whozin_activity_member')
-      .update({ status: 'out', responded_at: new Date().toISOString() })
+      .update({ status: 'out', chat_access: true, responded_at: new Date().toISOString() })
       .eq('activity_id', id)
       .eq('user_id', whozinUser.id)
 

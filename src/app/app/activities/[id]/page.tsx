@@ -62,6 +62,7 @@ interface ActivityDetail {
   is_creator: boolean
   current_user_id: string
   my_status: string | null
+  my_chat_access?: boolean
   group_id: string
   group_name: string
   creator_name: string
@@ -127,6 +128,7 @@ export default function ActivityDetailPage() {
   const [cancelEndSeries, setCancelEndSeries] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const [showOutModal, setShowOutModal] = useState(false)
+  const [showHostOutSheet, setShowHostOutSheet] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [emergencyDelay, setEmergencyDelay] = useState(30) // minutes
@@ -722,6 +724,8 @@ export default function ActivityDetailPage() {
   async function handleResponse(response: 'in' | 'out') {
     if (!activity) return
     if (response === 'out' && activity.my_status === 'confirmed') {
+      // Dropping the host is special — offer stay-as-organizer vs. hand off.
+      if (activity.is_creator) { setShowHostOutSheet(true); return }
       setShowOutModal(true)
       return
     }
@@ -838,6 +842,8 @@ export default function ActivityDetailPage() {
   const tbd = activity.members.filter((m) => m.status === 'tbd').sort((a, b) => a.priority_order - b.priority_order)
   const missed = activity.members.filter((m) => m.status === 'missed')
   const out = activity.members.filter((m) => m.status === 'out')
+    // Pin the host to the top of Out when they've stepped back as organizer.
+    .sort((a, b) => (b.user_id === activity.creator_id ? 1 : 0) - (a.user_id === activity.creator_id ? 1 : 0))
 
   const isFull = activity.max_capacity ? confirmed.length >= activity.max_capacity : false
 
@@ -861,7 +867,7 @@ export default function ActivityDetailPage() {
     { key: 'details', label: 'Activity Details' },
     ...(showGroupTab ? [{ key: 'group' as Tab, label: 'Group' }] : []),
     ...(showMatchTab ? [{ key: 'match' as Tab, label: 'Match' }] : []),
-    ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
+    ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator || activity.my_chat_access) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
   ]
 
   return (
@@ -1316,9 +1322,14 @@ export default function ActivityDetailPage() {
                         >
                           <AvatarImg src={m.user?.avatar_url} />
                           <div className="flex-1 min-w-0">
-                            <p className="text-[14px] font-semibold text-foreground truncate">
-                              {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[14px] font-semibold text-foreground truncate">
+                                {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
+                              </p>
+                              {m.user_id === activity.creator_id && (
+                                <span className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">Host</span>
+                              )}
+                            </div>
                             <p className={`text-[11px] font-medium ${cfg.color}`}>{cfg.label}</p>
                           </div>
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-muted flex-shrink-0">
@@ -1332,8 +1343,8 @@ export default function ActivityDetailPage() {
               </div>
             ) : (
               <>
-                <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={setSelectedMember} />
-                <StatusSection title="Wait List" count={waitlist.length} members={waitlist} statusKey="waitlist" onMemberTap={setSelectedMember} />
+                <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" onMemberTap={setSelectedMember} hostId={activity.creator_id} />
+                <StatusSection title="Wait List" count={waitlist.length} members={waitlist} statusKey="waitlist" onMemberTap={setSelectedMember} hostId={activity.creator_id} />
                 {!isCountdownActive && <StatusSection title="Inviting" count={waiting.length} members={waiting} statusKey="waiting" onMemberTap={setSelectedMember} />}
 
                 {/* Status banner — show when invites are done */}
@@ -1360,7 +1371,7 @@ export default function ActivityDetailPage() {
                 <StatusSection title="On Deck" count={tbd.length} members={tbd} statusKey="tbd" onMemberTap={setSelectedMember} onReorder={isCountdownActive ? handleReorderTbd : undefined} />
 
                 {!isCountdownActive && <StatusSection title="Missed" count={missed.length} members={missed} statusKey="missed" onMemberTap={setSelectedMember} />}
-                <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={setSelectedMember} />
+                <StatusSection title="Out" count={out.length} members={out} statusKey="out" onMemberTap={setSelectedMember} hostId={activity.creator_id} />
               </>
             )}
 
@@ -1443,7 +1454,7 @@ export default function ActivityDetailPage() {
                   : `${confirmed.length} confirmed`}
               </p>
             </div>
-            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" />
+            <StatusSection title="In" count={confirmed.length} badge={isFull ? 'Full' : undefined} badgeColor="bg-green-100 text-green-700" members={confirmed} statusKey="confirmed" hostId={activity.creator_id} />
           </div>
         )}
 
@@ -2427,6 +2438,67 @@ export default function ActivityDetailPage() {
         />
       )}
 
+      {/* Host stepping out — stay as organizer or hand off */}
+      {showHostOutSheet && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setShowHostOutSheet(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-background rounded-2xl p-6 w-full max-w-sm shadow-xl animate-enter" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center mb-5">
+              <h3 className="text-[17px] font-bold text-foreground">You can&apos;t make it?</h3>
+              <p className="text-[13px] text-muted mt-1.5 leading-snug">You&apos;re the host. Your spot opens up either way — choose what happens to hosting.</p>
+            </div>
+
+            <button
+              onClick={() => { setShowHostOutSheet(false); doResponse('out') }}
+              disabled={responding}
+              className="w-full text-left px-4 py-3 rounded-xl border border-primary/40 bg-primary/5 active:opacity-80 transition-opacity disabled:opacity-50 mb-3"
+            >
+              <p className="text-[14px] font-bold text-foreground">Stay as organizer</p>
+              <p className="text-[12px] text-muted leading-snug mt-0.5">You won&apos;t attend, but you still run it — chat, roster, and settings all stay yours.</p>
+            </button>
+
+            {(() => {
+              const candidates = confirmed.filter((m) => m.user_id !== activity.current_user_id)
+              return (
+                <div className="mb-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-muted mb-2">Or hand off hosting to</p>
+                  {candidates.length === 0 ? (
+                    <p className="text-[12px] text-muted px-1">No one else is confirmed yet — mark someone In first to hand off.</p>
+                  ) : (
+                    <div className="max-h-52 overflow-y-auto rounded-xl border border-border/50 divide-y divide-border/40">
+                      {candidates.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => { setShowHostOutSheet(false); setTransferLeaving(true); setTransferSpot('defer'); setTransferMember(m) }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left active:bg-primary/5 transition-colors"
+                        >
+                          <AvatarImg src={m.user?.avatar_url} />
+                          <span className="text-[14px] font-semibold text-foreground truncate flex-1">
+                            {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
+                          </span>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-muted flex-shrink-0">
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            <button
+              onClick={() => setShowHostOutSheet(false)}
+              disabled={responding}
+              className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-muted active:bg-surface transition-colors disabled:opacity-50"
+            >
+              Never mind
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* OUT Confirmation Modal */}
       {showOutModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-6" onClick={() => setShowOutModal(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -2660,6 +2732,7 @@ function StatusSection({
   statusKey,
   onMemberTap,
   onReorder,
+  hostId,
 }: {
   title: string
   count: number
@@ -2669,6 +2742,7 @@ function StatusSection({
   statusKey: string
   onMemberTap?: (member: MemberInfo) => void
   onReorder?: (fromIdx: number, toIdx: number) => void
+  hostId?: string
 }) {
   const config = STATUS_CONFIG[statusKey]
   // "In" and "Inviting" are the sections you almost always care about, so they
@@ -2718,9 +2792,14 @@ function StatusSection({
               >
                 <AvatarImg src={m.user?.avatar_url} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold text-foreground truncate">
-                    {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-[14px] font-semibold text-foreground truncate">
+                      {m.user ? `${m.user.first_name} ${m.user.last_name}` : 'Unknown'}
+                    </p>
+                    {hostId && m.user_id === hostId && (
+                      <span className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">Host</span>
+                    )}
+                  </div>
                   <p className={`text-[11px] font-medium ${config.color}`}>{config.label}</p>
                 </div>
                 {onReorder && (
@@ -2834,7 +2913,9 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
 
-  const isConfirmed = activity.my_status === 'confirmed'
+  // Chat is open to confirmed members, the host, and anyone granted chat access
+  // (e.g. a host who stepped out or handed off but stays to coordinate).
+  const isConfirmed = activity.my_status === 'confirmed' || activity.is_creator || !!activity.my_chat_access
 
   // Load messages
   useEffect(() => {

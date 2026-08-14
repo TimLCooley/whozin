@@ -19,24 +19,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  // Only confirmed members can read chat
+  // Chat is for confirmed members, the host (creator), and anyone granted
+  // chat_access (e.g. a host who handed off but stays to help coordinate).
   const { data: membership } = await admin
     .from('whozin_activity_member')
-    .select('id, status')
+    .select('id, status, chat_access')
     .eq('activity_id', activityId)
     .eq('user_id', whozinUser.id)
     .single()
 
-  if (!membership || membership.status !== 'confirmed') {
-    return NextResponse.json({ error: 'Only confirmed members can access chat' }, { status: 403 })
-  }
-
-  // Verify activity has chat enabled
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('chat_enabled')
+    .select('chat_enabled, creator_id')
     .eq('id', activityId)
     .single()
+
+  const canChat = activity?.creator_id === whozinUser.id ||
+    membership?.status === 'confirmed' || membership?.chat_access === true
+  if (!canChat) {
+    return NextResponse.json({ error: 'Only participants can access chat' }, { status: 403 })
+  }
 
   if (!activity?.chat_enabled) {
     return NextResponse.json({ error: 'Chat is not enabled for this activity' }, { status: 403 })
@@ -111,24 +113,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!whozinUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  // Only confirmed members can send messages
+  // Chat is for confirmed members, the host, and anyone granted chat_access.
   const { data: membership } = await admin
     .from('whozin_activity_member')
-    .select('id, status')
+    .select('id, status, chat_access')
     .eq('activity_id', activityId)
     .eq('user_id', whozinUser.id)
     .single()
 
-  if (!membership || membership.status !== 'confirmed') {
-    return NextResponse.json({ error: 'Only confirmed members can send messages' }, { status: 403 })
-  }
-
-  // Verify activity has chat enabled and creator is Pro
   const { data: activity } = await admin
     .from('whozin_activity')
     .select('chat_enabled, creator_id, activity_name')
     .eq('id', activityId)
     .single()
+
+  const canChat = activity?.creator_id === whozinUser.id ||
+    membership?.status === 'confirmed' || membership?.chat_access === true
+  if (!canChat) {
+    return NextResponse.json({ error: 'Only participants can send messages' }, { status: 403 })
+  }
 
   if (!activity?.chat_enabled) {
     return NextResponse.json({ error: 'Chat is not enabled for this activity' }, { status: 403 })
