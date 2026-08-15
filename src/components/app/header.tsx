@@ -29,7 +29,10 @@ export function AppHeader({ showBack, onBack }: AppHeaderProps) {
   const router = useRouter()
   const [isAdmin, setIsAdmin] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
-  const [navLogo, setNavLogo] = useState<string | null>(cachedNavLogo)
+  // Default to the bundled logo so it shows instantly — no runtime fetch, no
+  // "Whozin" text-placeholder flash. A custom logo_nav from settings still
+  // overrides it below (for white-label).
+  const [navLogo, setNavLogo] = useState<string | null>(cachedNavLogo || '/logo-nav.png')
   const [showQR, setShowQR] = useState(false)
   const [userId, setUserId] = useState('')
   const [userName, setUserName] = useState('')
