@@ -157,14 +157,16 @@ export default function PublicProfilePage() {
           </div>
         )}
 
-        <h2 className="text-xl font-bold text-foreground mt-4">{name}</h2>
-
         {groupName ? (
-          <p className="text-[14px] text-muted mt-1 text-center">
-            wants to add you to <span className="font-semibold text-foreground">{groupName}</span>
-          </p>
+          <>
+            <h2 className="text-xl font-bold text-foreground mt-4 text-center">Join {groupName}</h2>
+            <p className="text-[13px] text-muted mt-1">Hosted by {name}</p>
+          </>
         ) : (
-          <p className="text-[13px] text-muted mt-1">Whozin Member</p>
+          <>
+            <h2 className="text-xl font-bold text-foreground mt-4">{name}</h2>
+            <p className="text-[13px] text-muted mt-1">Whozin Member</p>
+          </>
         )}
 
         {/* ===== LOGGED-IN USER FLOW ===== */}
