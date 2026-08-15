@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { BrandedFullLogo } from '@/components/ui/branded-logo'
 
 interface Profile {
@@ -24,7 +25,7 @@ export default function PublicProfilePage() {
   const [error, setError] = useState('')
 
   // Join flow state
-  const [showJoinForm, setShowJoinForm] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
   const [phone, setPhone] = useState('')
   const [joinFirstName, setJoinFirstName] = useState('')
   const [joinLastName, setJoinLastName] = useState('')
@@ -127,9 +128,9 @@ export default function PublicProfilePage() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-center">
         <p className="text-foreground font-bold text-lg mb-2">User Not Found</p>
         <p className="text-muted text-[14px] mb-6">This QR code may be invalid or expired.</p>
-        <a href="/" className="px-6 py-3 rounded-xl bg-primary text-white font-semibold text-[14px]">
+        <Link href="/" className="px-6 py-3 rounded-xl bg-primary text-white font-semibold text-[14px]">
           Go to Whozin
-        </a>
+        </Link>
       </div>
     )
   }
@@ -194,44 +195,10 @@ export default function PublicProfilePage() {
           </div>
         )}
 
-        {/* ===== NON-LOGGED-IN: SECURE JOIN FLOW ===== */}
-        {!isLoggedIn && !joined && !showJoinForm && (
-          <div className="mt-8 w-full max-w-xs space-y-3">
-            <button
-              onClick={() => setShowJoinForm(true)}
-              className="w-full py-3.5 rounded-xl bg-primary text-white font-bold text-[15px] shadow-lg active:scale-[0.98] transition-transform"
-            >
-              Join Securely
-            </button>
-            <a
-              href="/dl"
-              className="block w-full py-3.5 rounded-xl border-2 border-primary text-primary font-bold text-[15px] text-center active:scale-[0.98] transition-transform"
-            >
-              Download Whozin
-            </a>
-            <p className="text-[12px] text-muted text-center mt-2">
-              Already have an account?{' '}
-              <a href={`/auth/sign-in?redirect=/u/${id}${groupId ? `?group=${groupId}` : ''}`} className="text-primary font-semibold">
-                Sign in
-              </a>
-            </p>
-          </div>
-        )}
-
-        {/* ===== JOIN FORM ===== */}
-        {!isLoggedIn && !joined && showJoinForm && (
+        {/* ===== NON-LOGGED-IN: JOIN FORM (shown immediately — no extra tap) ===== */}
+        {!isLoggedIn && !joined && (
           <div className="mt-6 w-full max-w-xs">
             <div className="bg-surface/50 border border-border/50 rounded-2xl p-5">
-              <p className="text-[14px] text-foreground font-semibold text-center mb-1">
-                {groupName
-                  ? `Join ${groupName}`
-                  : `Connect with ${firstName}`
-                }
-              </p>
-              <p className="text-[12px] text-muted text-center mb-4">
-                Enter your info to join securely.
-              </p>
-
               {/* Name fields */}
               <div className="flex gap-2 mb-3 w-full">
                 <input
@@ -271,50 +238,6 @@ export default function PublicProfilePage() {
                 />
               </div>
 
-              {/* Privacy toggles */}
-              <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
-                <p className="text-[12px] text-muted font-semibold uppercase tracking-wide">Privacy</p>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] text-foreground">Show my phone number</span>
-                  <button
-                    role="switch"
-                    aria-checked={joinShowPhone}
-                    onClick={() => setJoinShowPhone(!joinShowPhone)}
-                    className={`relative w-[42px] h-[26px] rounded-full transition-colors duration-200 flex-shrink-0 ${
-                      joinShowPhone ? 'bg-primary' : 'bg-[#d5d9e2]'
-                    }`}
-                  >
-                    <span className={`absolute top-[3px] left-[3px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
-                      joinShowPhone ? 'translate-x-[16px]' : ''
-                    }`} />
-                  </button>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px] text-foreground">Show my full last name</span>
-                    <button
-                      role="switch"
-                      aria-checked={joinShowLastName}
-                      onClick={() => setJoinShowLastName(!joinShowLastName)}
-                      className={`relative w-[42px] h-[26px] rounded-full transition-colors duration-200 flex-shrink-0 ${
-                        joinShowLastName ? 'bg-primary' : 'bg-[#d5d9e2]'
-                      }`}
-                    >
-                      <span className={`absolute top-[3px] left-[3px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform duration-200 ${
-                        joinShowLastName ? 'translate-x-[16px]' : ''
-                      }`} />
-                    </button>
-                  </div>
-                  {joinLastName && !joinShowLastName && (
-                    <p className="text-[12px] text-muted mt-1">
-                      Others will see: <span className="font-medium">{joinFirstName || 'You'} {maskLastName(joinLastName)}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
               {joinError && (
                 <p className="text-[12px] text-danger mt-3 text-center">{joinError}</p>
               )}
@@ -328,17 +251,62 @@ export default function PublicProfilePage() {
                 {joining ? 'Joining...' : groupName ? `Join ${groupName}` : 'Connect'}
               </button>
 
+              {/* Privacy tucked away — sensible defaults, editable anytime */}
               <button
-                onClick={() => { setShowJoinForm(false); setJoinError('') }}
-                className="w-full mt-2 py-2 text-[13px] text-muted font-medium"
+                onClick={() => setShowPrivacy((v) => !v)}
+                className="w-full mt-3 flex items-center justify-center gap-1 text-[12px] text-muted font-medium active:opacity-70"
               >
-                Back
+                Privacy options
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${showPrivacy ? 'rotate-180' : ''}`}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
               </button>
+              {showPrivacy && (
+                <div className="mt-3 space-y-3 border-t border-border/50 pt-4 animate-enter">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] text-foreground">Show my phone number</span>
+                    <button
+                      role="switch"
+                      aria-checked={joinShowPhone}
+                      onClick={() => setJoinShowPhone(!joinShowPhone)}
+                      className={`relative w-[42px] h-[26px] rounded-full transition-colors duration-200 flex-shrink-0 ${joinShowPhone ? 'bg-primary' : 'bg-[#d5d9e2]'}`}
+                    >
+                      <span className={`absolute top-[3px] left-[3px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform duration-200 ${joinShowPhone ? 'translate-x-[16px]' : ''}`} />
+                    </button>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-foreground">Show my full last name</span>
+                      <button
+                        role="switch"
+                        aria-checked={joinShowLastName}
+                        onClick={() => setJoinShowLastName(!joinShowLastName)}
+                        className={`relative w-[42px] h-[26px] rounded-full transition-colors duration-200 flex-shrink-0 ${joinShowLastName ? 'bg-primary' : 'bg-[#d5d9e2]'}`}
+                      >
+                        <span className={`absolute top-[3px] left-[3px] w-[20px] h-[20px] bg-white rounded-full shadow-sm transition-transform duration-200 ${joinShowLastName ? 'translate-x-[16px]' : ''}`} />
+                      </button>
+                    </div>
+                    {joinLastName && !joinShowLastName && (
+                      <p className="text-[12px] text-muted mt-1">
+                        Others will see: <span className="font-medium">{joinFirstName || 'You'} {maskLastName(joinLastName)}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <p className="text-[11px] text-muted text-center mt-3 px-2 leading-relaxed">
-              Your info is stored securely. Privacy settings can be changed anytime in the app.
-            </p>
+            {/* Secondary options */}
+            <div className="mt-3 text-center space-y-1.5">
+              <a href="/dl" className="block text-[13px] text-primary font-semibold active:opacity-70">Download the app instead</a>
+              <p className="text-[12px] text-muted">
+                Already have an account?{' '}
+                <a href={`/auth/sign-in?redirect=/u/${id}${groupId ? `?group=${groupId}` : ''}`} className="text-primary font-semibold">Sign in</a>
+              </p>
+              <p className="text-[11px] text-muted px-2 leading-relaxed pt-1">
+                Your info is stored securely and your privacy settings can be changed anytime.
+              </p>
+            </div>
           </div>
         )}
 
