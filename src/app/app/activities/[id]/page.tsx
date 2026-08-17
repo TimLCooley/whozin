@@ -12,6 +12,7 @@ import { usePaywall } from '@/hooks/use-pro-status'
 import ProBadge from '@/components/ui/pro-badge'
 import { TournamentTab } from '@/components/app/tournament-tab'
 import { InConfirmModal } from '@/components/app/in-confirm-modal'
+import { SavedLocations } from '@/components/app/saved-locations'
 
 interface MemberInfo {
   id: string
@@ -2589,6 +2590,11 @@ export default function ActivityDetailPage() {
                   />
                   <p className="text-[11px] text-muted mt-1">Used for directions and the calendar invite.</p>
                 </div>
+                <SavedLocations
+                  location={editLocation}
+                  address={editAddress}
+                  onPick={(name, addr) => { setEditLocation(name); setEditAddress(addr) }}
+                />
               </div>
             )}
 

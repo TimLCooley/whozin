@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { AppHeader } from '@/components/app/header'
 import { AvatarCropModal } from '@/components/ui/avatar-crop-modal'
+import { SavedLocationsManager } from '@/components/app/saved-locations-manager'
 
-type SectionKey = 'personal' | 'membership' | 'ratings' | 'permissions' | 'privacy' | 'blocked'
+type SectionKey = 'personal' | 'membership' | 'ratings' | 'savedPlaces' | 'permissions' | 'privacy' | 'blocked'
 
 type CameraPermissionState = 'granted' | 'denied' | 'prompt' | 'unknown'
 
@@ -49,6 +50,7 @@ export default function SettingsPage() {
     personal: true,
     membership: true,
     ratings: false,
+    savedPlaces: false,
     permissions: true,
     privacy: true,
     blocked: false,
@@ -442,6 +444,16 @@ export default function SettingsPage() {
               <p className="text-[11px] text-muted mt-1">Lower is better; can be negative for plus handicaps.</p>
             </div>
           </div>
+        </Section>
+
+        {/* Saved places */}
+        <Section
+          title="Saved places"
+          open={openSections.savedPlaces}
+          onToggle={() => toggleSection('savedPlaces')}
+          delay={3}
+        >
+          <SavedLocationsManager />
         </Section>
 
         {/* Permissions */}
