@@ -8,6 +8,7 @@ import { usePaywall } from '@/hooks/use-pro-status'
 import ProBadge from '@/components/ui/pro-badge'
 import { ensureImage } from '@/lib/pdf-to-image'
 import { GroupMembersModal } from '@/components/app/group-members-modal'
+import { SavedLocations } from '@/components/app/saved-locations'
 
 interface Preset {
   id: string
@@ -1200,6 +1201,11 @@ export default function CreateActivityPage() {
                 />
                 <p className="text-[11px] text-muted mt-1">Used for directions and the calendar invite.</p>
               </div>
+              <SavedLocations
+                location={location}
+                address={address}
+                onPick={(name, addr) => { setLocation(name); setAddress(addr) }}
+              />
             </FieldCard>
 
             {/* Note */}
