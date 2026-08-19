@@ -475,7 +475,13 @@ export default function ActivityDetailPage() {
 
   async function handleReorderTbd(fromIdx: number, toIdx: number) {
     if (!activity) return
-    const tbdMembers = activity.members.filter((m) => m.status === 'tbd')
+    // Sort to match the displayed On Deck order exactly. Without this, after the
+    // first move the optimistic update changes priority_order values but not the
+    // members[] array order, so the handler's indices drift out of sync with the
+    // (sorted) list on screen and further moves become no-ops.
+    const tbdMembers = activity.members
+      .filter((m) => m.status === 'tbd')
+      .sort((a, b) => a.priority_order - b.priority_order)
     if (fromIdx === toIdx || fromIdx < 0 || fromIdx >= tbdMembers.length || toIdx < 0 || toIdx >= tbdMembers.length) return
 
     const reordered = [...tbdMembers]
