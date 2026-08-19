@@ -2815,27 +2815,41 @@ function StatusSection({
                   <p className={`text-[11px] font-medium ${config.color}`}>{config.label}</p>
                 </div>
                 {onReorder && (
-                  <div className="flex flex-col gap-0.5 flex-shrink-0">
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                    {/* Move to top — one tap to send someone to the front */}
                     <button
-                      onClick={(e) => { e.stopPropagation(); if (i > 0) onReorder(i, i - 1) }}
+                      onClick={(e) => { e.stopPropagation(); if (i > 0) onReorder(i, 0) }}
                       disabled={i === 0}
                       className="p-1 text-muted disabled:opacity-30 active:text-primary"
-                      aria-label="Move up"
+                      aria-label="Move to top"
+                      title="Move to top"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M18 15l-6-6-6 6" />
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 11l-6-6-6 6M18 18l-6-6-6 6" />
                       </svg>
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); if (i < members.length - 1) onReorder(i, i + 1) }}
-                      disabled={i === members.length - 1}
-                      className="p-1 text-muted disabled:opacity-30 active:text-primary"
-                      aria-label="Move down"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </button>
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (i > 0) onReorder(i, i - 1) }}
+                        disabled={i === 0}
+                        className="p-1 text-muted disabled:opacity-30 active:text-primary"
+                        aria-label="Move up"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 15l-6-6-6 6" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (i < members.length - 1) onReorder(i, i + 1) }}
+                        disabled={i === members.length - 1}
+                        className="p-1 text-muted disabled:opacity-30 active:text-primary"
+                        aria-label="Move down"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 )}
                 {onMemberTap ? (
