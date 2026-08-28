@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { InConfirmModal } from '@/components/app/in-confirm-modal'
+import { createClient } from '@/lib/supabase/client'
+import { isSuperAdmin } from '@/lib/auth'
 
 interface ActivityCard {
   id: string
@@ -95,6 +97,25 @@ export default function AppHome() {
   const [loading, setLoading] = useState(true)
   const [outConfirm, setOutConfirm] = useState<{ id: string; name: string } | null>(null)
   const [inConfirm, setInConfirm] = useState<{ activity: ActivityCard; mode: 'confirm' | 'calendar' } | null>(null)
+  // Dev-only line-calling lab: visible to super admins + 999 test accounts.
+  const [canRecord, setCanRecord] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { user } } = await createClient().auth.getUser()
+        let ok = user?.email ? isSuperAdmin(user.email) : false
+        if (!ok) {
+          const p = await fetch('/api/user/profile').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+          const digits = (p?.phone || '').replace(/\D/g, '')
+          ok = digits.startsWith('1') ? digits.slice(1, 4) === '999' : digits.slice(0, 3) === '999'
+        }
+        if (!cancelled) setCanRecord(ok)
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const loadActivities = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
@@ -952,6 +973,20 @@ export default function AppHome() {
           <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
+
+      {/* Line-calling lab — dev-only (super admin + 999 test accounts) */}
+      {canRecord && (
+        <button
+          onClick={() => router.push('/app/lab')}
+          className="absolute bottom-4 left-4 w-14 h-14 bg-red-500 rounded-2xl flex items-center justify-center shadow-[0_4px_14px_rgba(239,68,68,0.35)] active:scale-95 transition-transform z-50"
+          aria-label="Line-calling lab"
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="4" fill="white" stroke="none" />
+          </svg>
+        </button>
+      )}
 
     </div>
   )
