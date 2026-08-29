@@ -269,31 +269,32 @@ export default function SimGame() {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col bg-surface overflow-auto" style={{ overscrollBehavior: 'none' }}>
+    <div className="fixed inset-0 z-[100] flex flex-col bg-surface overflow-hidden" style={{ overscrollBehavior: 'none' }}>
       <AppHeader showBack />
-      <div className="w-full max-w-[1400px] mx-auto px-6 py-5 space-y-4 pb-12">
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div>
-            <span className="inline-block text-[11px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full mb-2">Dev · Claude vs You</span>
-            <h1 className="text-2xl font-bold text-foreground">Calibration match</h1>
-            <p className="text-[13px] text-muted mt-1 leading-relaxed max-w-2xl">The lines start where <span className="font-semibold">I</span> put them — drag the corners to fix anything that&apos;s off, then Compare. New: <span className="font-semibold text-[#0891b2]">⚡ Snap</span> runs the real CV polish on your rough placement (the product&apos;s tap+snap flow) — get the corners close, hit Snap, and see if it locks the paint. Corners can go anywhere — even far off-screen.</p>
-          </div>
-          <div className="flex items-stretch gap-2">
-            <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
-            <Stat label="Played" value={`${scores.length}`} />
-            <Stat label="Avg agree" value={avg == null ? '—' : `${avg}`} />
-            <Stat label="Passes" value={`${scores.filter((s) => s >= 95).length}`} />
-            <button type="button" onClick={exportData} disabled={!scores.length}
-              className="rounded-xl bg-background border border-border/50 px-3 text-[12px] font-bold text-foreground active:opacity-70 transition-opacity disabled:opacity-40">Export</button>
-          </div>
+      {/* Single-screen layout: compact top bar / court fills the middle / one-row bottom bar */}
+      <div className="flex items-center justify-between gap-3 px-4 py-1.5 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
+          <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
+          <p className="text-[11px] text-muted truncate hidden xl:block">Drag corners to fix my lines · <span className="font-semibold text-[#0891b2]">⚡ Snap</span> = CV polish (the product&apos;s tap+snap) · then Compare</p>
         </div>
+        <div className="flex items-stretch gap-1.5">
+          <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
+          <Stat label="Played" value={`${scores.length}`} />
+          <Stat label="Avg" value={avg == null ? '—' : `${avg}`} />
+          <Stat label="Passes" value={`${scores.filter((s) => s >= 95).length}`} />
+          <button type="button" onClick={exportData} disabled={!scores.length}
+            className="rounded-lg bg-background border border-border/50 px-2.5 text-[11px] font-bold text-foreground active:opacity-70 transition-opacity disabled:opacity-40">Export</button>
+        </div>
+      </div>
 
-        <div className="relative w-full flex justify-center bg-surface touch-none" style={{ padding: '64px 12%', overflow: 'visible' }}
-          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          <div ref={boxRef} className="relative w-full" style={{ overflow: 'visible' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="court" className="w-full block rounded-lg pointer-events-none"
-              onLoad={(e) => { const im = e.currentTarget; setNatural({ w: im.naturalWidth, h: im.naturalHeight }); if (im.naturalHeight) setAspect(im.naturalWidth / im.naturalHeight) }} />
+      <div className="flex-1 min-h-0 relative flex items-center justify-center touch-none" style={{ overflow: 'visible' }}
+        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+        <div ref={boxRef} className="relative" style={{ overflow: 'visible' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="court" className="block rounded-lg pointer-events-none"
+            style={{ maxWidth: '78vw', maxHeight: 'calc(100dvh - 190px)' }}
+            onLoad={(e) => { const im = e.currentTarget; setNatural({ w: im.naturalWidth, h: im.naturalHeight }); if (im.naturalHeight) setAspect(im.naturalWidth / im.naturalHeight) }} />
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
               <path d={courtPath(yours, kx, ky, aspect)} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
               <path d={courtPath(yours, kx, ky, aspect)} fill="none" stroke="#39FF14" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
@@ -323,66 +324,53 @@ export default function SimGame() {
           </div>
         </div>
 
-        {phase === 'place' && (
-          <div className="max-w-xl mx-auto space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted w-24 flex-shrink-0">Fisheye ↔</span>
-              <input type="range" min={-0.6} max={0.6} step={0.01} value={kx} onChange={(e) => setKx(parseFloat(e.target.value))} className="flex-1" />
-              <span className="text-[11px] font-bold text-muted tabular-nums w-10 text-right">{kx.toFixed(2)}</span>
+      <div className="px-4 pb-3 pt-1 flex items-center justify-center gap-2 flex-wrap">
+        <button type="button" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}
+          className="px-3 py-2 rounded-xl bg-surface text-foreground border border-border/50 text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-40">← Prev</button>
+        {phase === 'place' ? (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-muted">↔</span>
+              <input type="range" min={-0.6} max={0.6} step={0.01} value={kx} onChange={(e) => setKx(parseFloat(e.target.value))} className="w-28" />
+              <span className="text-[10px] font-bold text-muted tabular-nums w-8">{kx.toFixed(2)}</span>
+              <span className="text-[11px] text-muted">↕</span>
+              <input type="range" min={-0.6} max={0.6} step={0.01} value={ky} onChange={(e) => setKy(parseFloat(e.target.value))} className="w-28" />
+              <span className="text-[10px] font-bold text-muted tabular-nums w-8">{ky.toFixed(2)}</span>
+              <button type="button" onClick={() => { setKx(0); setKy(0) }} className="text-[11px] font-bold px-2 py-1 rounded-full bg-surface text-muted border border-border/50 active:opacity-70 transition-opacity">Reset</button>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted w-24 flex-shrink-0">Fisheye ↕</span>
-              <input type="range" min={-0.6} max={0.6} step={0.01} value={ky} onChange={(e) => setKy(parseFloat(e.target.value))} className="flex-1" />
-              <span className="text-[11px] font-bold text-muted tabular-nums w-10 text-right">{ky.toFixed(2)}</span>
-              <button type="button" onClick={() => { setKx(0); setKy(0) }} className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-surface text-muted border border-border/50 active:opacity-70 transition-opacity">Reset</button>
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-2 max-w-xl mx-auto">
-          <button type="button" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}
-            className="px-4 py-3 rounded-xl bg-surface text-foreground border border-border/50 text-[14px] font-bold active:opacity-80 transition-opacity disabled:opacity-40">← Prev</button>
-          {phase === 'place' ? (
-            <>
-              <button type="button" onClick={snap} disabled={snapping}
-                className="px-4 py-3 rounded-xl bg-[#22d3ee] text-white text-[14px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
-                {snapping ? 'Snapping…' : '⚡ Snap'}
-              </button>
-              <button type="button" onClick={compare} className="flex-1 py-3 rounded-xl bg-primary text-white text-[15px] font-bold active:opacity-80 transition-opacity">Compare with Claude →</button>
-            </>
-          ) : (
-            <button type="button" onClick={() => setIdx(Math.min(IMAGES.length - 1, idx + 1))}
-              className="flex-1 py-3 rounded-xl bg-[#00C853] text-white text-[15px] font-bold active:opacity-80 transition-opacity">Next court →</button>
-          )}
-        </div>
-        {phase === 'result' && res && (
-          <div className="max-w-xl mx-auto flex items-center justify-center gap-2">
-            <span className="text-[12px] font-bold text-muted mr-1">Your call:</span>
-            {(['PASS', 'PARTIAL', 'REJECT'] as Verdict[]).map((v) => {
+            <button type="button" onClick={snap} disabled={snapping}
+              className="px-4 py-2 rounded-xl bg-[#22d3ee] text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
+              {snapping ? 'Snapping…' : '⚡ Snap'}
+            </button>
+            <button type="button" onClick={compare} className="px-6 py-2 rounded-xl bg-primary text-white text-[14px] font-bold active:opacity-80 transition-opacity">Compare with Claude →</button>
+          </>
+        ) : (
+          <>
+            {res && (
+              <span className="text-[12px] text-muted hidden lg:inline">
+                {tier === 'PASS' ? 'We agree — auto-accept.' : tier === 'PARTIAL' ? 'Close, not confident.' : 'We disagree — one of us is off.'} Gap: {res.errPx}px
+              </span>
+            )}
+            <span className="text-[12px] font-bold text-muted ml-2">Your call:</span>
+            {res && (['PASS', 'PARTIAL', 'REJECT'] as Verdict[]).map((v) => {
               const on = res.tim === v
               const color = v === 'PASS' ? '#00C853' : v === 'PARTIAL' ? '#f59e0b' : '#ef4444'
               return (
                 <button key={v} type="button" onClick={() => rate(v)}
-                  className="px-4 py-2 rounded-full text-[13px] font-bold border-2 transition-all active:opacity-80"
+                  className="px-3.5 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all active:opacity-80"
                   style={on ? { background: color, borderColor: color, color: '#fff' } : { borderColor: color, color, background: 'transparent' }}>
                   {v}
                 </button>
               )
             })}
-          </div>
+            <button type="button" onClick={() => setIdx(Math.min(IMAGES.length - 1, idx + 1))}
+              className="px-6 py-2 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 transition-opacity">Next court →</button>
+          </>
         )}
-        {phase === 'result' && res && (
-          <p className="text-[12px] text-muted text-center">
-            {tier === 'PASS' ? 'We agree — this would auto-accept.' : tier === 'PARTIAL' ? 'Close, but not confident — tighten it up.' : 'We disagree — one of us is off. Reject (still useful data).'}
-            {' '}Visible-line gap: {res.errPx}px.
-          </p>
-        )}
-
         {scores.length >= IMAGES.length && (
-          <div className="max-w-xl mx-auto rounded-xl bg-[#00C853]/10 border border-[#00C853]/30 px-4 py-3 text-center">
-            <p className="text-[14px] font-bold text-green-700">🏁 All {IMAGES.length} courts played — results auto-sent to Claude</p>
-            <p className="text-[12px] text-muted mt-0.5">Avg agreement {avg} · {scores.filter((s) => s >= 95).length} passes. Tell Claude to analyze the round.</p>
-          </div>
+          <span className="text-[12px] font-bold text-green-700 bg-[#00C853]/10 border border-[#00C853]/30 rounded-full px-3 py-1.5">
+            🏁 All {IMAGES.length} played · avg {avg} · {scores.filter((s) => s >= 95).length} passes — tell Claude to analyze
+          </span>
         )}
       </div>
     </div>,
@@ -392,9 +380,9 @@ export default function SimGame() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-background border border-border/50 px-3 py-2 text-center min-w-[64px]">
-      <p className="text-[9px] uppercase tracking-wide text-muted font-bold">{label}</p>
-      <p className="text-[15px] font-bold text-foreground tabular-nums">{value}</p>
+    <div className="rounded-lg bg-background border border-border/50 px-2.5 py-1 text-center min-w-[56px]">
+      <p className="text-[8px] uppercase tracking-wide text-muted font-bold">{label}</p>
+      <p className="text-[13px] font-bold text-foreground tabular-nums">{value}</p>
     </div>
   )
 }
