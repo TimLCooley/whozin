@@ -98,6 +98,16 @@ export default function SimGame() {
   // traps even position:fixed children, and this tool needs the whole screen.
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+  // Size the court image from the MEASURED space between the bars (not a viewport
+  // guess) so the bottom row with Compare/verdict buttons is never clipped.
+  const [areaEl, setAreaEl] = useState<HTMLDivElement | null>(null)
+  const [avail, setAvail] = useState({ w: 900, h: 520 })
+  useEffect(() => {
+    if (!areaEl) return
+    const ro = new ResizeObserver(() => setAvail({ w: areaEl.clientWidth, h: areaEl.clientHeight }))
+    ro.observe(areaEl)
+    return () => ro.disconnect()
+  }, [areaEl])
   const dragRef = useRef<number | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
@@ -288,12 +298,12 @@ export default function SimGame() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 relative flex items-center justify-center touch-none" style={{ overflow: 'visible' }}
+      <div ref={setAreaEl} className="flex-1 min-h-0 relative flex items-center justify-center touch-none" style={{ overflow: 'visible' }}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
         <div ref={boxRef} className="relative" style={{ overflow: 'visible' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt="court" className="block rounded-lg pointer-events-none"
-            style={{ maxWidth: '78vw', maxHeight: 'calc(100dvh - 190px)' }}
+            style={{ maxWidth: Math.max(240, Math.round(avail.w * 0.8)), maxHeight: Math.max(200, Math.round(avail.h * 0.94)) }}
             onLoad={(e) => { const im = e.currentTarget; setNatural({ w: im.naturalWidth, h: im.naturalHeight }); if (im.naturalHeight) setAspect(im.naturalWidth / im.naturalHeight) }} />
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
               <path d={courtPath(yours, kx, ky, aspect)} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
