@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { createClient } from '@/lib/supabase/client'
@@ -77,7 +78,8 @@ function courtPath(corners: Pt[], kx: number, ky: number, a: number): string {
   }).join(' ')
 }
 
-type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number }
+type Verdict = 'PASS' | 'PARTIAL' | 'REJECT'
+type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict }
 
 export default function SimGame() {
   const router = useRouter()
@@ -92,6 +94,10 @@ export default function SimGame() {
   const [store, setStore] = useState<Record<string, Res>>({})
   const [loupe, setLoupe] = useState<Pt | null>(null)
   const [snapping, setSnapping] = useState(false)
+  // Portaled to <body>: the app layout's phone frame (md:max-w-[480px] + transform)
+  // traps even position:fixed children, and this tool needs the whole screen.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   const dragRef = useRef<number | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
@@ -228,6 +234,15 @@ export default function SimGame() {
     fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
     setPhase('result')
   }
+  // Tim's own eyeball verdict on the round — the human judgment the auto score
+  // gets compared against. Saved with the round (localStorage + disk).
+  function rate(v: Verdict) {
+    const cur = store[url]
+    if (!cur) return
+    const next = { ...store, [url]: { ...cur, tim: v } }
+    setStore(next); try { localStorage.setItem(STORE, JSON.stringify(next)) } catch { /* ignore */ }
+    fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
+  }
   function exportData() {
     const json = JSON.stringify(store, null, 2)
     navigator.clipboard?.writeText(json).then(() => alert(`Copied ${Object.keys(store).length} rounds to clipboard.`), () => window.prompt('Copy the training data:', json))
@@ -239,21 +254,24 @@ export default function SimGame() {
   const tier = res ? (res.score >= 95 ? 'PASS' : res.score >= 70 ? 'PARTIAL' : 'REJECT') : null
   const tierColor = tier === 'PASS' ? '#00C853' : tier === 'PARTIAL' ? '#f59e0b' : '#ef4444'
 
+  if (!mounted) return null
+
   if (!allowed) {
-    return (
-      <div className="h-full flex flex-col bg-surface">
+    return createPortal(
+      <div className="fixed inset-0 z-[100] flex flex-col bg-surface">
         <AppHeader showBack />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
-  return (
-    <div className="h-full flex flex-col bg-surface overflow-auto" style={{ overscrollBehavior: 'none' }}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex flex-col bg-surface overflow-auto" style={{ overscrollBehavior: 'none' }}>
       <AppHeader showBack />
-      <div className="w-full px-6 py-5 space-y-4 pb-12">
+      <div className="w-full max-w-[1400px] mx-auto px-6 py-5 space-y-4 pb-12">
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
             <span className="inline-block text-[11px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full mb-2">Dev · Claude vs You</span>
@@ -270,7 +288,7 @@ export default function SimGame() {
           </div>
         </div>
 
-        <div className="relative w-full flex justify-center bg-surface touch-none" style={{ padding: '96px 16%', overflow: 'visible' }}
+        <div className="relative w-full flex justify-center bg-surface touch-none" style={{ padding: '64px 12%', overflow: 'visible' }}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           <div ref={boxRef} className="relative w-full" style={{ overflow: 'visible' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -338,6 +356,22 @@ export default function SimGame() {
           )}
         </div>
         {phase === 'result' && res && (
+          <div className="max-w-xl mx-auto flex items-center justify-center gap-2">
+            <span className="text-[12px] font-bold text-muted mr-1">Your call:</span>
+            {(['PASS', 'PARTIAL', 'REJECT'] as Verdict[]).map((v) => {
+              const on = res.tim === v
+              const color = v === 'PASS' ? '#00C853' : v === 'PARTIAL' ? '#f59e0b' : '#ef4444'
+              return (
+                <button key={v} type="button" onClick={() => rate(v)}
+                  className="px-4 py-2 rounded-full text-[13px] font-bold border-2 transition-all active:opacity-80"
+                  style={on ? { background: color, borderColor: color, color: '#fff' } : { borderColor: color, color, background: 'transparent' }}>
+                  {v}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {phase === 'result' && res && (
           <p className="text-[12px] text-muted text-center">
             {tier === 'PASS' ? 'We agree — this would auto-accept.' : tier === 'PARTIAL' ? 'Close, but not confident — tighten it up.' : 'We disagree — one of us is off. Reject (still useful data).'}
             {' '}Visible-line gap: {res.errPx}px.
@@ -351,7 +385,8 @@ export default function SimGame() {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
