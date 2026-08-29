@@ -66,3 +66,4 @@ next-env.d.ts
 .grab-selection.json
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+.dev-sim/
