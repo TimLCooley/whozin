@@ -85,6 +85,57 @@ type Verdict = 'ACCEPT' | 'PARTIAL' | 'REJECT'
 // same read. Misalignment = the gate (thresholds/tolerance) needs fixing.
 type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number; medIn?: number } }
 
+// Machine verdict on CLAUDE'S read vs Tim's lines, measured in COURT INCHES —
+// the units that decide ball in/out. Tim's lines define the ground-truth
+// homography; every sample point of Claude's court is reprojected through it and
+// asked: how many inches on the court surface are you from where you claim to
+// be? coverage = % of visible points within TOL_IN.
+// Gate (Tim's spec): 100 → ACCEPT · 98–100 → PARTIAL (warn) · <98 → REJECT.
+const TOL_IN = 1.0 // inches — ball-call standard; tune from Tim's verdicts
+function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number): { verdict: Verdict; coverage: number; medIn: number } | undefined {
+  const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, a)))
+  const HtInv = homographyFromCorners(tims.map((c) => undistort(c, tkx, tky, a)), COURT_CORNERS)
+  if (!Hm || !HtInv) return undefined
+  const offs: number[] = []
+  const N = 20
+  for (const [x1, y1, x2, y2] of COURT_ALL_LINES) {
+    for (let s = 0; s <= N; s++) {
+      const t = s / N
+      const p = { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }
+      const img = distort(applyHomography(Hm, p), mine.kx, mine.ky, a)
+      if (img.x < 0 || img.x > 1 || img.y < 0 || img.y > 1) continue
+      const ct = applyHomography(HtInv, undistort(img, tkx, tky, a))
+      offs.push(Math.hypot(ct.x - p.x, ct.y - p.y) * 12) // feet → inches
+    }
+  }
+  if (offs.length < 20) return undefined
+  const coverage = (100 * offs.filter((o) => o <= TOL_IN).length) / offs.length
+  const medIn = [...offs].sort((x, y) => x - y)[Math.floor(offs.length / 2)]
+  const verdict: Verdict = coverage >= 99.95 ? 'ACCEPT' : coverage >= 98 ? 'PARTIAL' : 'REJECT'
+  return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medIn * 100) / 100 }
+}
+
+// Re-judge every stored round with the CURRENT algorithm (aspect ratios come from
+// loading each image). Keeps the Aligned stat honest whenever the gate changes.
+async function rejudgeAll(data: Record<string, Res>): Promise<Record<string, Res>> {
+  const out: Record<string, Res> = { ...data }
+  await Promise.all(Object.keys(out).map((u) => new Promise<void>((resolve) => {
+    const m = CLAUDE[u]
+    if (!m) { resolve(); return }
+    const im = new window.Image()
+    im.onload = () => {
+      const a = im.naturalHeight ? im.naturalWidth / im.naturalHeight : 16 / 9
+      const r = out[u]
+      const cv = judgeRead(m, r.yours, r.kx, r.ky, a)
+      out[u] = { ...r, cv: cv ?? r.cv }
+      resolve()
+    }
+    im.onerror = () => resolve()
+    im.src = u
+  })))
+  return out
+}
+
 export default function SimGame() {
   const router = useRouter()
   const [allowed, setAllowed] = useState<boolean | null>(null)
@@ -144,9 +195,12 @@ export default function SimGame() {
         const filtered: Record<string, Res> = {}
         for (const k of Object.keys(data)) if (IMAGES.includes(k)) filtered[k] = data[k]
         setStore(filtered)
-        localStorage.setItem(STORE, JSON.stringify(filtered))
-        // flush to disk so Claude can read them
-        fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(filtered) }).catch(() => {})
+        // re-judge every stored round with the current algorithm, then flush to disk
+        rejudgeAll(filtered).then((next) => {
+          setStore(next)
+          try { localStorage.setItem(STORE, JSON.stringify(next)) } catch { /* ignore */ }
+          fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
+        })
       }
     } catch { /* ignore */ }
   }, [])
@@ -226,34 +280,10 @@ export default function SimGame() {
     fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
   }
 
-  // Machine verdict on CLAUDE'S read vs Tim's lines, measured in COURT INCHES —
-  // the units that decide ball in/out. Tim's lines define the ground-truth
-  // homography; every sample point of Claude's court is reprojected through it
-  // and asked: how many inches on the court surface are you from where you claim
-  // to be? coverage = % of visible points within TOL_IN.
-  // Gate (Tim's spec): 100 → ACCEPT · 98–100 → PARTIAL (warn) · <98 → REJECT.
-  const TOL_IN = 1.0 // inches — ball-call standard; tune from Tim's verdicts
+  // Wrapper for the current court; the pure math lives in judgeRead (module scope)
+  // so stored rounds can be re-judged on load whenever the algorithm changes.
   function judgeClaude(): Res['cv'] | undefined {
-    const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, aspect)))
-    const HtInv = homographyFromCorners(yours.map((c) => undistort(c, kx, ky, aspect)), COURT_CORNERS)
-    if (!Hm || !HtInv) return undefined
-    const offs: number[] = []
-    const N = 20
-    for (const [x1, y1, x2, y2] of COURT_ALL_LINES) {
-      for (let s = 0; s <= N; s++) {
-        const t = s / N
-        const p = { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }
-        const img = distort(applyHomography(Hm, p), mine.kx, mine.ky, aspect)
-        if (img.x < 0 || img.x > 1 || img.y < 0 || img.y > 1) continue
-        const ct = applyHomography(HtInv, undistort(img, kx, ky, aspect))
-        offs.push(Math.hypot(ct.x - p.x, ct.y - p.y) * 12) // feet → inches
-      }
-    }
-    if (offs.length < 20) return undefined
-    const coverage = (100 * offs.filter((o) => o <= TOL_IN).length) / offs.length
-    const medIn = [...offs].sort((a, b) => a - b)[Math.floor(offs.length / 2)]
-    const verdict: Verdict = coverage >= 99.95 ? 'ACCEPT' : coverage >= 98 ? 'PARTIAL' : 'REJECT'
-    return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medIn * 100) / 100 }
+    return judgeRead(mine, yours, kx, ky, aspect)
   }
 
   // Side stat: symmetric chamfer between Claude's read and Tim's lines, in px.
