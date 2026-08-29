@@ -110,16 +110,32 @@ def detected_line_quads(img, blue, lm, court_px, det, w, h):
     return out
 
 def court_region(img):
-    """Court surface segmentation without the blue-only assumption: candidate
-    colored regions (blue and green hue components), scored by how much white
-    PAINT each contains — the court is the colored region with the lines in it
-    (the lawn is green too, but it has no paint)."""
+    """Color-AGNOSTIC court segmentation, broadcast-style (Tim's football note):
+    sample the dominant ground colors from the central/lower frame (the way
+    1st&Ten keys the field with sampled palettes rather than assuming green),
+    build a region per dominant color mode, and pick the region that CONTAINS
+    the white paint — any surface color works, and the lawn/apron loses because
+    the lines aren't on it."""
+    h, w = img.shape[:2]
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    H, S, V = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+    H, S, V = hsv[:, :, 0].astype(int), hsv[:, :, 1].astype(int), hsv[:, :, 2].astype(int)
     wm = verify.white_mask(img)
+    # dominant color modes from the central band (skip sky/top 25%)
+    ys, xs = np.mgrid[int(h * 0.25):h:6, 0:w:6]
+    bins = {}
+    for y, x in zip(ys.ravel(), xs.ravel()):
+        s, v, hh = S[y, x], V[y, x], H[y, x]
+        key = ('c', hh // 12, min(s // 80, 2)) if s > 45 else ('g', v // 45)
+        bins[key] = bins.get(key, 0) + 1
     best = None
-    for cond in ((H > 95) & (H < 135) & (S > 60) & (V > 40),
-                 (H > 30) & (H < 90) & (S > 50) & (V > 60)):
+    for key, cnt in sorted(bins.items(), key=lambda kv: -kv[1])[:5]:
+        if key[0] == 'c':
+            _, hb, sb = key
+            cond = (np.abs(((H - (hb * 12 + 6)) + 90) % 180 - 90) <= 9) & (S > 45) & \
+                   (np.abs(S - (sb * 80 + 40)) <= 90)
+        else:
+            _, vb = key
+            cond = (S <= 45) & (np.abs(V - (vb * 45 + 22)) <= 34)
         m = cv2.morphologyEx(cond.astype(np.uint8) * 255, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
         num, lab, stats, _ = cv2.connectedComponentsWithStats(m)
         for i in range(1, num):
@@ -137,11 +153,18 @@ def main():
     if img is None:
         print(json.dumps({'error': 'unknown court'})); return
     h, w = img.shape[:2]
-    # proven blue path first; paint-scored region only when blue fails (c03-class)
-    blue = auto2.blue_mask(img)
-    if blue is None or (blue > 0).mean() < 0.05:
-        alt = court_region(img)
-        if alt is not None: blue = alt
+    # court region = whichever candidate contains the most white paint:
+    # the proven blue mask vs the color-agnostic dominant-color region
+    wm0 = verify.white_mask(img)
+    def paint_in(region):
+        if region is None: return -1
+        return int(cv2.bitwise_and(wm0, cv2.dilate(region, np.ones((21, 21), np.uint8))).sum() // 255)
+    cand_b = auto2.blue_mask(img)
+    # blue is the proven default; the color-agnostic region takes over only when
+    # blue is paint-starved (2x margin — "more paint" can mean two courts merged)
+    pb = paint_in(cand_b)
+    cand_c = court_region(img) if pb < 3000 else None
+    blue = cand_c if cand_c is not None and paint_in(cand_c) > 2.0 * max(pb, 1) else cand_b
     if blue is None:
         print(json.dumps({'error': 'no court region found'})); return
     lm = auto2.line_mask(img, blue)
@@ -155,6 +178,14 @@ def main():
         near = cv2.dilate(blue, np.ones((int(w * 0.03) | 1, int(w * 0.03) | 1), np.uint8))
         relaxed = cv2.bitwise_and(m2, near)
         if (relaxed > 0).sum() > (lm > 0).sum(): lm = relaxed
+    if (lm > 0).sum() < 1500:
+        # region yielded no usable paint (c02-class): switch to the color-agnostic
+        # region and rebuild the line mask around it
+        alt = court_region(img)
+        if alt is not None:
+            alt_lm = auto2.line_mask(img, alt)
+            if (alt_lm > 0).sum() > (lm > 0).sum():
+                blue, lm = alt, alt_lm
     court_px = cv2.bitwise_and(lm, cv2.dilate(blue, np.ones((15, 15), np.uint8)))
     det = auto4.detect_lines(lm, w, h)
     pool = detected_line_quads(img, blue, lm, court_px, det, w, h)
