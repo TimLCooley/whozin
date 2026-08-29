@@ -14,7 +14,7 @@ type Pt = { x: number; y: number } // normalized to the image (may be <0 or >1 �
 // 18/19/21 removed round 5: shot at 0.5x ultra-wide — the product requires 1x zoom.
 const IMAGES = ['01', '02', '03', '04', '05', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '20', '22', '23', '24'].map((n) => `/sim/court${n}.jpg`)
 const DEFAULT_GUESS: Pt[] = [{ x: 0.30, y: 0.34 }, { x: 0.70, y: 0.34 }, { x: 0.90, y: 0.80 }, { x: 0.10, y: 0.80 }]
-const STORE = 'sim-game-v2' // v1 wiped after round 4 (archived in .dev-sim/corrections_round4.json)
+const STORE = 'sim-game-v3' // v2 wiped for round 6 (live-auto flow); archives in .dev-sim/
 
 type Court = { c: Pt[]; kx: number; ky: number }
 // Claude's court reads, round 5.
@@ -85,7 +85,10 @@ type Verdict = 'ACCEPT' | 'PARTIAL' | 'REJECT'
 // against them (step 2): cv = machine verdict (coverage of Claude's lines vs Tim's,
 // gate: 100 ACCEPT / 98-100 PARTIAL / <98 REJECT), tim = Tim's eyeball verdict of the
 // same read. Misalignment = the gate (thresholds/tolerance) needs fixing.
-type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number; medIn?: number; algo?: string } }
+// claude = the frozen output of setup calibration for this court (full-auto, or
+// tap+snap when auto punts) — the thing being graded. Round 6 flow: blank court →
+// Snap runs Claude's algo live → Tim corrects the green lines into truth → verdict.
+type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; claude?: Court; cv?: { verdict: Verdict; coverage: number; medIn?: number; algo?: string } }
 
 // Machine verdict on CLAUDE'S read vs Tim's lines, in PIXELS at native resolution:
 // perpendicular distance from each visible point of Claude's line to Tim's SAME
@@ -137,7 +140,7 @@ function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number,
 async function rejudgeAll(data: Record<string, Res>): Promise<Record<string, Res>> {
   const out: Record<string, Res> = { ...data }
   await Promise.all(Object.keys(out).map((u) => new Promise<void>((resolve) => {
-    const m = CLAUDE[u]
+    const m = out[u].claude ?? CLAUDE[u]
     if (!m) { resolve(); return }
     const im = new window.Image()
     im.onload = () => {
@@ -223,15 +226,17 @@ export default function SimGame() {
   }, [])
   // Start from Claude's read (the real-world flow: auto-calibration proposes, you correct it).
   useEffect(() => {
-    const start = CLAUDE[IMAGES[idx]]
-    setYours(start ? start.c : DEFAULT_GUESS)
-    setKx(start?.kx ?? 0)
-    setKy(start?.ky ?? 0)
+    // Round 6: courts start blank; a court already played restores its saved state.
+    const r = store[IMAGES[idx]]
+    setYours(r?.yours ?? DEFAULT_GUESS)
+    setKx(r?.kx ?? 0)
+    setKy(r?.ky ?? 0)
     setLoupe(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx])
 
   const url = IMAGES[idx]
-  const mine = CLAUDE[url] ?? { c: DEFAULT_GUESS, kx: 0, ky: 0 }
+  const mine: Court | null = store[url]?.claude ?? null
 
   function ptFrom(e: React.PointerEvent) {
     const r = boxRef.current!.getBoundingClientRect()
@@ -250,22 +255,31 @@ export default function SimGame() {
   }
   function onUp() { dragRef.current = null; setLoupe(null) }
 
-  // The product's tap+snap flow: rough corners in, CV-polished corners out.
-  // Dev-only endpoint (runs the Python toolkit); validated at 1.6–2.9px on the
-  // paint from ±35px-sloppy seeds on the real wet-court photos.
+  // Setup calibration, exactly like the product: on an untouched court Snap runs
+  // the FULL-AUTO reader (no seed); if auto can't find the court, the user drags
+  // rough corners and Snap polishes them (tap+snap). Either way the result is
+  // frozen as "Claude's read" — the thing Tim's corrections then grade.
   async function snap() {
     if (snapping) return
     setSnapping(true)
     try {
       const court = url.replace('/sim/', '').replace('.jpg', '')
-      const r = await fetch('/api/dev/sim-snap', {
+      const untouched = yours.every((p, i) => Math.abs(p.x - DEFAULT_GUESS[i].x) < 1e-9 && Math.abs(p.y - DEFAULT_GUESS[i].y) < 1e-9)
+      const endpoint = untouched ? '/api/dev/sim-auto' : '/api/dev/sim-snap'
+      const r = await fetch(endpoint, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ court, corners: yours.map((p) => [p.x, p.y]) }),
       }).then((x) => x.json())
       if (Array.isArray(r?.corners) && r.corners.length === 4) {
-        setYours(r.corners.map(([x, y]: [number, number]) => ({ x, y })))
+        const pts: Pt[] = r.corners.map(([x, y]: [number, number]) => ({ x, y }))
+        const read: Court = { c: pts, kx, ky }
+        setYours(pts)
+        const prev = store[url]
+        persist({ ...store, [url]: { score: 0, errPx: 0, yours: pts, kx, ky, tim: prev?.tim, claude: read, cv: undefined } })
       } else if (r?.error) {
-        alert(`Snap: ${r.error}`)
+        alert(untouched
+          ? `Auto-calibration: ${r.error}\n\nDrag the corners roughly onto the court, then press Snap again to finish setup.`
+          : `Snap: ${r.error}`)
       }
     } catch {
       alert('Snap failed (dev server only)')
@@ -300,11 +314,13 @@ export default function SimGame() {
   // Wrapper for the current court; the pure math lives in judgeRead (module scope)
   // so stored rounds can be re-judged on load whenever the algorithm changes.
   function judgeClaude(): Res['cv'] | undefined {
+    if (!mine) return undefined
     return judgeRead(mine, yours, kx, ky, aspect, natural.w, natural.h)
   }
 
   // Side stat: symmetric chamfer between Claude's read and Tim's lines, in px.
   function buildRes(): Res {
+    if (!mine) return { score: 0, errPx: 0, yours, kx, ky, tim: store[url]?.tim, claude: undefined, cv: undefined }
     const A = visiblePoints(yours, kx, ky)
     const B = visiblePoints(mine.c, mine.kx, mine.ky)
     const dir = (P: Pt[], Q: Pt[]) => {
@@ -319,11 +335,12 @@ export default function SimGame() {
     const errNorm = A.length && B.length ? (dir(A, B) + dir(B, A)) / 2 : 1
     const errPx = Math.round(errNorm * Math.hypot(natural.w, natural.h))
     const score = Math.max(0, Math.min(100, Math.round(100 - errNorm * 800)))
-    return { score, errPx, yours, kx, ky, tim: store[url]?.tim, cv: store[url]?.cv }
+    return { score, errPx, yours, kx, ky, tim: store[url]?.tim, claude: store[url]?.claude, cv: store[url]?.cv }
   }
 
   // Step 2a (optional peek): machine grades Claude's read vs Tim's lines.
   function judge() {
+    if (!mine) { alert('Snap first — there is no Claude read to grade yet.'); return }
     persist({ ...store, [url]: { ...buildRes(), cv: judgeClaude() } })
   }
   // Step 2b: Tim's verdict on Claude's read — the machine's is computed alongside
@@ -360,7 +377,7 @@ export default function SimGame() {
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
           <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Judge gate ${ALGO_VERSION} · perpendicular px vs your lines · tol ${TOL_PX}px · ≥${ACCEPT_COV} accept / ≥${PARTIAL_COV} partial`}>algo {ALGO_VERSION} · {TOL_PX}px</span>
-          <p className="text-[11px] text-muted truncate hidden xl:block">Step 1: assign true lines — <span className="font-semibold text-[#0891b2]">⚡ Snap them</span> (truth must be pixel-perfect) · Step 2: rule on <span className="text-[#22d3ee] font-semibold">my dashed read</span> · gate = % of my lines within {TOL_PX}px of yours (≥{ACCEPT_COV} accept · ≥{PARTIAL_COV} partial)</p>
+          <p className="text-[11px] text-muted truncate hidden xl:block"><span className="font-semibold text-[#0891b2]">⚡ Snap</span> = setup: my algo reads the blank court live (drag rough corners first if it punts) and freezes <span className="text-[#22d3ee] font-semibold">my read</span> · fix the green into truth · verdict · gate: {TOL_PX}px, ≥{ACCEPT_COV} accept / ≥{PARTIAL_COV} partial</p>
         </div>
         <div className="flex items-stretch gap-1.5">
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
@@ -379,7 +396,9 @@ export default function SimGame() {
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
               <path d={courtPath(yours, kx, ky, aspect)} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
               <path d={courtPath(yours, kx, ky, aspect)} fill="none" stroke="#39FF14" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-              <path d={courtPath(mine.c, mine.kx, mine.ky, aspect)} fill="none" stroke="#22d3ee" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeDasharray="4 3" />
+              {mine && (
+                <path d={courtPath(mine.c, mine.kx, mine.ky, aspect)} fill="none" stroke="#22d3ee" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeDasharray="4 3" />
+              )}
             </svg>
             {yours.map((c, i) => (
               <div key={i} className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary border-2 border-white shadow text-white text-[10px] font-bold flex items-center justify-center"
