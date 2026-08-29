@@ -114,7 +114,7 @@ def score_lm(img, corners, lm, cap=8.0):
     return overall, per
 
 def run(n):
-    p=f'/Users/timcooley/whozin/.claude/worktrees/keen-germain-c2e4ef/public/sim/court{n}.jpg'
+    p=f'/Users/timcooley/whozin/.claude/worktrees/keen-germain-c2e4ef/public/sim/court{int(n):02d}.jpg'
     img=cv2.imread(p); h,w=img.shape[:2]
     blue=blue_mask(img)
     if blue is None: return None,'REJECT: no court found',None

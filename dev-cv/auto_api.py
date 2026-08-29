@@ -54,6 +54,37 @@ def lineagree(corners, det, w, h):
         tot += min(bestsup, 3000)
     return tot / 1000.0
 
+def detected_line_quads(img, blue, lm, court_px, det, w, h):
+    """Court hypotheses built from the DETECTED PAINT LINES themselves: every
+    4-line subset, every opposite-pairing, prescreened by paint coverage, then
+    polished. This (not the blue-pad boundary) is what solved court01 — the grid
+    gets attached to the lines, not laid near them."""
+    import itertools
+    cnt = cv2.findNonZero(blue); cx, cy = cnt.reshape(-1, 2).mean(0)
+    quads = []
+    for combo in itertools.combinations(det[:10], 4):
+        lines4 = [(r, t) for r, t, _ in combo]
+        for opp in [((0, 1), (2, 3)), ((0, 2), (1, 3)), ((0, 3), (1, 2))]:
+            (a, b), (c, d) = opp
+            pts = [auto3.isect(lines4[a], lines4[c]), auto3.isect(lines4[a], lines4[d]),
+                   auto3.isect(lines4[b], lines4[d]), auto3.isect(lines4[b], lines4[c])]
+            if any(p is None for p in pts): continue
+            q = np.array(pts)
+            if np.any(np.abs(q) > 4 * max(w, h)): continue
+            if cv2.pointPolygonTest(q.astype(np.float32), (float(cx), float(cy)), False) < 0: continue
+            qn = auto3.order_ccw(q) / [w, h]
+            if sane(qn): quads.append(qn)
+    pres = [(auto4.coverage(img.shape, q * [w, h], court_px), q) for q in quads]
+    pres.sort(key=lambda x: -x[0])
+    out = []
+    for _, q in pres[:10]:
+        for roll in (0, 1):
+            try:
+                out.append(np.asarray(auto2.polish(img, np.roll(q, roll, axis=0) * [w, h], lm, bnd=0.03)))
+            except Exception:
+                pass
+    return out
+
 def main():
     req = json.load(sys.stdin)
     name = ''.join(ch for ch in str(req['court']) if ch.isalnum())
@@ -68,7 +99,7 @@ def main():
     lm = auto2.line_mask(img, blue)
     court_px = cv2.bitwise_and(lm, cv2.dilate(blue, np.ones((15, 15), np.uint8)))
     det = auto4.detect_lines(lm, w, h)
-    pool = []
+    pool = detected_line_quads(img, blue, lm, court_px, det, w, h)
     try:
         ref, _, _ = auto2.run(n)
         if ref is not None: pool.append(np.asarray(ref))
@@ -87,7 +118,9 @@ def main():
         cov = auto4.coverage(img.shape, q * [w, h], court_px)
         iou = iou_blue(q.tolist(), blue, w, h)
         la = lineagree(q.tolist(), det, w, h)
-        key = rsc + 6.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 0.5 * la
+        # coverage dominates (most truth-correlated signal); line-agreement is a
+        # weak tiebreak only — shifted fits can match MORE decoy lines than truth
+        key = rsc + 10.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 0.2 * la
         if best is None or key < best[0]: best = (key, q)
     if best is None:
         print(json.dumps({'error': 'no calibration found — needs manual corners'})); return
