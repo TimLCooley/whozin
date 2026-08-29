@@ -33,7 +33,9 @@ const CLAUDE: Record<string, Court> = {
   '/sim/court10.jpg': { c: [{ x: 0.7791, y: 0.3757 }, { x: 1.1830, y: 0.5060 }, { x: -0.1170, y: 1.3420 }, { x: -0.1070, y: 0.5610 }], kx: 0, ky: 0 },
   '/sim/court11.jpg': { c: [{ x: 0.1402, y: 0.5272 }, { x: 0.3928, y: 0.5058 }, { x: 0.8807, y: 0.7168 }, { x: 0.0215, y: 0.9519 }], kx: 0, ky: 0 },
   '/sim/court12.jpg': { c: [{ x: 0.7137, y: 0.5719 }, { x: 1.0133, y: 0.5982 }, { x: 0.4303, y: 0.8635 }, { x: 0.0322, y: 0.6858 }], kx: 0, ky: 0 },
-  '/sim/court13.jpg': { c: [{ x: 0.1019, y: 0.8530 }, { x: 0.0592, y: 0.4280 }, { x: 0.6254, y: 0.3993 }, { x: 0.7313, y: 0.7196 }], kx: 0, ky: 0 },
+  // c13 updated from Tim's round-5 feedback: multi-restart polish ranked by
+  // detected-line agreement (41px → 32px vs truth; identification still open)
+  '/sim/court13.jpg': { c: [{ x: 0.0883, y: 0.8856 }, { x: 0.0081, y: 0.4699 }, { x: 0.6754, y: 0.4758 }, { x: 0.6905, y: 0.6629 }], kx: 0, ky: 0 },
   '/sim/court14.jpg': { c: [{ x: -0.0381, y: 1.0654 }, { x: 0.3817, y: 0.2978 }, { x: 0.6480, y: 0.3017 }, { x: 1.0121, y: 0.7794 }], kx: 0, ky: 0 },
   '/sim/court15.jpg': { c: [{ x: 0.3791, y: 0.3338 }, { x: 0.6365, y: 0.3494 }, { x: 0.9449, y: 0.9674 }, { x: -0.2155, y: 0.8455 }], kx: 0, ky: 0 },
   '/sim/court16.jpg': { c: [{ x: 0.0070, y: 0.8444 }, { x: 0.3643, y: 0.2714 }, { x: 0.6434, y: 0.2892 }, { x: 0.9690, y: 0.7969 }], kx: 0, ky: 0 },
@@ -85,37 +87,49 @@ type Verdict = 'ACCEPT' | 'PARTIAL' | 'REJECT'
 // same read. Misalignment = the gate (thresholds/tolerance) needs fixing.
 type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number; medIn?: number; algo?: string } }
 
-// Machine verdict on CLAUDE'S read vs Tim's lines, measured in COURT INCHES —
-// the units that decide ball in/out. Tim's lines define the ground-truth
-// homography; every sample point of Claude's court is reprojected through it and
-// asked: how many inches on the court surface are you from where you claim to
-// be? coverage = % of visible points within TOL_IN.
-// Gate (Tim's spec): 100 → ACCEPT · 98–100 → PARTIAL (warn) · <98 → REJECT.
-// Version history: v1 = 10px image-space gate · v2 = court-inch gate (1")
-// · v3 = v2 + stored rounds re-judged on every load. Bump on any judging change.
-const ALGO_VERSION = 'v3'
-const TOL_IN = 1.0 // inches — ball-call standard; tune from Tim's verdicts
-function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number): Res['cv'] {
+// Machine verdict on CLAUDE'S read vs Tim's lines, in PIXELS at native resolution:
+// perpendicular distance from each visible point of Claude's line to Tim's SAME
+// line. Pixels, not inches, because acceptance means "on the paint as well as the
+// sensor allows" — one far-baseline pixel is already inches of depth, and no
+// calibration can beat the sensor. Inches come back at the CALL layer as honest
+// per-zone margins ("too close to call" widens with distance).
+// Gate v5, FITTED to Tim's 13 round-5 verdicts (8/13 aligned; misses were rough
+// truth lines or charity PARTIALs on garbage): tol 4px · ≥95% ACCEPT · ≥90% PARTIAL.
+// Version history: v1 = 10px image gate · v2 = global court-inch (1") · v3 = +auto
+// re-judge on load · v4 = perpendicular local-inch · v5 = perpendicular px, fitted.
+const ALGO_VERSION = 'v5'
+const TOL_PX = 4 // px at native resolution
+const ACCEPT_COV = 95
+const PARTIAL_COV = 90
+function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number, nw: number, nh: number): Res['cv'] {
   const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, a)))
-  const HtInv = homographyFromCorners(tims.map((c) => undistort(c, tkx, tky, a)), COURT_CORNERS)
-  if (!Hm || !HtInv) return undefined
+  const Ht = homographyFromCorners(COURT_CORNERS, tims.map((c) => undistort(c, tkx, tky, a)))
+  if (!Hm || !Ht) return undefined
   const offs: number[] = []
-  const N = 20
+  const N = 20, M = 60
   for (const [x1, y1, x2, y2] of COURT_ALL_LINES) {
+    const timLine: Pt[] = []
+    for (let s = 0; s <= M; s++) {
+      const t = s / M
+      timLine.push(distort(applyHomography(Ht, { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }), tkx, tky, a))
+    }
     for (let s = 0; s <= N; s++) {
       const t = s / N
-      const p = { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }
-      const img = distort(applyHomography(Hm, p), mine.kx, mine.ky, a)
+      const img = distort(applyHomography(Hm, { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }), mine.kx, mine.ky, a)
       if (img.x < 0 || img.x > 1 || img.y < 0 || img.y > 1) continue
-      const ct = applyHomography(HtInv, undistort(img, tkx, tky, a))
-      offs.push(Math.hypot(ct.x - p.x, ct.y - p.y) * 12) // feet → inches
+      let best = Infinity
+      for (const q of timLine) {
+        const d = Math.hypot((img.x - q.x) * nw, (img.y - q.y) * nh)
+        if (d < best) best = d
+      }
+      if (best < Infinity) offs.push(best)
     }
   }
   if (offs.length < 20) return undefined
-  const coverage = (100 * offs.filter((o) => o <= TOL_IN).length) / offs.length
-  const medIn = [...offs].sort((x, y) => x - y)[Math.floor(offs.length / 2)]
-  const verdict: Verdict = coverage >= 99.95 ? 'ACCEPT' : coverage >= 98 ? 'PARTIAL' : 'REJECT'
-  return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medIn * 100) / 100, algo: ALGO_VERSION }
+  const coverage = (100 * offs.filter((o) => o <= TOL_PX).length) / offs.length
+  const medPx = [...offs].sort((x, y) => x - y)[Math.floor(offs.length / 2)]
+  const verdict: Verdict = coverage >= ACCEPT_COV ? 'ACCEPT' : coverage >= PARTIAL_COV ? 'PARTIAL' : 'REJECT'
+  return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medPx * 10) / 10, algo: ALGO_VERSION }
 }
 
 // Re-judge every stored round with the CURRENT algorithm (aspect ratios come from
@@ -129,7 +143,7 @@ async function rejudgeAll(data: Record<string, Res>): Promise<Record<string, Res
     im.onload = () => {
       const a = im.naturalHeight ? im.naturalWidth / im.naturalHeight : 16 / 9
       const r = out[u]
-      const cv = judgeRead(m, r.yours, r.kx, r.ky, a)
+      const cv = judgeRead(m, r.yours, r.kx, r.ky, a, im.naturalWidth || 1280, im.naturalHeight || 720)
       out[u] = { ...r, cv: cv ?? r.cv }
       resolve()
     }
@@ -286,7 +300,7 @@ export default function SimGame() {
   // Wrapper for the current court; the pure math lives in judgeRead (module scope)
   // so stored rounds can be re-judged on load whenever the algorithm changes.
   function judgeClaude(): Res['cv'] | undefined {
-    return judgeRead(mine, yours, kx, ky, aspect)
+    return judgeRead(mine, yours, kx, ky, aspect, natural.w, natural.h)
   }
 
   // Side stat: symmetric chamfer between Claude's read and Tim's lines, in px.
@@ -345,8 +359,8 @@ export default function SimGame() {
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Judge gate ${ALGO_VERSION} · ${TOL_IN}" tolerance · 100 accept / 98+ partial / <98 reject`}>algo {ALGO_VERSION} · {TOL_IN}&quot;</span>
-          <p className="text-[11px] text-muted truncate hidden xl:block">Step 1: assign true lines — <span className="font-semibold text-[#0891b2]">⚡ Snap them</span> (truth must be pixel-perfect) · Step 2: rule on <span className="text-[#22d3ee] font-semibold">my dashed read</span> · gate = % of my court within 1&quot; of yours (100 accept · 98+ partial · &lt;98 reject)</p>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Judge gate ${ALGO_VERSION} · perpendicular px vs your lines · tol ${TOL_PX}px · ≥${ACCEPT_COV} accept / ≥${PARTIAL_COV} partial`}>algo {ALGO_VERSION} · {TOL_PX}px</span>
+          <p className="text-[11px] text-muted truncate hidden xl:block">Step 1: assign true lines — <span className="font-semibold text-[#0891b2]">⚡ Snap them</span> (truth must be pixel-perfect) · Step 2: rule on <span className="text-[#22d3ee] font-semibold">my dashed read</span> · gate = % of my lines within {TOL_PX}px of yours (≥{ACCEPT_COV} accept · ≥{PARTIAL_COV} partial)</p>
         </div>
         <div className="flex items-stretch gap-1.5">
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
@@ -381,7 +395,7 @@ export default function SimGame() {
             {res?.cv && (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-white text-[14px] font-bold shadow-lg z-10"
                 style={{ background: res.tim ? (res.tim === res.cv.verdict ? '#00C853' : '#ef4444') : '#64748b' }}>
-                CV: {res.cv.verdict} ({res.cv.coverage}% ≤1&quot;{res.cv.medIn != null ? ` · med ${res.cv.medIn}"` : ''}){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? 'ALIGNED ✓' : 'MISALIGNED ✗'}` : ''}
+                CV: {res.cv.verdict} ({res.cv.coverage}% ≤{TOL_PX}px{res.cv.medIn != null ? ` · med ${res.cv.medIn}px` : ''}){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? 'ALIGNED ✓' : 'MISALIGNED ✗'}` : ''}
               </div>
             )}
             <div className="absolute bottom-2 left-2 flex gap-3 text-[12px] font-bold z-10">
