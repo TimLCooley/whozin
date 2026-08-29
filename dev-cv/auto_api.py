@@ -7,9 +7,33 @@
 import sys, json
 import cv2
 import numpy as np
-import auto2, auto3, auto4, verify
+import auto2, auto3, auto4, verify, vps
 
 WT = '/'.join(__file__.split('/')[:-2])
+
+def seg_agree(corners, segs, w, h, tol_deg=2.5):
+    """Tile-grid vote: fraction of seam-segment length pointing at the candidate's
+    own two vanishing points. Tile seams are parallel to the court axes, so a
+    correct homography agrees with the seam grid ~2x more than a decoy fit."""
+    Hm, _ = cv2.findHomography(verify.CC, np.array(corners, float) * [w, h])
+    if Hm is None: return 0.0
+    vp1 = Hm @ [1, 0, 0]; vp2 = Hm @ [0, 1, 0]
+    tot = ok = 0.0
+    for x1, y1, x2, y2 in segs:
+        m = np.array([(x1 + x2) / 2, (y1 + y2) / 2])
+        d = np.array([x2 - x1, y2 - y1]); l = np.hypot(*d)
+        if l < 1: continue
+        d = d / l
+        good = False
+        for vp in (vp1, vp2):
+            v = np.array([vp[0] - m[0] * vp[2], vp[1] - m[1] * vp[2]])
+            nv = np.hypot(*v)
+            if nv < 1e-9: continue
+            cosang = abs(np.dot(d, v / nv))
+            if np.degrees(np.arccos(np.clip(cosang, 0, 1))) < tol_deg: good = True; break
+        tot += l
+        if good: ok += l
+    return ok / tot if tot else 0.0
 
 def sane(q):
     q = np.asarray(q)
@@ -111,6 +135,7 @@ def main():
             if isinstance(r, list): pool += [np.asarray(q) for q in r]
         except Exception:
             pass
+    segs = vps.segments(img, blue)
     best = None
     for q in pool:
         if not sane(q): continue
@@ -118,9 +143,10 @@ def main():
         cov = auto4.coverage(img.shape, q * [w, h], court_px)
         iou = iou_blue(q.tolist(), blue, w, h)
         la = lineagree(q.tolist(), det, w, h)
-        # coverage dominates (most truth-correlated signal); line-agreement is a
-        # weak tiebreak only — shifted fits can match MORE decoy lines than truth
-        key = rsc + 10.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 0.2 * la
+        sa = seg_agree(q.tolist(), segs, w, h)
+        # coverage dominates (most truth-correlated signal); tile-seam agreement
+        # is the second-strongest (truth ~2x decoys); line-agreement weak tiebreak
+        key = rsc + 10.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 3.0 * sa - 0.2 * la
         if best is None or key < best[0]: best = (key, q)
     if best is None:
         print(json.dumps({'error': 'no calibration found — needs manual corners'})); return

@@ -390,6 +390,13 @@ export default function SimGame() {
           <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Judge gate ${ALGO_VERSION} · perpendicular px vs your lines · tol ${TOL_PX}px · ≥${ACCEPT_COV} accept / ≥${PARTIAL_COV} partial`}>algo {ALGO_VERSION} · {TOL_PX}px</span>
           <p className="text-[11px] text-muted truncate hidden xl:block"><span className="font-semibold text-[#0891b2]">⚡ Snap</span> = setup: my algo reads the blank court live (drag rough corners first if it punts) and freezes <span className="text-[#22d3ee] font-semibold">my read</span> · fix the green into truth · verdict · gate: {TOL_PX}px, ≥{ACCEPT_COV} accept / ≥{PARTIAL_COV} partial</p>
         </div>
+        {/* result pill lives up here (not over the image) so it never blocks the loupe */}
+        {res?.cv && (
+          <div className="px-4 py-1.5 rounded-full text-white text-[13px] font-bold shadow whitespace-nowrap"
+            style={{ background: res.tim ? (res.tim === res.cv.verdict ? '#00C853' : '#ef4444') : '#64748b' }}>
+            CV: {res.cv.verdict} ({res.cv.coverage}% ≤{TOL_PX}px{res.cv.medIn != null ? ` · med ${res.cv.medIn}px` : ''}){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? '✓' : '✗'}` : ''}
+          </div>
+        )}
         <div className="flex items-stretch gap-1.5">
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
           <Stat label="Played" value={`${scores.length}`} />
@@ -422,12 +429,6 @@ export default function SimGame() {
                 style={{ left: `calc(${loupe.x * 100}% - 72px)`, top: `calc(${loupe.y * 100}% - 180px)`, backgroundImage: `url(${url})`, backgroundRepeat: 'no-repeat', backgroundColor: '#000', backgroundSize: `${natural.w * 5}px ${natural.h * 5}px`, backgroundPosition: `${-loupe.x * natural.w * 5 + 72}px ${-loupe.y * natural.h * 5 + 72}px` }}>
                 <div className="absolute left-1/2 top-0 w-px h-full bg-red-500/80" />
                 <div className="absolute top-1/2 left-0 h-px w-full bg-red-500/80" />
-              </div>
-            )}
-            {res?.cv && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-white text-[14px] font-bold shadow-lg z-10"
-                style={{ background: res.tim ? (res.tim === res.cv.verdict ? '#00C853' : '#ef4444') : '#64748b' }}>
-                CV: {res.cv.verdict} ({res.cv.coverage}% ≤{TOL_PX}px{res.cv.medIn != null ? ` · med ${res.cv.medIn}px` : ''}){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? 'ALIGNED ✓' : 'MISALIGNED ✗'}` : ''}
               </div>
             )}
             <div className="absolute bottom-2 left-2 flex gap-3 text-[12px] font-bold z-10">
