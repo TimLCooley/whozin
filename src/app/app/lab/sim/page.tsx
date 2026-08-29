@@ -79,7 +79,9 @@ function courtPath(corners: Pt[], kx: number, ky: number, a: number): string {
 }
 
 type Verdict = 'PASS' | 'PARTIAL' | 'REJECT'
-type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict }
+// cv = the referee's verdict on the judged placement (how the product gate would rule);
+// tim = Tim's eyeball verdict on the SAME placement. Misalignment = the gate is wrong.
+type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; px: number; worst?: string } }
 
 export default function SimGame() {
   const router = useRouter()
@@ -94,6 +96,7 @@ export default function SimGame() {
   const [store, setStore] = useState<Record<string, Res>>({})
   const [loupe, setLoupe] = useState<Pt | null>(null)
   const [snapping, setSnapping] = useState(false)
+  const [judging, setJudging] = useState(false)
   // Portaled to <body>: the app layout's phone frame (md:max-w-[480px] + transform)
   // traps even position:fixed children, and this tool needs the whole screen.
   const [mounted, setMounted] = useState(false)
@@ -219,11 +222,12 @@ export default function SimGame() {
     return pts
   }
 
-  function compare() {
-    // Score = how well the two drawn courts agree WHERE THEY ARE VISIBLE
-    // (symmetric chamfer between the projected line points inside the frame).
-    // Off-frame corners are extrapolations — they never count against you.
-    // Also inherently label-invariant: it compares the drawn lines, not corner #s.
+  async function compare() {
+    if (judging) return
+    setJudging(true)
+    // Side stat: how well the drawn court agrees with Claude's read where visible
+    // (symmetric chamfer, label-invariant). Kept for reference — the headline is
+    // the CV referee's verdict below.
     const A = visiblePoints(yours, kx, ky)
     const B = visiblePoints(mine.c, mine.kx, mine.ky)
     const dir = (P: Pt[], Q: Pt[]) => {
@@ -238,10 +242,22 @@ export default function SimGame() {
     const errNorm = A.length && B.length ? (dir(A, B) + dir(B, A)) / 2 : 1
     const errPx = Math.round(errNorm * Math.hypot(natural.w, natural.h))
     const score = Math.max(0, Math.min(100, Math.round(100 - errNorm * 800)))
-    const next = { ...store, [url]: { score, errPx, yours, kx, ky } }
+    // The point of the game: the CV referee rules on the placement as the product
+    // gate would (lines vs the actual paint). Tim rules the same placement by eye.
+    let cv: Res['cv']
+    try {
+      const court = url.replace('/sim/', '').replace('.jpg', '')
+      const r = await fetch('/api/dev/sim-judge', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ court, corners: yours.map((p) => [p.x, p.y]) }),
+      }).then((x) => x.json())
+      if (r?.verdict) cv = { verdict: r.verdict, px: r.px, worst: r.worst }
+    } catch { /* dev server only — fall back to agreement display */ }
+    const next: Record<string, Res> = { ...store, [url]: { score, errPx, yours, kx, ky, cv } }
     setStore(next); try { localStorage.setItem(STORE, JSON.stringify(next)) } catch { /* ignore */ }
     // auto-save to disk so Claude reads your answers directly — no export needed
     fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
+    setJudging(false)
     setPhase('result')
   }
   // Tim's own eyeball verdict on the round — the human judgment the auto score
@@ -260,9 +276,10 @@ export default function SimGame() {
 
   const res = store[url]
   const scores = Object.values(store).map((r) => r.score)
-  const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null
-  const tier = res ? (res.score >= 95 ? 'PASS' : res.score >= 70 ? 'PARTIAL' : 'REJECT') : null
-  const tierColor = tier === 'PASS' ? '#00C853' : tier === 'PARTIAL' ? '#f59e0b' : '#ef4444'
+  const rated = Object.values(store).filter((r) => r.cv && r.tim)
+  const aligned = rated.filter((r) => r.cv!.verdict === r.tim).length
+  const vColor = (v: Verdict | null | undefined) => (v === 'PASS' ? '#00C853' : v === 'PARTIAL' ? '#f59e0b' : '#ef4444')
+  const cvV = res?.cv?.verdict ?? null
 
   if (!mounted) return null
 
@@ -286,13 +303,12 @@ export default function SimGame() {
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
-          <p className="text-[11px] text-muted truncate hidden xl:block">Drag corners to fix my lines · <span className="font-semibold text-[#0891b2]">⚡ Snap</span> = CV polish (the product&apos;s tap+snap) · then Compare</p>
+          <p className="text-[11px] text-muted truncate hidden xl:block">Judge the lines as placed (or drag/<span className="font-semibold text-[#0891b2]">⚡ Snap</span> first) · CV rules on the paint, you rule by eye · misalignment = my gate is wrong</p>
         </div>
         <div className="flex items-stretch gap-1.5">
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
           <Stat label="Played" value={`${scores.length}`} />
-          <Stat label="Avg" value={avg == null ? '—' : `${avg}`} />
-          <Stat label="Passes" value={`${scores.filter((s) => s >= 95).length}`} />
+          <Stat label="Aligned" value={rated.length ? `${aligned}/${rated.length}` : '—'} />
           <button type="button" onClick={exportData} disabled={!scores.length}
             className="rounded-lg bg-background border border-border/50 px-2.5 text-[11px] font-bold text-foreground active:opacity-70 transition-opacity disabled:opacity-40">Export</button>
         </div>
@@ -324,7 +340,9 @@ export default function SimGame() {
               </div>
             )}
             {phase === 'result' && res && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-white text-[16px] font-bold shadow-lg z-10" style={{ background: tierColor }}>{tier} · {res.score}/100</div>
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-white text-[15px] font-bold shadow-lg z-10" style={{ background: vColor(cvV ?? (res.score >= 95 ? 'PASS' : res.score >= 70 ? 'PARTIAL' : 'REJECT')) }}>
+                {res.cv ? `CV: ${res.cv.verdict} · ${res.cv.px}px on paint` : `agree ${res.score}/100`}
+              </div>
             )}
             {phase === 'result' && (
               <div className="absolute bottom-2 left-2 flex gap-3 text-[12px] font-bold z-10">
@@ -352,13 +370,13 @@ export default function SimGame() {
               className="px-4 py-2 rounded-xl bg-[#22d3ee] text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
               {snapping ? 'Snapping…' : '⚡ Snap'}
             </button>
-            <button type="button" onClick={compare} className="px-6 py-2 rounded-xl bg-primary text-white text-[14px] font-bold active:opacity-80 transition-opacity">Compare with Claude →</button>
+            <button type="button" onClick={compare} disabled={judging} className="px-6 py-2 rounded-xl bg-primary text-white text-[14px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">{judging ? 'Judging…' : 'Judge it →'}</button>
           </>
         ) : (
           <>
-            {res && (
+            {res?.cv && (
               <span className="text-[12px] text-muted hidden lg:inline">
-                {tier === 'PASS' ? 'We agree — auto-accept.' : tier === 'PARTIAL' ? 'Close, not confident.' : 'We disagree — one of us is off.'} Gap: {res.errPx}px
+                CV says <span className="font-bold" style={{ color: vColor(res.cv.verdict) }}>{res.cv.verdict}</span>{res.cv.worst ? ` (worst: ${res.cv.worst})` : ''} · vs my read: {res.score}
               </span>
             )}
             <span className="text-[12px] font-bold text-muted ml-2">Your call:</span>
@@ -379,7 +397,7 @@ export default function SimGame() {
         )}
         {scores.length >= IMAGES.length && (
           <span className="text-[12px] font-bold text-green-700 bg-[#00C853]/10 border border-[#00C853]/30 rounded-full px-3 py-1.5">
-            🏁 All {IMAGES.length} played · avg {avg} · {scores.filter((s) => s >= 95).length} passes — tell Claude to analyze
+            🏁 All {IMAGES.length} played · CV aligned with you on {aligned}/{rated.length} — tell Claude to analyze
           </span>
         )}
       </div>
