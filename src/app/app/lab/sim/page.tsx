@@ -95,7 +95,7 @@ type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; 
 // · v3 = v2 + stored rounds re-judged on every load. Bump on any judging change.
 const ALGO_VERSION = 'v3'
 const TOL_IN = 1.0 // inches — ball-call standard; tune from Tim's verdicts
-function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number): { verdict: Verdict; coverage: number; medIn: number } | undefined {
+function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number): Res['cv'] {
   const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, a)))
   const HtInv = homographyFromCorners(tims.map((c) => undistort(c, tkx, tky, a)), COURT_CORNERS)
   if (!Hm || !HtInv) return undefined
