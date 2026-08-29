@@ -121,9 +121,41 @@ def main():
     if blue is None:
         print(json.dumps({'error': 'no court region found'})); return
     lm = auto2.line_mask(img, blue)
+    if (lm > 0).sum() < 1500:
+        # dull/shadowed paint (e.g. c02): retry with relaxed thresholds
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV); S, V = hsv[:, :, 1], hsv[:, :, 2]
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        k = max(21, int(w * 0.03) | 1)
+        th2 = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+        m2 = (((S < 95) & (V > 115)) & (th2 > 14)).astype(np.uint8) * 255
+        near = cv2.dilate(blue, np.ones((int(w * 0.03) | 1, int(w * 0.03) | 1), np.uint8))
+        relaxed = cv2.bitwise_and(m2, near)
+        if (relaxed > 0).sum() > (lm > 0).sum(): lm = relaxed
     court_px = cv2.bitwise_and(lm, cv2.dilate(blue, np.ones((15, 15), np.uint8)))
     det = auto4.detect_lines(lm, w, h)
     pool = detected_line_quads(img, blue, lm, court_px, det, w, h)
+    # Tim's "12 easy detectable things": typed junctions (4 corners L + 8 Ts).
+    # Any 4 visible junctions calibrate the court — corners not required.
+    try:
+        import junctions as jx
+        js = jx.detect_junctions(det, lm, w, h)
+        jcands = jx.junction_homographies(js, w, h)
+        if jcands:
+            # dedup, then prescreen ALL by coverage at half resolution (quick DT
+            # scores are decoy-gameable and were cutting the right candidate)
+            uniq = []
+            for q in jcands:
+                q = np.asarray(q)
+                if all(np.abs(q - u).max() > 0.015 for u in uniq): uniq.append(q)
+            h2, w2 = h // 2, w // 2
+            cp2 = cv2.resize(court_px, (w2, h2), interpolation=cv2.INTER_NEAREST)
+            shape2 = (h2, w2)
+            pres = sorted(((auto4.coverage(shape2, q * [w2, h2], cp2), q) for q in uniq), key=lambda x: -x[0])
+            for _, q in pres[:8]:
+                try: pool.append(np.asarray(auto2.polish(img, q * [w, h], lm, bnd=0.03)))
+                except Exception: pass
+    except Exception:
+        pass
     try:
         ref, _, _ = auto2.run(n)
         if ref is not None: pool.append(np.asarray(ref))
