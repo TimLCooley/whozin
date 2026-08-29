@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
+import { createClient } from '@/lib/supabase/client'
+import { isSuperAdmin } from '@/lib/auth'
 import { COURT_CORNERS, COURT_ALL_LINES } from '@/lib/pickleball-court'
 import { homographyFromCorners, applyHomography } from '@/lib/homography'
 
@@ -84,6 +87,8 @@ function courtPath(corners: Pt[], kx: number, ky: number, a: number): string {
 type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number }
 
 export default function SimGame() {
+  const router = useRouter()
+  const [allowed, setAllowed] = useState<boolean | null>(null)
   const [idx, setIdx] = useState(0)
   const [phase, setPhase] = useState<'place' | 'result'>('place')
   const [yours, setYours] = useState<Pt[]>(DEFAULT_GUESS)
@@ -95,6 +100,27 @@ export default function SimGame() {
   const [loupe, setLoupe] = useState<Pt | null>(null)
   const dragRef = useRef<number | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data: { user } } = await createClient().auth.getUser()
+        let ok = user?.email ? isSuperAdmin(user.email) : false
+        if (!ok) {
+          const p = await fetch('/api/user/profile').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+          const digits = (p?.phone || '').replace(/\D/g, '')
+          ok = digits.startsWith('1') ? digits.slice(1, 4) === '999' : digits.slice(0, 3) === '999'
+        }
+        if (cancelled) return
+        setAllowed(ok)
+        if (!ok) router.replace('/app')
+      } catch {
+        if (!cancelled) { setAllowed(false); router.replace('/app') }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [router])
 
   useEffect(() => {
     try {
@@ -186,6 +212,17 @@ export default function SimGame() {
   const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null
   const tier = res ? (res.score >= 95 ? 'PASS' : res.score >= 70 ? 'PARTIAL' : 'REJECT') : null
   const tierColor = tier === 'PASS' ? '#00C853' : tier === 'PARTIAL' ? '#f59e0b' : '#ef4444'
+
+  if (!allowed) {
+    return (
+      <div className="h-full flex flex-col bg-surface">
+        <AppHeader showBack />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex flex-col bg-surface overflow-auto" style={{ overscrollBehavior: 'none' }}>
