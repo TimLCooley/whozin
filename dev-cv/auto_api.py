@@ -156,15 +156,16 @@ def main():
     # court region = whichever candidate contains the most white paint:
     # the proven blue mask vs the color-agnostic dominant-color region
     wm0 = verify.white_mask(img)
+    wm0[:int(h * 0.30), :] = 0  # clouds are bright+low-S too; court paint isn't in the sky
     def paint_in(region):
         if region is None: return -1
         return int(cv2.bitwise_and(wm0, cv2.dilate(region, np.ones((21, 21), np.uint8))).sum() // 255)
     cand_b = auto2.blue_mask(img)
-    # blue is the proven default; the color-agnostic region takes over only when
-    # blue is paint-starved (2x margin — "more paint" can mean two courts merged)
+    # blue is the proven default; the color-agnostic region takes over only on a
+    # decisive paint ratio (3x) — mild "more paint" can mean two courts merged
     pb = paint_in(cand_b)
-    cand_c = court_region(img) if pb < 3000 else None
-    blue = cand_c if cand_c is not None and paint_in(cand_c) > 2.0 * max(pb, 1) else cand_b
+    cand_c = court_region(img)
+    blue = cand_c if cand_c is not None and paint_in(cand_c) > 3.0 * max(pb, 1) else cand_b
     if blue is None:
         print(json.dumps({'error': 'no court region found'})); return
     lm = auto2.line_mask(img, blue)
