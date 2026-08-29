@@ -109,6 +109,26 @@ def detected_line_quads(img, blue, lm, court_px, det, w, h):
                 pass
     return out
 
+def court_region(img):
+    """Court surface segmentation without the blue-only assumption: candidate
+    colored regions (blue and green hue components), scored by how much white
+    PAINT each contains — the court is the colored region with the lines in it
+    (the lawn is green too, but it has no paint)."""
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    H, S, V = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+    wm = verify.white_mask(img)
+    best = None
+    for cond in ((H > 95) & (H < 135) & (S > 60) & (V > 40),
+                 (H > 30) & (H < 90) & (S > 50) & (V > 60)):
+        m = cv2.morphologyEx(cond.astype(np.uint8) * 255, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
+        num, lab, stats, _ = cv2.connectedComponentsWithStats(m)
+        for i in range(1, num):
+            if stats[i, cv2.CC_STAT_AREA] < 0.02 * m.size: continue
+            comp = (lab == i).astype(np.uint8) * 255
+            paint = int(cv2.bitwise_and(wm, cv2.dilate(comp, np.ones((21, 21), np.uint8))).sum() // 255)
+            if best is None or paint > best[0]: best = (paint, comp)
+    return best[1] if best and best[0] > 300 else None
+
 def main():
     req = json.load(sys.stdin)
     name = ''.join(ch for ch in str(req['court']) if ch.isalnum())
@@ -117,7 +137,11 @@ def main():
     if img is None:
         print(json.dumps({'error': 'unknown court'})); return
     h, w = img.shape[:2]
+    # proven blue path first; paint-scored region only when blue fails (c03-class)
     blue = auto2.blue_mask(img)
+    if blue is None or (blue > 0).mean() < 0.05:
+        alt = court_region(img)
+        if alt is not None: blue = alt
     if blue is None:
         print(json.dumps({'error': 'no court region found'})); return
     lm = auto2.line_mask(img, blue)
