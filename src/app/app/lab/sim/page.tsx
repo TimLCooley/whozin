@@ -338,6 +338,17 @@ export default function SimGame() {
     return { score, errPx, yours, kx, ky, tim: store[url]?.tim, claude: store[url]?.claude, cv: store[url]?.cv }
   }
 
+  // Wipe the whole round: local state, browser save, and the disk file.
+  function restart() {
+    if (!window.confirm('Start over? This wipes all rounds (browser + disk).')) return
+    setStore({})
+    try { localStorage.removeItem(STORE) } catch { /* ignore */ }
+    fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) }).catch(() => {})
+    setIdx(0)
+    setYours(DEFAULT_GUESS)
+    setKx(0); setKy(0); setLoupe(null)
+  }
+
   // Step 2a (optional peek): machine grades Claude's read vs Tim's lines.
   function judge() {
     if (!mine) { alert('Snap first — there is no Claude read to grade yet.'); return }
@@ -383,6 +394,8 @@ export default function SimGame() {
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
           <Stat label="Played" value={`${scores.length}`} />
           <Stat label="Aligned" value={rated.length ? `${aligned}/${rated.length}` : '—'} />
+          <button type="button" onClick={restart}
+            className="rounded-lg bg-background border border-border/50 px-2.5 text-[11px] font-bold text-foreground active:opacity-70 transition-opacity">↺ Restart</button>
         </div>
       </div>
 
