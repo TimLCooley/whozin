@@ -83,7 +83,7 @@ type Verdict = 'ACCEPT' | 'PARTIAL' | 'REJECT'
 // against them (step 2): cv = machine verdict (coverage of Claude's lines vs Tim's,
 // gate: 100 ACCEPT / 98-100 PARTIAL / <98 REJECT), tim = Tim's eyeball verdict of the
 // same read. Misalignment = the gate (thresholds/tolerance) needs fixing.
-type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number } }
+type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number; medIn?: number } }
 
 export default function SimGame() {
   const router = useRouter()
@@ -226,27 +226,34 @@ export default function SimGame() {
     fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
   }
 
-  // Machine verdict on CLAUDE'S read, measured against Tim's lines (Tim's = truth).
-  // coverage = worse direction of "% of one court's visible points within TOL px of
-  // the other" — catches both drift and missing regions.
+  // Machine verdict on CLAUDE'S read vs Tim's lines, measured in COURT INCHES —
+  // the units that decide ball in/out. Tim's lines define the ground-truth
+  // homography; every sample point of Claude's court is reprojected through it
+  // and asked: how many inches on the court surface are you from where you claim
+  // to be? coverage = % of visible points within TOL_IN.
   // Gate (Tim's spec): 100 → ACCEPT · 98–100 → PARTIAL (warn) · <98 → REJECT.
+  const TOL_IN = 1.0 // inches — ball-call standard; tune from Tim's verdicts
   function judgeClaude(): Res['cv'] | undefined {
-    const A = visiblePoints(mine.c, mine.kx, mine.ky) // Claude's read
-    const B = visiblePoints(yours, kx, ky)            // Tim's assigned lines
-    if (!A.length || !B.length) return undefined
-    const tol = 10 / Math.hypot(natural.w, natural.h) // 10px at native res — tune from Tim's verdicts
-    const cover = (P: Pt[], Q: Pt[]) => {
-      let n = 0
-      for (const p of P) {
-        let m = Infinity
-        for (const q of Q) { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < m) m = d }
-        if (m <= tol) n++
+    const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, aspect)))
+    const HtInv = homographyFromCorners(yours.map((c) => undistort(c, kx, ky, aspect)), COURT_CORNERS)
+    if (!Hm || !HtInv) return undefined
+    const offs: number[] = []
+    const N = 20
+    for (const [x1, y1, x2, y2] of COURT_ALL_LINES) {
+      for (let s = 0; s <= N; s++) {
+        const t = s / N
+        const p = { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }
+        const img = distort(applyHomography(Hm, p), mine.kx, mine.ky, aspect)
+        if (img.x < 0 || img.x > 1 || img.y < 0 || img.y > 1) continue
+        const ct = applyHomography(HtInv, undistort(img, kx, ky, aspect))
+        offs.push(Math.hypot(ct.x - p.x, ct.y - p.y) * 12) // feet → inches
       }
-      return (100 * n) / P.length
     }
-    const coverage = Math.min(cover(A, B), cover(B, A))
+    if (offs.length < 20) return undefined
+    const coverage = (100 * offs.filter((o) => o <= TOL_IN).length) / offs.length
+    const medIn = [...offs].sort((a, b) => a - b)[Math.floor(offs.length / 2)]
     const verdict: Verdict = coverage >= 99.95 ? 'ACCEPT' : coverage >= 98 ? 'PARTIAL' : 'REJECT'
-    return { verdict, coverage: Math.round(coverage * 10) / 10 }
+    return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medIn * 100) / 100 }
   }
 
   // Side stat: symmetric chamfer between Claude's read and Tim's lines, in px.
@@ -277,10 +284,6 @@ export default function SimGame() {
   function rate(v: Verdict) {
     persist({ ...store, [url]: { ...buildRes(), tim: v, cv: judgeClaude() } })
   }
-  function exportData() {
-    const json = JSON.stringify(store, null, 2)
-    navigator.clipboard?.writeText(json).then(() => alert(`Copied ${Object.keys(store).length} rounds to clipboard.`), () => window.prompt('Copy the training data:', json))
-  }
 
   const res = store[url]
   const scores = Object.values(store).map((r) => r.score)
@@ -309,14 +312,12 @@ export default function SimGame() {
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
-          <p className="text-[11px] text-muted truncate hidden xl:block">Step 1: assign the true lines (drag / <span className="font-semibold text-[#0891b2]">⚡ Snap</span>) · Step 2: rule on <span className="text-[#22d3ee] font-semibold">my dashed read</span> — your buttons vs the CV gate (100 accept · 98+ partial · &lt;98 reject)</p>
+          <p className="text-[11px] text-muted truncate hidden xl:block">Step 1: assign true lines — <span className="font-semibold text-[#0891b2]">⚡ Snap them</span> (truth must be pixel-perfect) · Step 2: rule on <span className="text-[#22d3ee] font-semibold">my dashed read</span> · gate = % of my court within 1&quot; of yours (100 accept · 98+ partial · &lt;98 reject)</p>
         </div>
         <div className="flex items-stretch gap-1.5">
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
           <Stat label="Played" value={`${scores.length}`} />
           <Stat label="Aligned" value={rated.length ? `${aligned}/${rated.length}` : '—'} />
-          <button type="button" onClick={exportData} disabled={!scores.length}
-            className="rounded-lg bg-background border border-border/50 px-2.5 text-[11px] font-bold text-foreground active:opacity-70 transition-opacity disabled:opacity-40">Export</button>
         </div>
       </div>
 
@@ -346,7 +347,7 @@ export default function SimGame() {
             {res?.cv && (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-white text-[14px] font-bold shadow-lg z-10"
                 style={{ background: res.tim ? (res.tim === res.cv.verdict ? '#00C853' : '#ef4444') : '#64748b' }}>
-                CV: {res.cv.verdict} ({res.cv.coverage}%){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? 'ALIGNED ✓' : 'MISALIGNED ✗'}` : ''}
+                CV: {res.cv.verdict} ({res.cv.coverage}% ≤1&quot;{res.cv.medIn != null ? ` · med ${res.cv.medIn}"` : ''}){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? 'ALIGNED ✓' : 'MISALIGNED ✗'}` : ''}
               </div>
             )}
             <div className="absolute bottom-2 left-2 flex gap-3 text-[12px] font-bold z-10">
