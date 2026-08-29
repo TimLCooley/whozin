@@ -83,7 +83,7 @@ type Verdict = 'ACCEPT' | 'PARTIAL' | 'REJECT'
 // against them (step 2): cv = machine verdict (coverage of Claude's lines vs Tim's,
 // gate: 100 ACCEPT / 98-100 PARTIAL / <98 REJECT), tim = Tim's eyeball verdict of the
 // same read. Misalignment = the gate (thresholds/tolerance) needs fixing.
-type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number; medIn?: number } }
+type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number; medIn?: number; algo?: string } }
 
 // Machine verdict on CLAUDE'S read vs Tim's lines, measured in COURT INCHES —
 // the units that decide ball in/out. Tim's lines define the ground-truth
@@ -91,6 +91,9 @@ type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; 
 // asked: how many inches on the court surface are you from where you claim to
 // be? coverage = % of visible points within TOL_IN.
 // Gate (Tim's spec): 100 → ACCEPT · 98–100 → PARTIAL (warn) · <98 → REJECT.
+// Version history: v1 = 10px image-space gate · v2 = court-inch gate (1")
+// · v3 = v2 + stored rounds re-judged on every load. Bump on any judging change.
+const ALGO_VERSION = 'v3'
 const TOL_IN = 1.0 // inches — ball-call standard; tune from Tim's verdicts
 function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number): { verdict: Verdict; coverage: number; medIn: number } | undefined {
   const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, a)))
@@ -112,7 +115,7 @@ function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number)
   const coverage = (100 * offs.filter((o) => o <= TOL_IN).length) / offs.length
   const medIn = [...offs].sort((x, y) => x - y)[Math.floor(offs.length / 2)]
   const verdict: Verdict = coverage >= 99.95 ? 'ACCEPT' : coverage >= 98 ? 'PARTIAL' : 'REJECT'
-  return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medIn * 100) / 100 }
+  return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medIn * 100) / 100, algo: ALGO_VERSION }
 }
 
 // Re-judge every stored round with the CURRENT algorithm (aspect ratios come from
@@ -342,6 +345,7 @@ export default function SimGame() {
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Judge gate ${ALGO_VERSION} · ${TOL_IN}" tolerance · 100 accept / 98+ partial / <98 reject`}>algo {ALGO_VERSION} · {TOL_IN}&quot;</span>
           <p className="text-[11px] text-muted truncate hidden xl:block">Step 1: assign true lines — <span className="font-semibold text-[#0891b2]">⚡ Snap them</span> (truth must be pixel-perfect) · Step 2: rule on <span className="text-[#22d3ee] font-semibold">my dashed read</span> · gate = % of my court within 1&quot; of yours (100 accept · 98+ partial · &lt;98 reject)</p>
         </div>
         <div className="flex items-stretch gap-1.5">
