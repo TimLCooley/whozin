@@ -78,16 +78,17 @@ function courtPath(corners: Pt[], kx: number, ky: number, a: number): string {
   }).join(' ')
 }
 
-type Verdict = 'PASS' | 'PARTIAL' | 'REJECT'
-// cv = the referee's verdict on the judged placement (how the product gate would rule);
-// tim = Tim's eyeball verdict on the SAME placement. Misalignment = the gate is wrong.
-type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; px: number; worst?: string } }
+type Verdict = 'ACCEPT' | 'PARTIAL' | 'REJECT'
+// Training mode. Tim assigns the true lines (step 1), then both grade CLAUDE'S read
+// against them (step 2): cv = machine verdict (coverage of Claude's lines vs Tim's,
+// gate: 100 ACCEPT / 98-100 PARTIAL / <98 REJECT), tim = Tim's eyeball verdict of the
+// same read. Misalignment = the gate (thresholds/tolerance) needs fixing.
+type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; cv?: { verdict: Verdict; coverage: number } }
 
 export default function SimGame() {
   const router = useRouter()
   const [allowed, setAllowed] = useState<boolean | null>(null)
   const [idx, setIdx] = useState(0)
-  const [phase, setPhase] = useState<'place' | 'result'>('place')
   const [yours, setYours] = useState<Pt[]>(DEFAULT_GUESS)
   const [kx, setKx] = useState(0)
   const [ky, setKy] = useState(0)
@@ -96,7 +97,6 @@ export default function SimGame() {
   const [store, setStore] = useState<Record<string, Res>>({})
   const [loupe, setLoupe] = useState<Pt | null>(null)
   const [snapping, setSnapping] = useState(false)
-  const [judging, setJudging] = useState(false)
   // Portaled to <body>: the app layout's phone frame (md:max-w-[480px] + transform)
   // traps even position:fixed children, and this tool needs the whole screen.
   const [mounted, setMounted] = useState(false)
@@ -153,7 +153,6 @@ export default function SimGame() {
   // Start from Claude's read (the real-world flow: auto-calibration proposes, you correct it).
   useEffect(() => {
     const start = CLAUDE[IMAGES[idx]]
-    setPhase('place')
     setYours(start ? start.c : DEFAULT_GUESS)
     setKx(start?.kx ?? 0)
     setKy(start?.ky ?? 0)
@@ -168,7 +167,6 @@ export default function SimGame() {
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
   }
   function onDown(e: React.PointerEvent) {
-    if (phase !== 'place') return
     const r = boxRef.current!.getBoundingClientRect()
     const px = e.clientX - r.left, py = e.clientY - r.top
     let hit = -1, best = 34
@@ -222,12 +220,37 @@ export default function SimGame() {
     return pts
   }
 
-  async function compare() {
-    if (judging) return
-    setJudging(true)
-    // Side stat: how well the drawn court agrees with Claude's read where visible
-    // (symmetric chamfer, label-invariant). Kept for reference — the headline is
-    // the CV referee's verdict below.
+  function persist(next: Record<string, Res>) {
+    setStore(next); try { localStorage.setItem(STORE, JSON.stringify(next)) } catch { /* ignore */ }
+    // auto-save to disk so Claude reads the training data directly — no export needed
+    fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
+  }
+
+  // Machine verdict on CLAUDE'S read, measured against Tim's lines (Tim's = truth).
+  // coverage = worse direction of "% of one court's visible points within TOL px of
+  // the other" — catches both drift and missing regions.
+  // Gate (Tim's spec): 100 → ACCEPT · 98–100 → PARTIAL (warn) · <98 → REJECT.
+  function judgeClaude(): Res['cv'] | undefined {
+    const A = visiblePoints(mine.c, mine.kx, mine.ky) // Claude's read
+    const B = visiblePoints(yours, kx, ky)            // Tim's assigned lines
+    if (!A.length || !B.length) return undefined
+    const tol = 10 / Math.hypot(natural.w, natural.h) // 10px at native res — tune from Tim's verdicts
+    const cover = (P: Pt[], Q: Pt[]) => {
+      let n = 0
+      for (const p of P) {
+        let m = Infinity
+        for (const q of Q) { const d = Math.hypot(p.x - q.x, p.y - q.y); if (d < m) m = d }
+        if (m <= tol) n++
+      }
+      return (100 * n) / P.length
+    }
+    const coverage = Math.min(cover(A, B), cover(B, A))
+    const verdict: Verdict = coverage >= 99.95 ? 'ACCEPT' : coverage >= 98 ? 'PARTIAL' : 'REJECT'
+    return { verdict, coverage: Math.round(coverage * 10) / 10 }
+  }
+
+  // Side stat: symmetric chamfer between Claude's read and Tim's lines, in px.
+  function buildRes(): Res {
     const A = visiblePoints(yours, kx, ky)
     const B = visiblePoints(mine.c, mine.kx, mine.ky)
     const dir = (P: Pt[], Q: Pt[]) => {
@@ -242,32 +265,17 @@ export default function SimGame() {
     const errNorm = A.length && B.length ? (dir(A, B) + dir(B, A)) / 2 : 1
     const errPx = Math.round(errNorm * Math.hypot(natural.w, natural.h))
     const score = Math.max(0, Math.min(100, Math.round(100 - errNorm * 800)))
-    // The point of the game: the CV referee rules on the placement as the product
-    // gate would (lines vs the actual paint). Tim rules the same placement by eye.
-    let cv: Res['cv']
-    try {
-      const court = url.replace('/sim/', '').replace('.jpg', '')
-      const r = await fetch('/api/dev/sim-judge', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ court, corners: yours.map((p) => [p.x, p.y]) }),
-      }).then((x) => x.json())
-      if (r?.verdict) cv = { verdict: r.verdict, px: r.px, worst: r.worst }
-    } catch { /* dev server only — fall back to agreement display */ }
-    const next: Record<string, Res> = { ...store, [url]: { score, errPx, yours, kx, ky, cv } }
-    setStore(next); try { localStorage.setItem(STORE, JSON.stringify(next)) } catch { /* ignore */ }
-    // auto-save to disk so Claude reads your answers directly — no export needed
-    fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
-    setJudging(false)
-    setPhase('result')
+    return { score, errPx, yours, kx, ky, tim: store[url]?.tim, cv: store[url]?.cv }
   }
-  // Tim's own eyeball verdict on the round — the human judgment the auto score
-  // gets compared against. Saved with the round (localStorage + disk).
+
+  // Step 2a (optional peek): machine grades Claude's read vs Tim's lines.
+  function judge() {
+    persist({ ...store, [url]: { ...buildRes(), cv: judgeClaude() } })
+  }
+  // Step 2b: Tim's verdict on Claude's read — the machine's is computed alongside
+  // silently, so every rated court adds an alignment data point.
   function rate(v: Verdict) {
-    const cur = store[url]
-    if (!cur) return
-    const next = { ...store, [url]: { ...cur, tim: v } }
-    setStore(next); try { localStorage.setItem(STORE, JSON.stringify(next)) } catch { /* ignore */ }
-    fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
+    persist({ ...store, [url]: { ...buildRes(), tim: v, cv: judgeClaude() } })
   }
   function exportData() {
     const json = JSON.stringify(store, null, 2)
@@ -278,8 +286,6 @@ export default function SimGame() {
   const scores = Object.values(store).map((r) => r.score)
   const rated = Object.values(store).filter((r) => r.cv && r.tim)
   const aligned = rated.filter((r) => r.cv!.verdict === r.tim).length
-  const vColor = (v: Verdict | null | undefined) => (v === 'PASS' ? '#00C853' : v === 'PARTIAL' ? '#f59e0b' : '#ef4444')
-  const cvV = res?.cv?.verdict ?? null
 
   if (!mounted) return null
 
@@ -303,7 +309,7 @@ export default function SimGame() {
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
-          <p className="text-[11px] text-muted truncate hidden xl:block">Judge the lines as placed (or drag/<span className="font-semibold text-[#0891b2]">⚡ Snap</span> first) · CV rules on the paint, you rule by eye · misalignment = my gate is wrong</p>
+          <p className="text-[11px] text-muted truncate hidden xl:block">Step 1: assign the true lines (drag / <span className="font-semibold text-[#0891b2]">⚡ Snap</span>) · Step 2: rule on <span className="text-[#22d3ee] font-semibold">my dashed read</span> — your buttons vs the CV gate (100 accept · 98+ partial · &lt;98 reject)</p>
         </div>
         <div className="flex items-stretch gap-1.5">
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
@@ -324,11 +330,9 @@ export default function SimGame() {
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
               <path d={courtPath(yours, kx, ky, aspect)} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
               <path d={courtPath(yours, kx, ky, aspect)} fill="none" stroke="#39FF14" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-              {phase === 'result' && (
-                <path d={courtPath(mine.c, mine.kx, mine.ky, aspect)} fill="none" stroke="#22d3ee" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeDasharray="4 3" />
-              )}
+              <path d={courtPath(mine.c, mine.kx, mine.ky, aspect)} fill="none" stroke="#22d3ee" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeDasharray="4 3" />
             </svg>
-            {phase === 'place' && yours.map((c, i) => (
+            {yours.map((c, i) => (
               <div key={i} className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary border-2 border-white shadow text-white text-[10px] font-bold flex items-center justify-center"
                 style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}>{i + 1}</div>
             ))}
@@ -339,62 +343,47 @@ export default function SimGame() {
                 <div className="absolute top-1/2 left-0 h-px w-full bg-red-500/80" />
               </div>
             )}
-            {phase === 'result' && res && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-white text-[15px] font-bold shadow-lg z-10" style={{ background: vColor(cvV ?? (res.score >= 95 ? 'PASS' : res.score >= 70 ? 'PARTIAL' : 'REJECT')) }}>
-                {res.cv ? `CV: ${res.cv.verdict} · ${res.cv.px}px on paint` : `agree ${res.score}/100`}
+            {res?.cv && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full text-white text-[14px] font-bold shadow-lg z-10"
+                style={{ background: res.tim ? (res.tim === res.cv.verdict ? '#00C853' : '#ef4444') : '#64748b' }}>
+                CV: {res.cv.verdict} ({res.cv.coverage}%){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? 'ALIGNED ✓' : 'MISALIGNED ✗'}` : ''}
               </div>
             )}
-            {phase === 'result' && (
-              <div className="absolute bottom-2 left-2 flex gap-3 text-[12px] font-bold z-10">
-                <span className="text-[#39FF14] drop-shadow">■ You</span><span className="text-[#22d3ee] drop-shadow">▦ Claude</span>
-              </div>
-            )}
+            <div className="absolute bottom-2 left-2 flex gap-3 text-[12px] font-bold z-10">
+              <span className="text-[#39FF14] drop-shadow">■ Your lines (truth)</span><span className="text-[#22d3ee] drop-shadow">▦ Claude&apos;s read</span>
+            </div>
           </div>
         </div>
 
       <div className="px-4 pb-3 pt-1 flex items-center justify-center gap-2 flex-wrap">
         <button type="button" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}
           className="px-3 py-2 rounded-xl bg-surface text-foreground border border-border/50 text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-40">← Prev</button>
-        {phase === 'place' ? (
-          <>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-muted">↔</span>
-              <input type="range" min={-0.6} max={0.6} step={0.01} value={kx} onChange={(e) => setKx(parseFloat(e.target.value))} className="w-28" />
-              <span className="text-[10px] font-bold text-muted tabular-nums w-8">{kx.toFixed(2)}</span>
-              <span className="text-[11px] text-muted">↕</span>
-              <input type="range" min={-0.6} max={0.6} step={0.01} value={ky} onChange={(e) => setKy(parseFloat(e.target.value))} className="w-28" />
-              <span className="text-[10px] font-bold text-muted tabular-nums w-8">{ky.toFixed(2)}</span>
-              <button type="button" onClick={() => { setKx(0); setKy(0) }} className="text-[11px] font-bold px-2 py-1 rounded-full bg-surface text-muted border border-border/50 active:opacity-70 transition-opacity">Reset</button>
-            </div>
-            <button type="button" onClick={snap} disabled={snapping}
-              className="px-4 py-2 rounded-xl bg-[#22d3ee] text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
-              {snapping ? 'Snapping…' : '⚡ Snap'}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-muted">↔</span>
+          <input type="range" min={-0.6} max={0.6} step={0.01} value={kx} onChange={(e) => setKx(parseFloat(e.target.value))} className="w-24" />
+          <span className="text-[11px] text-muted">↕</span>
+          <input type="range" min={-0.6} max={0.6} step={0.01} value={ky} onChange={(e) => setKy(parseFloat(e.target.value))} className="w-24" />
+          <button type="button" onClick={() => { setKx(0); setKy(0) }} className="text-[11px] font-bold px-2 py-1 rounded-full bg-surface text-muted border border-border/50 active:opacity-70 transition-opacity">Reset</button>
+        </div>
+        <button type="button" onClick={snap} disabled={snapping}
+          className="px-4 py-2 rounded-xl bg-[#22d3ee] text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
+          {snapping ? 'Snapping…' : '⚡ Snap'}
+        </button>
+        <button type="button" onClick={judge} className="px-4 py-2 rounded-xl bg-primary text-white text-[13px] font-bold active:opacity-80 transition-opacity">⚖ Judge</button>
+        <span className="text-[12px] font-bold text-muted ml-1">My read is:</span>
+        {(['ACCEPT', 'PARTIAL', 'REJECT'] as Verdict[]).map((v) => {
+          const on = res?.tim === v
+          const color = v === 'ACCEPT' ? '#00C853' : v === 'PARTIAL' ? '#f59e0b' : '#ef4444'
+          return (
+            <button key={v} type="button" onClick={() => rate(v)}
+              className="px-3.5 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all active:opacity-80"
+              style={on ? { background: color, borderColor: color, color: '#fff' } : { borderColor: color, color, background: 'transparent' }}>
+              {v}
             </button>
-            <button type="button" onClick={compare} disabled={judging} className="px-6 py-2 rounded-xl bg-primary text-white text-[14px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">{judging ? 'Judging…' : 'Judge it →'}</button>
-          </>
-        ) : (
-          <>
-            {res?.cv && (
-              <span className="text-[12px] text-muted hidden lg:inline">
-                CV says <span className="font-bold" style={{ color: vColor(res.cv.verdict) }}>{res.cv.verdict}</span>{res.cv.worst ? ` (worst: ${res.cv.worst})` : ''} · vs my read: {res.score}
-              </span>
-            )}
-            <span className="text-[12px] font-bold text-muted ml-2">Your call:</span>
-            {res && (['PASS', 'PARTIAL', 'REJECT'] as Verdict[]).map((v) => {
-              const on = res.tim === v
-              const color = v === 'PASS' ? '#00C853' : v === 'PARTIAL' ? '#f59e0b' : '#ef4444'
-              return (
-                <button key={v} type="button" onClick={() => rate(v)}
-                  className="px-3.5 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all active:opacity-80"
-                  style={on ? { background: color, borderColor: color, color: '#fff' } : { borderColor: color, color, background: 'transparent' }}>
-                  {v}
-                </button>
-              )
-            })}
-            <button type="button" onClick={() => setIdx(Math.min(IMAGES.length - 1, idx + 1))}
-              className="px-6 py-2 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 transition-opacity">Next court →</button>
-          </>
-        )}
+          )
+        })}
+        <button type="button" onClick={() => setIdx(Math.min(IMAGES.length - 1, idx + 1))} disabled={idx === IMAGES.length - 1}
+          className="px-5 py-2 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 transition-opacity disabled:opacity-40">Next →</button>
         {scores.length >= IMAGES.length && (
           <span className="text-[12px] font-bold text-green-700 bg-[#00C853]/10 border border-[#00C853]/30 rounded-full px-3 py-1.5">
             🏁 All {IMAGES.length} played · CV aligned with you on {aligned}/{rated.length} — tell Claude to analyze
