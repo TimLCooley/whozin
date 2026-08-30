@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { AppHeader } from '@/components/app/header'
 import { createClient } from '@/lib/supabase/client'
 import { isSuperAdmin } from '@/lib/auth'
+import { isNative, getPlatform } from '@/lib/capacitor'
 import { COURT_CORNERS, COURT_ALL_LINES } from '@/lib/pickleball-court'
 import { homographyFromCorners, applyHomography } from '@/lib/homography'
 
@@ -160,6 +161,26 @@ export default function LiveSim() {
   const camBlockedRef = useRef(false)
   async function openCam() {
     if (busy) return
+    // In the native app, use the NATIVE camera (same lesson as the QR scanner:
+    // Android WebView getUserMedia is unreliable). Requires a build that
+    // bundles @capacitor/camera — older builds fall through to the web paths.
+    if (isNative() && getPlatform() === 'android') {
+      try {
+        const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+        const shot = await Camera.getPhoto({
+          source: CameraSource.Camera, resultType: CameraResultType.DataUrl,
+          quality: 88, width: 1600, correctOrientation: true,
+        })
+        if (shot?.dataUrl) { await uploadDataUrl(shot.dataUrl); return }
+        return
+      } catch (err) {
+        const msg = String(err)
+        if (!/not implemented|not available|plugin/i.test(msg)) {
+          setStatus(`Native camera: ${msg}`); setPhase('manual'); return
+        }
+        // plugin missing in this app build -> fall through to web camera/picker
+      }
+    }
     if (camBlockedRef.current) { fileRef.current?.click(); return } // known blocked: go straight to picker
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
