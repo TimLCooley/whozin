@@ -157,8 +157,10 @@ export default function LiveSim() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [camOn, setCamOn] = useState(false)
+  const camBlockedRef = useRef(false)
   async function openCam() {
     if (busy) return
+    if (camBlockedRef.current) { fileRef.current?.click(); return } // known blocked: go straight to picker
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
@@ -169,8 +171,9 @@ export default function LiveSim() {
     } catch (err) {
       const name = (err as DOMException)?.name ?? ''
       if (name === 'NotAllowedError' || name === 'SecurityError') {
-        setStatus('Camera BLOCKED for this site — enable it: iOS Safari: aA menu → Website Settings → Camera → Allow. Chrome: ⋮ → Site settings → Camera.')
-        setPhase('manual')
+        camBlockedRef.current = true
+        setStatus('Camera blocked for this site — using photo picker (in Safari: aA → Website Settings → Camera → Allow to get the viewfinder)')
+        fileRef.current?.click()
       } else {
         setStatus(`No camera available (${name || err}) — using photo picker`)
         fileRef.current?.click()
