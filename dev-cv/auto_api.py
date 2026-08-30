@@ -287,11 +287,28 @@ def main():
             if 0 <= px < w and 0 <= py < h: ys.append(py / h)
         return float(np.mean(ys)) if ys else None
 
+    def frame_frac(q):
+        """Fraction of the frame the candidate court covers (Tim's scale prior:
+        people photograph THEIR court — it fills the frame, it doesn't hide in
+        a corner)."""
+        Hq, _ = cv2.findHomography(verify.CC, np.array(q, float) * [w, h])
+        if Hq is None: return 0.0
+        C = np.array([[0, 0, 1], [20, 0, 1], [20, 44, 1], [0, 44, 1]], float)
+        Q = (Hq @ C.T).T
+        with np.errstate(all='ignore'):
+            Q = Q[:, :2] / Q[:, 2:3]
+        if not np.isfinite(Q).all(): return 0.0
+        m = np.zeros((h // 4, w // 4), np.uint8)
+        cv2.fillPoly(m, [np.clip(Q / 4, -4 * max(w, h), 4 * max(w, h)).astype(np.int32)], 1)
+        return float(m.mean())
+
     best = None
     for q in pool:
         if not sane(q): continue
         cy = court_cy(q)
         if cy is None or cy < 0.30: continue  # court in top third of frame = not a court
+        ff = frame_frac(q)
+        if ff < 0.06: continue  # court squished into a corner = not the court being photographed
         rsc, _ = verify.score(img, q.tolist())
         cov = auto4.coverage(img.shape, q * [w, h], court_px)
         iou = iou_blue(q.tolist(), blue, w, h)
@@ -300,7 +317,8 @@ def main():
         # coverage dominates (most truth-correlated signal); tile-seam agreement
         # is the second-strongest (truth ~2x decoys); line-agreement weak tiebreak
         key = rsc + 10.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 3.0 * sa - 0.2 * la \
-              + 12.0 * max(0.0, 0.50 - cy)  # gravity prior: penalize high-in-frame courts
+              + 12.0 * max(0.0, 0.50 - cy) \
+              + 8.0 * max(0.0, 0.20 - ff)  # gravity + scale priors (Tim): low in frame, fills the frame
         if best is None or key < best[0]: best = (key, q)
     if best is None:
         print(json.dumps({'error': 'no calibration found — needs manual corners'})); return
