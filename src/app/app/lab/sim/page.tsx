@@ -16,7 +16,7 @@ type Pt = { x: number; y: number } // normalized to the image (may be <0 or >1 �
 // 26 six-court complex with players, 27 partial view at net post (gate SHOULD punt).
 const IMAGES = ['01', '02', '03', '04', '05', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '20', '22', '23', '24', '25', '26', '27'].map((n) => `/sim/court${n}.jpg`)
 const DEFAULT_GUESS: Pt[] = [{ x: 0.30, y: 0.34 }, { x: 0.70, y: 0.34 }, { x: 0.90, y: 0.80 }, { x: 0.10, y: 0.80 }]
-const STORE = 'sim-game-v3' // v2 wiped for round 6 (live-auto flow); archives in .dev-sim/
+const STORE = 'sim-game-v4' // v3 wiped: verdict buttons removed, pin-distance metric; archives in .dev-sim/
 
 type Court = { c: Pt[]; kx: number; ky: number }
 // Claude's court reads, round 5.
@@ -82,63 +82,26 @@ function courtPath(corners: Pt[], kx: number, ky: number, a: number): string {
   }).join(' ')
 }
 
-type Verdict = 'ACCEPT' | 'PARTIAL' | 'REJECT'
-// Training mode. Tim assigns the true lines (step 1), then both grade CLAUDE'S read
-// against them (step 2): cv = machine verdict (coverage of Claude's lines vs Tim's,
-// gate: 100 ACCEPT / 98-100 PARTIAL / <98 REJECT), tim = Tim's eyeball verdict of the
-// same read. Misalignment = the gate (thresholds/tolerance) needs fixing.
-// claude = the frozen output of setup calibration for this court (full-auto, or
-// tap+snap when auto punts) — the thing being graded. Round 6 flow: blank court →
-// Snap runs Claude's algo live → Tim corrects the green lines into truth → verdict.
-type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; tim?: Verdict; claude?: Court; cv?: { verdict: Verdict; coverage: number; medIn?: number; algo?: string } }
+// Training mode, pin-to-pin: Snap freezes Claude's read (claude); Tim fixes the
+// green pins into truth; the metric is simply the distance between the two pin
+// sets, in px at native resolution — objective, no verdict buttons, no
+// interpretation. Measured automatically on Judge/Next (navigation also saves).
+type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; claude?: Court; cv?: { avg: number; max: number; algo?: string } }
 
-// Machine verdict on CLAUDE'S read vs Tim's lines, in PIXELS at native resolution:
-// perpendicular distance from each visible point of Claude's line to Tim's SAME
-// line. Pixels, not inches, because acceptance means "on the paint as well as the
-// sensor allows" — one far-baseline pixel is already inches of depth, and no
-// calibration can beat the sensor. Inches come back at the CALL layer as honest
-// per-zone margins ("too close to call" widens with distance).
-// Gate v5, FITTED to Tim's 13 round-5 verdicts (8/13 aligned; misses were rough
-// truth lines or charity PARTIALs on garbage): tol 4px · ≥95% ACCEPT · ≥90% PARTIAL.
-// Version history: v1 = 10px image gate · v2 = global court-inch (1") · v3 = +auto
-// re-judge on load · v4 = perpendicular local-inch · v5 = perpendicular px, fitted.
-const ALGO_VERSION = 'v5'
-const TOL_PX = 4 // px at native resolution
-const ACCEPT_COV = 95
-const PARTIAL_COV = 90
-function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number, nw: number, nh: number): Res['cv'] {
-  const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, a)))
-  const Ht = homographyFromCorners(COURT_CORNERS, tims.map((c) => undistort(c, tkx, tky, a)))
-  if (!Hm || !Ht) return undefined
-  const offs: number[] = []
-  const N = 20, M = 60
-  for (const [x1, y1, x2, y2] of COURT_ALL_LINES) {
-    const timLine: Pt[] = []
-    for (let s = 0; s <= M; s++) {
-      const t = s / M
-      timLine.push(distort(applyHomography(Ht, { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }), tkx, tky, a))
-    }
-    for (let s = 0; s <= N; s++) {
-      const t = s / N
-      const img = distort(applyHomography(Hm, { x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t }), mine.kx, mine.ky, a)
-      if (img.x < 0 || img.x > 1 || img.y < 0 || img.y > 1) continue
-      let best = Infinity
-      for (const q of timLine) {
-        const d = Math.hypot((img.x - q.x) * nw, (img.y - q.y) * nh)
-        if (d < best) best = d
-      }
-      if (best < Infinity) offs.push(best)
-    }
-  }
-  if (offs.length < 20) return undefined
-  const coverage = (100 * offs.filter((o) => o <= TOL_PX).length) / offs.length
-  const medPx = [...offs].sort((x, y) => x - y)[Math.floor(offs.length / 2)]
-  const verdict: Verdict = coverage >= ACCEPT_COV ? 'ACCEPT' : coverage >= PARTIAL_COV ? 'PARTIAL' : 'REJECT'
-  return { verdict, coverage: Math.round(coverage * 10) / 10, medIn: Math.round(medPx * 10) / 10, algo: ALGO_VERSION }
+// PIN-TO-PIN metric (Tim's call — no verdicts, no interpretation): for each of
+// Tim's 4 pins, the distance to Claude's nearest corner pin, in px at native
+// resolution. avg + worst. Nearest matching makes it corner-ordering-proof.
+// Version history: v1-v5 = coverage/verdict gates (retired) · v6 = pin distance.
+const ALGO_VERSION = 'v6'
+function judgeRead(mine: Court, tims: Pt[], _tkx: number, _tky: number, _a: number, nw: number, nh: number): Res['cv'] {
+  if (!mine.c?.length || tims.length !== 4) return undefined
+  const ds = tims.map((t) => Math.min(...mine.c.map((c) => Math.hypot((t.x - c.x) * nw, (t.y - c.y) * nh))))
+  const avg = ds.reduce((s, d) => s + d, 0) / ds.length
+  return { avg: Math.round(avg * 10) / 10, max: Math.round(Math.max(...ds) * 10) / 10, algo: ALGO_VERSION }
 }
 
-// Re-judge every stored round with the CURRENT algorithm (aspect ratios come from
-// loading each image). Keeps the Aligned stat honest whenever the gate changes.
+// Re-measure every stored round with the CURRENT algorithm (aspect ratios come
+// from loading each image). Keeps stats honest whenever the metric changes.
 async function rejudgeAll(data: Record<string, Res>): Promise<Record<string, Res>> {
   const out: Record<string, Res> = { ...data }
   await Promise.all(Object.keys(out).map((u) => new Promise<void>((resolve) => {
@@ -299,8 +262,7 @@ export default function SimGame() {
         const pts: Pt[] = r.corners.map(([x, y]: [number, number]) => ({ x, y }))
         const read: Court = { c: pts, kx, ky }
         setYours(pts)
-        const prev = store[url]
-        persist({ ...store, [url]: { score: 0, errPx: 0, yours: pts, kx, ky, tim: prev?.tim, claude: read, cv: undefined } })
+        persist({ ...store, [url]: { score: 0, errPx: 0, yours: pts, kx, ky, claude: read, cv: undefined } })
       } else if (r?.error) {
         alert(untouched
           ? `Auto-calibration: ${r.error}\n\nDrag the corners roughly onto the court, then press Snap again to finish setup.`
@@ -345,7 +307,7 @@ export default function SimGame() {
 
   // Side stat: symmetric chamfer between Claude's read and Tim's lines, in px.
   function buildRes(): Res {
-    if (!mine) return { score: 0, errPx: 0, yours, kx, ky, tim: store[url]?.tim, claude: undefined, cv: undefined }
+    if (!mine) return { score: 0, errPx: 0, yours, kx, ky, claude: undefined, cv: undefined }
     const A = visiblePoints(yours, kx, ky)
     const B = visiblePoints(mine.c, mine.kx, mine.ky)
     const dir = (P: Pt[], Q: Pt[]) => {
@@ -360,7 +322,7 @@ export default function SimGame() {
     const errNorm = A.length && B.length ? (dir(A, B) + dir(B, A)) / 2 : 1
     const errPx = Math.round(errNorm * Math.hypot(natural.w, natural.h))
     const score = Math.max(0, Math.min(100, Math.round(100 - errNorm * 800)))
-    return { score, errPx, yours, kx, ky, tim: store[url]?.tim, claude: store[url]?.claude, cv: store[url]?.cv }
+    return { score, errPx, yours, kx, ky, claude: store[url]?.claude, cv: store[url]?.cv }
   }
 
   // Wipe the whole round: local state, browser save, and the disk file.
@@ -374,21 +336,25 @@ export default function SimGame() {
     setKx(0); setKy(0); setLoupe(null)
   }
 
-  // Step 2a (optional peek): machine grades Claude's read vs Tim's lines.
+  // Measure my pins against Tim's, save the round.
   function judge() {
-    if (!mine) { alert('Snap first — there is no Claude read to grade yet.'); return }
+    if (!mine) { alert('Snap first — there is no Claude read to measure yet.'); return }
     persist({ ...store, [url]: { ...buildRes(), cv: judgeClaude() } })
   }
-  // Step 2b: Tim's verdict on Claude's read — the machine's is computed alongside
-  // silently, so every rated court adds an alignment data point.
-  function rate(v: Verdict) {
-    persist({ ...store, [url]: { ...buildRes(), tim: v, cv: judgeClaude() } })
+  // Navigation SAVES: measure (if a read exists) and persist before moving.
+  function goto(next: number) {
+    if (next === idx) return
+    if (mine) persist({ ...store, [url]: { ...buildRes(), cv: judgeClaude() } })
+    else if (JSON.stringify(yours) !== JSON.stringify(store[url]?.yours ?? DEFAULT_GUESS)) {
+      persist({ ...store, [url]: buildRes() })
+    }
+    setIdx(next)
   }
 
   const res = store[url]
   const scores = Object.values(store).map((r) => r.score)
-  const rated = Object.values(store).filter((r) => r.cv && r.tim)
-  const aligned = rated.filter((r) => r.cv!.verdict === r.tim).length
+  const measured = Object.values(store).filter((r) => r.cv)
+  const avgAll = measured.length ? measured.reduce((s, r) => s + r.cv!.avg, 0) / measured.length : null
 
   if (!mounted) return null
 
@@ -412,20 +378,20 @@ export default function SimGame() {
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
-          <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Judge gate ${ALGO_VERSION} · perpendicular px vs your lines · tol ${TOL_PX}px · ≥${ACCEPT_COV} accept / ≥${PARTIAL_COV} partial`}>algo {ALGO_VERSION} · {TOL_PX}px</span>
-          <p className="text-[11px] text-muted truncate hidden xl:block"><span className="font-semibold text-[#0891b2]">⚡ Snap</span> = setup: my algo reads the blank court live (drag rough corners first if it punts) and freezes <span className="text-[#22d3ee] font-semibold">my read</span> · fix the green into truth · verdict · gate: {TOL_PX}px, ≥{ACCEPT_COV} accept / ≥{PARTIAL_COV} partial</p>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Metric ${ALGO_VERSION}: distance from each of your pins to Claude's nearest pin, px at native resolution`}>algo {ALGO_VERSION} · pin px</span>
+          <p className="text-[11px] text-muted truncate hidden xl:block"><span className="font-semibold text-[#0891b2]">⚡ Snap</span> = setup: my algo reads the blank court live (drag rough corners first if it punts) and freezes <span className="text-[#22d3ee] font-semibold">my pins</span> · fix the green pins to truth · Next measures pin-to-pin distance and saves</p>
         </div>
         {/* result pill lives up here (not over the image) so it never blocks the loupe */}
         {res?.cv && (
           <div className="px-4 py-1.5 rounded-full text-white text-[13px] font-bold shadow whitespace-nowrap"
-            style={{ background: res.tim ? (res.tim === res.cv.verdict ? '#00C853' : '#ef4444') : '#64748b' }}>
-            CV: {res.cv.verdict} ({res.cv.coverage}% ≤{TOL_PX}px{res.cv.medIn != null ? ` · med ${res.cv.medIn}px` : ''}){res.tim ? ` · You: ${res.tim} · ${res.tim === res.cv.verdict ? '✓' : '✗'}` : ''}
+            style={{ background: res.cv.avg <= 5 ? '#00C853' : res.cv.avg <= 15 ? '#f59e0b' : '#ef4444' }}>
+            Pins: avg {res.cv.avg}px · worst {res.cv.max}px
           </div>
         )}
         <div className="flex items-stretch gap-1.5">
           <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
           <Stat label="Played" value={`${scores.length}`} />
-          <Stat label="Aligned" value={rated.length ? `${aligned}/${rated.length}` : '—'} />
+          <Stat label="Avg px" value={avgAll == null ? '—' : `${Math.round(avgAll * 10) / 10}`} />
           <button type="button" onClick={restart}
             className="rounded-lg bg-background border border-border/50 px-2.5 text-[11px] font-bold text-foreground active:opacity-70 transition-opacity">↺ Restart</button>
         </div>
@@ -463,7 +429,7 @@ export default function SimGame() {
         </div>
 
       <div className="px-4 pb-3 pt-1 flex items-center justify-center gap-2 flex-wrap">
-        <button type="button" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}
+        <button type="button" onClick={() => goto(Math.max(0, idx - 1))} disabled={idx === 0}
           className="px-3 py-2 rounded-xl bg-surface text-foreground border border-border/50 text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-40">← Prev</button>
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] text-muted">↔</span>
@@ -476,24 +442,12 @@ export default function SimGame() {
           className="px-4 py-2 rounded-xl bg-[#22d3ee] text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
           {snapping ? 'Snapping…' : '⚡ Snap'}
         </button>
-        <button type="button" onClick={judge} className="px-4 py-2 rounded-xl bg-primary text-white text-[13px] font-bold active:opacity-80 transition-opacity">⚖ Judge</button>
-        <span className="text-[12px] font-bold text-muted ml-1">My read is:</span>
-        {(['ACCEPT', 'PARTIAL', 'REJECT'] as Verdict[]).map((v) => {
-          const on = res?.tim === v
-          const color = v === 'ACCEPT' ? '#00C853' : v === 'PARTIAL' ? '#f59e0b' : '#ef4444'
-          return (
-            <button key={v} type="button" onClick={() => rate(v)}
-              className="px-3.5 py-1.5 rounded-full text-[12px] font-bold border-2 transition-all active:opacity-80"
-              style={on ? { background: color, borderColor: color, color: '#fff' } : { borderColor: color, color, background: 'transparent' }}>
-              {v}
-            </button>
-          )
-        })}
-        <button type="button" onClick={() => setIdx(Math.min(IMAGES.length - 1, idx + 1))} disabled={idx === IMAGES.length - 1}
+        <button type="button" onClick={judge} className="px-4 py-2 rounded-xl bg-primary text-white text-[13px] font-bold active:opacity-80 transition-opacity">📏 Measure</button>
+        <button type="button" onClick={() => goto(Math.min(IMAGES.length - 1, idx + 1))} disabled={idx === IMAGES.length - 1}
           className="px-5 py-2 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 transition-opacity disabled:opacity-40">Next →</button>
         {scores.length >= IMAGES.length && (
           <span className="text-[12px] font-bold text-green-700 bg-[#00C853]/10 border border-[#00C853]/30 rounded-full px-3 py-1.5">
-            🏁 All {IMAGES.length} played · CV aligned with you on {aligned}/{rated.length} — tell Claude to analyze
+            🏁 All {IMAGES.length} played · avg pin error {avgAll == null ? '—' : Math.round(avgAll)}px — tell Claude to analyze
           </span>
         )}
       </div>
