@@ -93,12 +93,45 @@ type Res = { score: number; errPx: number; yours: Pt[]; kx: number; ky: number; 
 // Tim's 4 pins, the distance to Claude's nearest corner pin, in px at native
 // resolution. avg + worst. Nearest matching makes it corner-ordering-proof.
 // Version history: v1-v5 = coverage/verdict gates (retired) · v6 = pin distance.
-const ALGO_VERSION = 'v6'
-function judgeRead(mine: Court, tims: Pt[], _tkx: number, _tky: number, _a: number, nw: number, nh: number): Res['cv'] {
+const ALGO_VERSION = 'v7'
+// The court's 12 markers: 4 corners (the ONLY draggable pins) + 8 Ts, all in feet.
+// The Ts derive from the corners via the homography — Tim never moves them.
+const T_MARKS: { x: number; y: number }[] = [
+  { x: 0, y: 15 }, { x: 20, y: 15 }, { x: 0, y: 29 }, { x: 20, y: 29 },
+  { x: 10, y: 0 }, { x: 10, y: 44 }, { x: 10, y: 15 }, { x: 10, y: 29 },
+]
+const ALL_MARKS = [...COURT_CORNERS, ...T_MARKS]
+// A rectangle court reads the same under 4 symmetries — score the best one so
+// pin ordering can never fake a miss.
+const SYMS: ((m: { x: number; y: number }) => { x: number; y: number })[] = [
+  (m) => m,
+  (m) => ({ x: 20 - m.x, y: 44 - m.y }),
+  (m) => ({ x: 20 - m.x, y: m.y }),
+  (m) => ({ x: m.x, y: 44 - m.y }),
+]
+// Metric v7: distance between the two courts at ALL 12 markers (in-frame ones),
+// px at native resolution. Corners AND Ts count — a fit that nails corners but
+// bends the kitchen shows up here.
+function judgeRead(mine: Court, tims: Pt[], tkx: number, tky: number, a: number, nw: number, nh: number): Res['cv'] {
   if (!mine.c?.length || tims.length !== 4) return undefined
-  const ds = tims.map((t) => Math.min(...mine.c.map((c) => Math.hypot((t.x - c.x) * nw, (t.y - c.y) * nh))))
-  const avg = ds.reduce((s, d) => s + d, 0) / ds.length
-  return { avg: Math.round(avg * 10) / 10, max: Math.round(Math.max(...ds) * 10) / 10, algo: ALGO_VERSION }
+  const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, a)))
+  const Ht = homographyFromCorners(COURT_CORNERS, tims.map((c) => undistort(c, tkx, tky, a)))
+  if (!Hm || !Ht) return undefined
+  let best: { avg: number; max: number } | null = null
+  for (const T of SYMS) {
+    const ds: number[] = []
+    for (const m of ALL_MARKS) {
+      const pt = distort(applyHomography(Ht, T(m)), tkx, tky, a)
+      if (pt.x < -0.02 || pt.x > 1.02 || pt.y < -0.02 || pt.y > 1.02) continue // off-frame: not judgeable
+      const pm = distort(applyHomography(Hm, m), mine.kx, mine.ky, a)
+      ds.push(Math.hypot((pt.x - pm.x) * nw, (pt.y - pm.y) * nh))
+    }
+    if (ds.length < 4) continue
+    const avg = ds.reduce((s, d) => s + d, 0) / ds.length
+    if (!best || avg < best.avg) best = { avg, max: Math.max(...ds) }
+  }
+  if (!best) return undefined
+  return { avg: Math.round(best.avg * 10) / 10, max: Math.round(best.max * 10) / 10, algo: ALGO_VERSION }
 }
 
 // Re-measure every stored round with the CURRENT algorithm (aspect ratios come
@@ -380,13 +413,13 @@ export default function SimGame() {
           <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full whitespace-nowrap">Dev · Claude vs You</span>
           <h1 className="text-[16px] font-bold text-foreground whitespace-nowrap">Calibration match</h1>
           <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-700 bg-cyan-100 px-2 py-0.5 rounded-full whitespace-nowrap" title={`Metric ${ALGO_VERSION}: distance from each of your pins to Claude's nearest pin, px at native resolution`}>algo {ALGO_VERSION} · pin px</span>
-          <p className="text-[11px] text-muted truncate hidden xl:block"><span className="font-semibold text-[#0891b2]">⚡ Snap</span> = setup: my algo reads the blank court live (drag rough corners first if it punts) and freezes <span className="text-[#22d3ee] font-semibold">my pins</span> · fix the green pins to truth · Next measures pin-to-pin distance and saves</p>
+          <p className="text-[11px] text-muted truncate hidden xl:block"><span className="font-semibold text-[#0891b2]">⚡ Snap</span> = setup · drag ONLY the 4 corner pins — the <span className="text-yellow-500 font-semibold">8 yellow Ts</span> derive from them · cyan rings = my 12 markers · Next measures all in-frame markers and saves</p>
         </div>
         {/* result pill lives up here (not over the image) so it never blocks the loupe */}
         {res?.cv && (
           <div className="px-4 py-1.5 rounded-full text-white text-[13px] font-bold shadow whitespace-nowrap"
             style={{ background: res.cv.avg <= 5 ? '#00C853' : res.cv.avg <= 15 ? '#f59e0b' : '#ef4444' }}>
-            Pins: avg {res.cv.avg}px · worst {res.cv.max}px
+            Markers: avg {res.cv.avg}px · worst {res.cv.max}px
           </div>
         )}
         <div className="flex items-stretch gap-1.5">
@@ -416,6 +449,30 @@ export default function SimGame() {
               <div key={i} className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary border-2 border-white shadow text-white text-[10px] font-bold flex items-center justify-center pointer-events-none"
                 style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}>{i + 1}</div>
             ))}
+            {/* the 8 yellow Ts — DERIVED from the corner pins via the homography; never draggable */}
+            {(() => {
+              const Ht = homographyFromCorners(COURT_CORNERS, yours.map((c) => undistort(c, kx, ky, aspect)))
+              if (!Ht) return null
+              return T_MARKS.map((m, i) => {
+                const p = distort(applyHomography(Ht, m), kx, ky, aspect)
+                return (
+                  <div key={`t${i}`} className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-black/50 shadow pointer-events-none"
+                    style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, background: '#facc15' }} />
+                )
+              })
+            })()}
+            {/* Claude's 12 markers as cyan rings — compare against your yellow Ts / blue pins */}
+            {mine && (() => {
+              const Hm = homographyFromCorners(COURT_CORNERS, mine.c.map((c) => undistort(c, mine.kx, mine.ky, aspect)))
+              if (!Hm) return null
+              return ALL_MARKS.map((m, i) => {
+                const p = distort(applyHomography(Hm, m), mine.kx, mine.ky, aspect)
+                return (
+                  <div key={`m${i}`} className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#22d3ee] pointer-events-none"
+                    style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} />
+                )
+              })
+            })()}
             {loupe && (
               <div className="absolute w-36 h-36 rounded-full border-[3px] border-white shadow-xl pointer-events-none overflow-hidden z-10"
                 style={{ left: `calc(${loupe.x * 100}% - 72px)`, top: `calc(${loupe.y * 100}% - 180px)`, backgroundImage: `url(${url})`, backgroundRepeat: 'no-repeat', backgroundColor: '#000', backgroundSize: `${natural.w * 5}px ${natural.h * 5}px`, backgroundPosition: `${-loupe.x * natural.w * 5 + 72}px ${-loupe.y * natural.h * 5 + 72}px` }}>
