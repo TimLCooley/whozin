@@ -123,27 +123,67 @@ export default function LiveSim() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cur, pollNonce])
 
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0]
-    e.target.value = ''
-    if (!f || busy) return
+  async function uploadDataUrl(dataUrl: string) {
     setBusy(true); setPhase('uploading'); setStatus('Uploading…')
     try {
-      const bmp = await createImageBitmap(f)
-      const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
-      const cw = Math.round(bmp.width * scale), ch = Math.round(bmp.height * scale)
-      const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch
-      cv.getContext('2d')!.drawImage(bmp, 0, 0, cw, ch)
       const r = await fetch('/api/lab/live', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', data: cv.toDataURL('image/jpeg', 0.9) }),
+        body: JSON.stringify({ action: 'upload', data: dataUrl }),
       }).then((x) => x.json())
       if (r?.id) {
         setIds((s) => [r.id, ...s])
         setCur(r.id); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS)
         setPhase('reading'); setStatus('Mac is reading the court…')
       } else { setPhase('manual'); setStatus(`Upload failed: ${r?.error ?? '?'}`) }
-    } catch (err) { setStatus(`Capture failed: ${err}`) } finally { setBusy(false) }
+    } catch (err) { setPhase('manual'); setStatus(`Upload failed: ${err}`) } finally { setBusy(false) }
+  }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f || busy) return
+    try {
+      const bmp = await createImageBitmap(f)
+      const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
+      const cw = Math.round(bmp.width * scale), ch = Math.round(bmp.height * scale)
+      const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch
+      cv.getContext('2d')!.drawImage(bmp, 0, 0, cw, ch)
+      await uploadDataUrl(cv.toDataURL('image/jpeg', 0.9))
+    } catch (err) { setPhase('manual'); setStatus(`Capture failed: ${err}`) }
+  }
+
+  // In-page camera (HTTPS): live viewfinder + shutter — the OS picker was
+  // hijacking the capture-input on Tim's phone. Falls back to the file input.
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [camOn, setCamOn] = useState(false)
+  async function openCam() {
+    if (busy) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
+      })
+      streamRef.current = stream
+      setCamOn(true)
+      setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}) } }, 50)
+    } catch {
+      fileRef.current?.click() // camera denied/unavailable -> picker fallback
+    }
+  }
+  function closeCam() {
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    setCamOn(false)
+  }
+  async function shutter() {
+    const v = videoRef.current
+    if (!v || !v.videoWidth) return
+    const scale = Math.min(1, 1600 / Math.max(v.videoWidth, v.videoHeight))
+    const cw = Math.round(v.videoWidth * scale), ch = Math.round(v.videoHeight * scale)
+    const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch
+    cv.getContext('2d')!.drawImage(v, 0, 0, cw, ch)
+    closeCam()
+    await uploadDataUrl(cv.toDataURL('image/jpeg', 0.9))
   }
 
   async function save() {
@@ -280,7 +320,7 @@ export default function LiveSim() {
 
       <div className="px-3 pb-3 pt-1 flex items-center justify-center gap-2 flex-wrap">
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
-        <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
+        <button type="button" onClick={openCam} disabled={busy}
           className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 New shot</button>
         <button type="button" onClick={clearPins} disabled={!cur}
           className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↺ Clear</button>
@@ -295,6 +335,17 @@ export default function LiveSim() {
           onClick={() => { const n = ids[idxIn - 1]; setCur(n); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS) }}
           className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">Newer →</button>
       </div>
+      {camOn && (
+        <div className="fixed inset-0 z-[200] bg-black flex flex-col">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video ref={videoRef} playsInline muted className="flex-1 min-h-0 object-contain" />
+          <div className="flex items-center justify-center gap-6 py-4 bg-black">
+            <button type="button" onClick={closeCam} className="px-5 py-3 rounded-xl bg-white/15 text-white text-[14px] font-bold">Cancel</button>
+            <button type="button" onClick={shutter} className="w-18 h-18 px-6 py-6 rounded-full bg-white border-4 border-white/40 shadow-xl" aria-label="Take photo" />
+            <button type="button" onClick={() => fileRef.current?.click()} className="px-5 py-3 rounded-xl bg-white/15 text-white text-[14px] font-bold">Library</button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   )
