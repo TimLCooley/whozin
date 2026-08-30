@@ -272,20 +272,22 @@ def main():
                 pass
     segs = vps.segments(img, blue)
 
-    def court_cy(q):
-        """Mean normalized y of the candidate's in-frame markers. The court is
-        ON THE GROUND (Tim's gravity prior): a court living in the top of the
-        frame is ceiling lights / fence tops / nonsense, never a court."""
+    def court_stats(q):
+        """(mean y, distance-from-aim-point) of in-frame markers. Gravity prior:
+        courts live low in frame (ceiling lights / fence tops are not courts).
+        Aim prior (park data, Aug 30): people CENTER their court — of competing
+        on-paint interpretations, the one nearest frame center is theirs."""
         import junctions as _jx
         Hq, _ = cv2.findHomography(verify.CC, np.array(q, float) * [w, h])
         if Hq is None: return None
-        ys = []
+        xs, ys = [], []
         for mx, my, _t in _jx.MODEL_JUNCTIONS:
             P = Hq @ [mx, my, 1.0]
             if abs(P[2]) < 1e-9: continue
             px, py = P[0] / P[2], P[1] / P[2]
-            if 0 <= px < w and 0 <= py < h: ys.append(py / h)
-        return float(np.mean(ys)) if ys else None
+            if 0 <= px < w and 0 <= py < h: xs.append(px / w); ys.append(py / h)
+        if not ys: return None
+        return float(np.mean(ys)), float(np.hypot(np.mean(xs) - 0.5, np.mean(ys) - 0.55))
 
     def frame_frac(q):
         """Fraction of the frame the candidate court covers (Tim's scale prior:
@@ -305,8 +307,10 @@ def main():
     best = None
     for q in pool:
         if not sane(q): continue
-        cy = court_cy(q)
-        if cy is None or cy < 0.30: continue  # court in top third of frame = not a court
+        st = court_stats(q)
+        if st is None: continue
+        cy, cdist = st
+        if cy < 0.30: continue  # court in top third of frame = not a court
         ff = frame_frac(q)
         if ff < 0.06: continue  # court squished into a corner = not the court being photographed
         rsc, _ = verify.score(img, q.tolist())
@@ -318,7 +322,8 @@ def main():
         # is the second-strongest (truth ~2x decoys); line-agreement weak tiebreak
         key = rsc + 10.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 3.0 * sa - 0.2 * la \
               + 12.0 * max(0.0, 0.50 - cy) \
-              + 8.0 * max(0.0, 0.20 - ff)  # gravity + scale priors (Tim): low in frame, fills the frame
+              + 8.0 * max(0.0, 0.20 - ff) \
+              + 5.0 * max(0.0, cdist - 0.10)  # gravity/scale/aim priors (Tim)
         if best is None or key < best[0]: best = (key, q)
     if best is None:
         print(json.dumps({'error': 'no calibration found — needs manual corners'})); return
