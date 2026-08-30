@@ -190,9 +190,10 @@ def refine_with_junctions(img, q, lm, det, court_px, w, h):
 
 def main():
     req = json.load(sys.stdin)
-    name = ''.join(ch for ch in str(req['court']) if ch.isalnum())
-    n = int(''.join(ch for ch in name if ch.isdigit()))
-    img = cv2.imread(f'{WT}/public/sim/{name}.jpg')
+    name = ''.join(ch for ch in str(req['court']) if ch.isalnum() or ch in '-_')
+    is_live = name.startswith('live-')
+    n = 0 if is_live else int(''.join(ch for ch in name if ch.isdigit()) or 0)
+    img = cv2.imread(f'{WT}/public/sim/live/{name[5:]}.jpg' if is_live else f'{WT}/public/sim/{name}.jpg')
     if img is None:
         print(json.dumps({'error': 'unknown court'})); return
     h, w = img.shape[:2]
@@ -255,17 +256,18 @@ def main():
                 except Exception: pass
     except Exception:
         pass
-    try:
-        ref, _, _ = auto2.run(n)
-        if ref is not None: pool.append(np.asarray(ref))
-    except Exception:
-        pass
-    for mod in (auto3, auto4):
+    if not is_live:  # legacy generators load by court number — sim courts only
         try:
-            r = mod.run(n, return_all=True)
-            if isinstance(r, list): pool += [np.asarray(q) for q in r]
+            ref, _, _ = auto2.run(n)
+            if ref is not None: pool.append(np.asarray(ref))
         except Exception:
             pass
+        for mod in (auto3, auto4):
+            try:
+                r = mod.run(n, return_all=True)
+                if isinstance(r, list): pool += [np.asarray(q) for q in r]
+            except Exception:
+                pass
     segs = vps.segments(img, blue)
     best = None
     for q in pool:

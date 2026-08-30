@@ -166,6 +166,17 @@ export default function SimGame() {
   const [aspect, setAspect] = useState(16 / 9)
   const [natural, setNatural] = useState({ w: 1280, h: 720 })
   const [store, setStore] = useState<Record<string, Res>>({})
+  // Live captures (courtside photos) appended to the deck; ids persist locally.
+  const [live, setLive] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  const liveInputRef = useRef<HTMLInputElement>(null)
+  const deck = [...IMAGES, ...live.map((id) => `/sim/live/${id}.jpg`)]
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem('sim-live-v1')
+      if (r) setLive(JSON.parse(r))
+    } catch { /* ignore */ }
+  }, [])
   const [loupe, setLoupe] = useState<Pt | null>(null)
   const [snapping, setSnapping] = useState(false)
   // Portaled to <body>: the app layout's phone frame (md:max-w-[480px] + transform)
@@ -215,7 +226,7 @@ export default function SimGame() {
         const data = JSON.parse(r) as Record<string, Res>
         // purge rounds for removed courts so the stats reflect the live set
         const filtered: Record<string, Res> = {}
-        for (const k of Object.keys(data)) if (IMAGES.includes(k)) filtered[k] = data[k]
+        for (const k of Object.keys(data)) if (IMAGES.includes(k) || k.startsWith('/sim/live/')) filtered[k] = data[k]
         setStore(filtered)
         // re-judge every stored round with the current algorithm, then flush to disk.
         // Merge FUNCTIONALLY and skip courts the user touched meanwhile — this
@@ -238,7 +249,7 @@ export default function SimGame() {
   // Start from Claude's read (the real-world flow: auto-calibration proposes, you correct it).
   useEffect(() => {
     // Round 6: courts start blank; a court already played restores its saved state.
-    const r = store[IMAGES[idx]]
+    const r = store[deck[idx]]
     setYours(r?.yours ?? DEFAULT_GUESS)
     setKx(r?.kx ?? 0)
     setKy(r?.ky ?? 0)
@@ -246,7 +257,9 @@ export default function SimGame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx])
 
-  const url = IMAGES[idx]
+  const url = deck[idx]
+  // API id for this image: sim courts by number, live captures by 'live-<id>'
+  const courtParam = url.startsWith('/sim/live/') ? 'live-' + url.slice(10, -4) : url.replace('/sim/', '').replace('.jpg', '')
   const mine: Court | null = store[url]?.claude ?? null
 
   function ptFrom(e: React.PointerEvent) {
@@ -278,6 +291,39 @@ export default function SimGame() {
   }
   function onUp() { dragRef.current = null; setLoupe(null) }
 
+  // Courtside capture: shoot with the phone camera (file-capture works over plain
+  // http), downscale client-side, upload to the dev server, append to the deck.
+  async function onLiveFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f || uploading) return
+    setUploading(true)
+    try {
+      const bmp = await createImageBitmap(f)
+      const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
+      const cw = Math.round(bmp.width * scale), ch = Math.round(bmp.height * scale)
+      const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch
+      cv.getContext('2d')!.drawImage(bmp, 0, 0, cw, ch)
+      const dataUrl = cv.toDataURL('image/jpeg', 0.9)
+      const r = await fetch('/api/dev/sim-upload', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data: dataUrl }),
+      }).then((x) => x.json())
+      if (r?.id) {
+        const next = [...live, r.id as string]
+        setLive(next)
+        try { localStorage.setItem('sim-live-v1', JSON.stringify(next)) } catch { /* ignore */ }
+        setIdx(IMAGES.length + next.length - 1)
+      } else {
+        alert(`Upload failed: ${r?.error ?? 'unknown'}`)
+      }
+    } catch (err) {
+      alert(`Capture failed: ${err}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   // Setup calibration, exactly like the product: on an untouched court Snap runs
   // the FULL-AUTO reader (no seed); if auto can't find the court, the user drags
   // rough corners and Snap polishes them (tap+snap). Either way the result is
@@ -286,7 +332,7 @@ export default function SimGame() {
     if (snapping) return
     setSnapping(true)
     try {
-      const court = url.replace('/sim/', '').replace('.jpg', '')
+      const court = courtParam
       const untouched = yours.every((p, i) => Math.abs(p.x - DEFAULT_GUESS[i].x) < 1e-9 && Math.abs(p.y - DEFAULT_GUESS[i].y) < 1e-9)
       const endpoint = untouched ? '/api/dev/sim-auto' : '/api/dev/sim-snap'
       const r = await fetch(endpoint, {
@@ -428,7 +474,7 @@ export default function SimGame() {
           </div>
         )}
         <div className="flex items-stretch gap-1.5">
-          <Stat label="Court" value={`${idx + 1} / ${IMAGES.length}`} />
+          <Stat label="Court" value={`${idx + 1} / ${deck.length}`} />
           <Stat label="Played" value={`${scores.length}`} />
           <Stat label="Avg px" value={avgAll == null ? '—' : `${Math.round(avgAll * 10) / 10}`} />
           <button type="button" onClick={restart}
@@ -501,16 +547,21 @@ export default function SimGame() {
           <input type="range" min={-0.6} max={0.6} step={0.01} value={ky} onChange={(e) => setKy(parseFloat(e.target.value))} className="w-24" />
           <button type="button" onClick={() => { setKx(0); setKy(0) }} className="text-[11px] font-bold px-2 py-1 rounded-full bg-surface text-muted border border-border/50 active:opacity-70 transition-opacity">Reset</button>
         </div>
+        <input ref={liveInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onLiveFile} />
+        <button type="button" onClick={() => liveInputRef.current?.click()} disabled={uploading}
+          className="px-4 py-2 rounded-xl bg-violet-500 text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
+          {uploading ? 'Uploading…' : '📷 Live'}
+        </button>
         <button type="button" onClick={snap} disabled={snapping}
           className="px-4 py-2 rounded-xl bg-[#22d3ee] text-white text-[13px] font-bold active:opacity-80 transition-opacity disabled:opacity-50">
           {snapping ? 'Snapping…' : '⚡ Snap'}
         </button>
         <button type="button" onClick={judge} className="px-4 py-2 rounded-xl bg-primary text-white text-[13px] font-bold active:opacity-80 transition-opacity">📏 Measure</button>
-        <button type="button" onClick={() => goto(Math.min(IMAGES.length - 1, idx + 1))} disabled={idx === IMAGES.length - 1}
+        <button type="button" onClick={() => goto(Math.min(deck.length - 1, idx + 1))} disabled={idx === deck.length - 1}
           className="px-5 py-2 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 transition-opacity disabled:opacity-40">Next →</button>
-        {scores.length >= IMAGES.length && (
+        {scores.length >= deck.length && (
           <span className="text-[12px] font-bold text-green-700 bg-[#00C853]/10 border border-[#00C853]/30 rounded-full px-3 py-1.5">
-            🏁 All {IMAGES.length} played · avg pin error {avgAll == null ? '—' : Math.round(avgAll)}px — tell Claude to analyze
+            🏁 All {deck.length} played · avg pin error {avgAll == null ? '—' : Math.round(avgAll)}px — tell Claude to analyze
           </span>
         )}
       </div>

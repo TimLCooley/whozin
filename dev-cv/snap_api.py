@@ -8,8 +8,10 @@ import auto2, verify
 
 def main():
     req = json.load(sys.stdin)
-    name = ''.join(ch for ch in str(req['court']) if ch.isalnum())
-    img = cv2.imread(f"{'/'.join(__file__.split('/')[:-2])}/public/sim/{name}.jpg")
+    name = ''.join(ch for ch in str(req['court']) if ch.isalnum() or ch in '-_')
+    WT = '/'.join(__file__.split('/')[:-2])
+    path = f'{WT}/public/sim/live/{name[5:]}.jpg' if name.startswith('live-') else f'{WT}/public/sim/{name}.jpg'
+    img = cv2.imread(path)
     if img is None:
         print(json.dumps({'error': 'unknown court'})); return
     h, w = img.shape[:2]

@@ -32,6 +32,11 @@ Xva, Tva = gen_set(120, 999)
 
 net = kpnet.KPNet().to(DEV)
 opt = torch.optim.Adam(net.parameters(), lr=3e-4)
+
+def hm_loss(pred, t):
+    # plain MSE collapses to all-zero on sparse heatmaps — weight the peaks
+    w = 1.0 + 80.0 * t
+    return ((pred - t) ** 2 * w).mean() * 100
 print(f'params: {sum(p.numel() for p in net.parameters())/1e6:.2f}M', flush=True)
 
 def batches(X, T, shuffle=True):
@@ -50,13 +55,13 @@ for ep in range(EPOCHS):
     t0 = time.time()
     for x, t in batches(Xtr, Ttr):
         opt.zero_grad()
-        loss = F.mse_loss(net(x), t) * 100
+        loss = hm_loss(net(x), t)
         loss.backward(); opt.step()
         tr += float(loss); nb += 1
     net.eval(); va = 0.0; vb = 0
     with torch.no_grad():
         for x, t in batches(Xva, Tva, shuffle=False):
-            va += float(F.mse_loss(net(x), t) * 100); vb += 1
+            va += float(hm_loss(net(x), t)); vb += 1
     va /= max(vb, 1)
     print(f'epoch {ep+1}/{EPOCHS}: train {tr/max(nb,1):.4f} val {va:.4f} ({time.time()-t0:.0f}s)', flush=True)
     if va < best:
