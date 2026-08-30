@@ -197,6 +197,38 @@ def main():
     if img is None:
         print(json.dumps({'error': 'unknown court'})); return
     h, w = img.shape[:2]
+    # ultra-wide/small-court captures (0.5x): the court drowns in surroundings
+    # and lines get too thin. Digital re-zoom: crop to the blue court + margin,
+    # upscale, read the crop, then map corners back to the full frame.
+    W0, H0 = w, h
+    crop_map = None  # (X0, Y0, cw_px, ch_px) of the crop in the ORIGINAL image
+    _b0 = auto2.blue_mask(img)
+    if _b0 is not None and (auto2.line_mask(img, _b0) > 0).sum() < 2500:
+        # choose the blue component CONTAINING PAINT (0.5x frames are full of
+        # sky, and sky is blue — the biggest blob is often clouds, not court)
+        _hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        _cond = ((_hsv[:, :, 0] > 95) & (_hsv[:, :, 0] < 135) & (_hsv[:, :, 1] > 60) & (_hsv[:, :, 2] > 40)).astype(np.uint8) * 255
+        _cond = cv2.morphologyEx(_cond, cv2.MORPH_CLOSE, np.ones((25, 25), np.uint8))
+        _wm = verify.white_mask(img); _wm[:int(h * 0.30), :] = 0
+        num0, lab0, stats0, _c0 = cv2.connectedComponentsWithStats(_cond)
+        besti, bestp = None, -1
+        for _i in range(1, num0):
+            if stats0[_i, cv2.CC_STAT_AREA] < 0.01 * w * h: continue
+            _comp = (lab0 == _i).astype(np.uint8) * 255
+            _p = int(cv2.bitwise_and(_wm, cv2.dilate(_comp, np.ones((21, 21), np.uint8))).sum() // 255)
+            if _p > bestp: bestp, besti = _p, _i
+        if besti is not None:
+            i0 = besti
+            x0, y0, bw0, bh0 = stats0[i0][:4]
+            mx0, my0 = int(bw0 * 0.35) + 30, int(bh0 * 0.35) + 30
+            X0, Y0 = max(0, x0 - mx0), max(0, y0 - my0)
+            X1, Y1 = min(w, x0 + bw0 + mx0), min(h, y0 + bh0 + my0)
+            if 0 < (X1 - X0) * (Y1 - Y0) < 0.8 * w * h:
+                crop = img[Y0:Y1, X0:X1]
+                s2 = max(1.0, 1500.0 / max(crop.shape[1], 1))
+                img = cv2.resize(crop, (int(crop.shape[1] * s2), int(crop.shape[0] * s2)), interpolation=cv2.INTER_CUBIC)
+                h, w = img.shape[:2]
+                crop_map = (X0, Y0, X1 - X0, Y1 - Y0)
     # court region = whichever candidate contains the most white paint:
     # the proven blue mask vs the color-agnostic dominant-color region
     wm0 = verify.white_mask(img)
@@ -327,8 +359,11 @@ def main():
         if best is None or key < best[0]: best = (key, q)
     if best is None:
         print(json.dumps({'error': 'no calibration found — needs manual corners'})); return
-    final = refine_with_junctions(img, best[1], lm, det, court_px, w, h)
-    print(json.dumps({'corners': np.round(np.asarray(final), 5).tolist()}))
+    final = np.asarray(refine_with_junctions(img, best[1], lm, det, court_px, w, h), dtype=float)
+    if crop_map is not None:
+        X0, Y0, CW, CH = crop_map
+        final = np.c_[(X0 + final[:, 0] * CW) / W0, (Y0 + final[:, 1] * CH) / H0]
+    print(json.dumps({'corners': np.round(final, 5).tolist()}))
 
 if __name__ == '__main__':
     try:
