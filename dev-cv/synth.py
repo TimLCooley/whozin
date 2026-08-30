@@ -3,8 +3,28 @@
 # cameras; only the TARGET court's 12 typed markers are labeled — the model's
 # core skill is picking YOUR court out of a wall of courts.
 # Ground truth is exact: image = warpPerspective(top-down venue texture).
+import glob
 import cv2
 import numpy as np
+
+# real photos: crops become backgrounds/textures to close the domain gap
+_REAL = None
+def real_pool():
+    global _REAL
+    if _REAL is None:
+        WT = '/'.join(__file__.split('/')[:-2])
+        _REAL = [cv2.imread(p) for p in sorted(glob.glob(f'{WT}/public/sim/court*.jpg'))]
+        _REAL = [im for im in _REAL if im is not None]
+    return _REAL
+
+def real_crop(rng, w, h):
+    pool = real_pool()
+    if not pool: return None
+    im = pool[int(rng.integers(0, len(pool)))]
+    ih, iw = im.shape[:2]
+    cw, ch = int(rng.uniform(0.3, 0.9) * iw), int(rng.uniform(0.3, 0.9) * ih)
+    x0, y0 = int(rng.integers(0, iw - cw + 1)), int(rng.integers(0, ih - ch + 1))
+    return cv2.resize(im[y0:y0 + ch, x0:x0 + cw], (w, h))
 
 FT = 8  # texture px per foot
 W_OUT, H_OUT = 512, 288
@@ -127,8 +147,19 @@ def gen_sample(rng):
         if not ok: continue
         if sum(vis) < 5: continue  # need a usable amount of court in frame
         img = cv2.warpPerspective(tex, H, (W_OUT, H_OUT), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
+        # surface realism: blend a real-photo texture into the whole ground (subtle)
+        if rng.random() < 0.6:
+            texr = real_crop(rng, W_OUT, H_OUT)
+            if texr is not None:
+                a = rng.uniform(0.08, 0.25)
+                img = cv2.addWeighted(texr, a, img, 1 - a, 0)
         # horizon fill: rows where ground doesn't project (black) -> sky/trees
         mask = (img.sum(2) == 0)
+        if mask.any() and rng.random() < 0.5:
+            texr = real_crop(rng, W_OUT, H_OUT)
+            if texr is not None:
+                img[mask] = texr[mask]
+                mask = np.zeros_like(mask)
         if mask.any():
             sky = np.zeros_like(img)
             base = np.array([jitter((190, 160, 120), 40, rng)], np.uint8)
