@@ -11,9 +11,10 @@ import { createClient } from '@/lib/supabase/client'
 import { isSuperAdmin } from '@/lib/auth'
 import { isNative, getPlatform } from '@/lib/capacitor'
 import { COURT_CORNERS, COURT_ALL_LINES } from '@/lib/pickleball-court'
-import { homographyFromCorners, applyHomography } from '@/lib/homography'
+import { homographyFromCorners, homographyLeastSquares, applyHomography } from '@/lib/homography'
 
 type Pt = { x: number; y: number }
+type P12 = Pt[]
 const DEFAULT_GUESS: Pt[] = [{ x: 0.30, y: 0.34 }, { x: 0.70, y: 0.34 }, { x: 0.90, y: 0.80 }, { x: 0.10, y: 0.80 }]
 const T_MARKS = [
   { x: 0, y: 15 }, { x: 20, y: 15 }, { x: 0, y: 29 }, { x: 20, y: 29 },
@@ -76,6 +77,7 @@ export default function LiveSim() {
   const [status, setStatus] = useState('Take a shot to start')
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'reading' | 'ready' | 'manual' | 'saved'>('idle')
   const [label, setLabel] = useState<'good' | 'unusable' | null>(null)
+  const [zoomSel, setZoomSel] = useState<'0.5' | '0.7' | '1'>('1')
   const [recRetake, setRecRetake] = useState(false)
   const [pollNonce, setPollNonce] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -152,7 +154,7 @@ export default function LiveSim() {
     try {
       const r = await fetch('/api/lab/live', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', data: dataUrl }),
+        body: JSON.stringify({ action: 'upload', data: dataUrl, zoom: zoomSel }),
       }).then((x) => x.json())
       if (r?.id) {
         setIds((s) => [r.id, ...s])
@@ -206,9 +208,16 @@ export default function LiveSim() {
     }
     if (camBlockedRef.current) { fileRef.current?.click(); return } // known blocked: go straight to picker
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
-      })
+      let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+      if (zoomSel !== '1') {
+        // best effort: pick the ultra-wide back camera when 0.5x/0.7x chosen
+        try {
+          const devs = await navigator.mediaDevices.enumerateDevices()
+          const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
+          if (uw) video = { deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        } catch { /* fall through to default lens */ }
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
       streamRef.current = stream
       setCamOn(true)
       setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}) } }, 50)
@@ -281,18 +290,31 @@ export default function LiveSim() {
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
   }
   const lastPtRef = useRef<{ x: number; y: number; t: number } | null>(null)
+  // all 12 marker positions derived from the current corners
+  function markerPositions(): P12 {
+    const Ht = homographyFromCorners(COURT_CORNERS, yours)
+    if (!Ht) return yours.map((c) => ({ ...c }))
+    return ALL_MARKS.map((m) => applyHomography(Ht, m))
+  }
   function onDown(e: React.PointerEvent) {
     dragRef.current = null
     if (!imgUrl) return
     const r = boxRef.current!.getBoundingClientRect()
     const px = e.clientX - r.left, py = e.clientY - r.top
+    const marks = markerPositions()
+    // grab ANY marker (Tim: no numbers needed — it's a point you can grab).
+    // corners win ties (slightly larger radius)
     let hit = -1, best = 34
-    yours.forEach((c, i) => { const d = Math.hypot(px - c.x * r.width, py - c.y * r.height); if (d < best) { best = d; hit = i } })
+    marks.forEach((c, i) => {
+      const rad = i < 4 ? 34 : 26
+      const d = Math.hypot(px - c.x * r.width, py - c.y * r.height)
+      if (d < Math.min(best, rad)) { best = d; hit = i }
+    })
     if (hit >= 0) {
       const p = ptFrom(e)
       dragRef.current = { i: hit, dx: 0, dy: 0 }
       lastPtRef.current = { ...p, t: performance.now() }
-      setLoupe({ x: yours[hit].x, y: yours[hit].y })
+      setLoupe({ x: marks[hit].x, y: marks[hit].y })
       e.currentTarget.setPointerCapture(e.pointerId)
     }
   }
@@ -309,12 +331,31 @@ export default function LiveSim() {
     const speed = distPx / Math.max(1, now - last.t) // px per ms
     const gain = Math.min(1, 0.2 + speed * 0.5)
     lastPtRef.current = { ...p, t: now }
-    setYours((cs) => cs.map((c, i) => {
-      if (i !== d.i) return c
-      const np = { x: c.x + (p.x - last.x) * gain, y: c.y + (p.y - last.y) * gain }
-      setLoupe(np)
-      return np
-    }))
+    if (d.i < 4) {
+      // corners: hard handles, direct move
+      setYours((cs) => cs.map((c, i) => {
+        if (i !== d.i) return c
+        const np = { x: c.x + (p.x - last.x) * gain, y: c.y + (p.y - last.y) * gain }
+        setLoupe(np)
+        return np
+      }))
+    } else {
+      // Ts: flex handles — pin the dragged marker (weighted), re-solve the
+      // homography so the whole court follows minimally, corners re-derive
+      setYours((cs) => {
+        const Ht = homographyFromCorners(COURT_CORNERS, cs)
+        if (!Ht) return cs
+        const marks = ALL_MARKS.map((m) => applyHomography(Ht, m))
+        const target = { x: marks[d.i].x + (p.x - last.x) * gain, y: marks[d.i].y + (p.y - last.y) * gain }
+        const src = [...ALL_MARKS]
+        const dst = marks.map((m, i) => (i === d.i ? target : m))
+        for (let k = 0; k < 24; k++) { src.push(ALL_MARKS[d.i]); dst.push(target) } // weight the pinned marker
+        const H2 = homographyLeastSquares(src, dst)
+        if (!H2) return cs
+        setLoupe(target)
+        return COURT_CORNERS.map((m) => applyHomography(H2, m))
+      })
+    }
   }
   function onUp() { dragRef.current = null; lastPtRef.current = null; setLoupe(null) }
 
@@ -381,7 +422,7 @@ export default function LiveSim() {
             if (!Ht) return null
             return T_MARKS.map((m, i) => {
               const p = applyHomography(Ht, m)
-              return <div key={`t${i}`} className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-black/50 shadow pointer-events-none" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, background: '#facc15' }} />
+              return <div key={`t${i}`} className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-black/50 shadow pointer-events-none" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, background: '#facc15' }} />
             })
           })()}
           {imgUrl && claude && phase !== 'uploading' && phase !== 'reading' && (() => {
@@ -404,6 +445,13 @@ export default function LiveSim() {
       </div>
 
       <div className="px-3 pb-3 pt-1 flex items-center justify-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1">
+          {(['0.5', '0.7', '1'] as const).map((z) => (
+            <button key={z} type="button" onClick={() => setZoomSel(z)}
+              className="px-2.5 py-1.5 rounded-full text-[12px] font-bold border-2"
+              style={zoomSel === z ? { background: '#7c3aed', borderColor: '#7c3aed', color: '#fff' } : { borderColor: '#7c3aed', color: '#7c3aed' }}>{z}x</button>
+          ))}
+        </div>
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <button type="button" onClick={openCam} disabled={busy}
           className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 New shot</button>

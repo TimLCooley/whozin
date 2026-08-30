@@ -69,7 +69,14 @@ def process(i, meta):
 def main():
     print('park watcher up — polling lab-live every 5s', flush=True)
     seen_err = 0
-    seen_saves = {}
+    seen_path = f'{WT}/.dev-sim/watcher_seen.json'
+    try:
+        seen_saves = json.load(open(seen_path))
+    except Exception:
+        seen_saves = {}
+    def remember():
+        try: json.dump(seen_saves, open(seen_path, 'w'))
+        except Exception: pass
     while True:
         try:
             ids = list_ids()
@@ -78,9 +85,11 @@ def main():
                 meta = get_meta(i) or {}
                 if meta.get('labeled_at') and seen_saves.get(f'L{i}') != meta['labeled_at']:
                     seen_saves[f'L{i}'] = meta['labeled_at']
+                    remember()
                     print(f"LABELED {i}: {meta.get('label')}", flush=True)
                 if meta.get('pinned_at') and seen_saves.get(i) != meta['pinned_at']:
                     seen_saves[i] = meta['pinned_at']
+                    remember()
                     print(f"SAVED {i}: metric={meta.get('metric')}", flush=True)
                 if meta.get('status') == 'pending':
                     print(f'{i}: processing…', flush=True)

@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
     const { error } = await admin.storage.from(BUCKET).upload(`${id}.jpg`, buf, { contentType: 'image/jpeg' })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    await writeMeta(admin, id, { status: 'pending', created: Date.now(), user: user.id })
+    const zoom = ['0.5', '0.7', '1'].includes(String(body?.zoom)) ? String(body.zoom) : null
+    await writeMeta(admin, id, { status: 'pending', created: Date.now(), user: user.id, zoom })
     return NextResponse.json({ id })
   }
   if (action === 'retry') {
