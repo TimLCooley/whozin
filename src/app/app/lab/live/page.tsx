@@ -166,8 +166,15 @@ export default function LiveSim() {
       streamRef.current = stream
       setCamOn(true)
       setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}) } }, 50)
-    } catch {
-      fileRef.current?.click() // camera denied/unavailable -> picker fallback
+    } catch (err) {
+      const name = (err as DOMException)?.name ?? ''
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setStatus('Camera BLOCKED for this site — enable it: iOS Safari: aA menu → Website Settings → Camera → Allow. Chrome: ⋮ → Site settings → Camera.')
+        setPhase('manual')
+      } else {
+        setStatus(`No camera available (${name || err}) — using photo picker`)
+        fileRef.current?.click()
+      }
     }
   }
   function closeCam() {
