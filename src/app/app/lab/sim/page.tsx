@@ -12,7 +12,9 @@ import { homographyFromCorners, applyHomography } from '@/lib/homography'
 type Pt = { x: number; y: number } // normalized to the image (may be <0 or >1 — no restrictions)
 // 06/07 removed; 11/12 added round 3; 13–24 = Tim's real 1-camera photos (wet court).
 // 18/19/21 removed round 5: shot at 0.5x ultra-wide — the product requires 1x zoom.
-const IMAGES = ['01', '02', '03', '04', '05', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '20', '22', '23', '24'].map((n) => `/sim/court${n}.jpg`)
+// 25–27 added round 6: internet photos (Pexels, free license) — 25 aerial two-court,
+// 26 six-court complex with players, 27 partial view at net post (gate SHOULD punt).
+const IMAGES = ['01', '02', '03', '04', '05', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '20', '22', '23', '24', '25', '26', '27'].map((n) => `/sim/court${n}.jpg`)
 const DEFAULT_GUESS: Pt[] = [{ x: 0.30, y: 0.34 }, { x: 0.70, y: 0.34 }, { x: 0.90, y: 0.80 }, { x: 0.10, y: 0.80 }]
 const STORE = 'sim-game-v3' // v2 wiped for round 6 (live-auto flow); archives in .dev-sim/
 
