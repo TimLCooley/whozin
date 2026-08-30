@@ -14,8 +14,9 @@ type Pt = { x: number; y: number } // normalized to the image (may be <0 or >1 �
 // 18/19/21 removed round 5: shot at 0.5x ultra-wide — the product requires 1x zoom.
 // 25–27 added round 6: internet photos (Pexels, free license) — 25 aerial two-court,
 // 26 six-court complex with players, 27 partial view at net post (gate SHOULD punt).
-// 04 removed: heavy lens warp — out of scope under the locked-1x capture rule.
-const IMAGES = ['01', '02', '03', '05', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '20', '22', '23', '24', '25', '26', '27'].map((n) => `/sim/court${n}.jpg`)
+// 04/05/08 removed: WARPED — Tim's 12-marker warp test (corners align but the
+// derived Ts can't reach the painted kitchen ⇒ lens distortion, no homography fix).
+const IMAGES = ['01', '02', '03', '09', '10', '11', '12', '13', '14', '15', '16', '17', '20', '22', '23', '24', '25', '26', '27'].map((n) => `/sim/court${n}.jpg`)
 const DEFAULT_GUESS: Pt[] = [{ x: 0.30, y: 0.34 }, { x: 0.70, y: 0.34 }, { x: 0.90, y: 0.80 }, { x: 0.10, y: 0.80 }]
 const STORE = 'sim-game-v4' // v3 wiped: verdict buttons removed, pin-distance metric; archives in .dev-sim/
 
@@ -295,8 +296,12 @@ export default function SimGame() {
       if (Array.isArray(r?.corners) && r.corners.length === 4) {
         const pts: Pt[] = r.corners.map(([x, y]: [number, number]) => ({ x, y }))
         const read: Court = { c: pts, kx, ky }
-        setYours(pts)
-        persist({ ...store, [url]: { score: 0, errPx: 0, yours: pts, kx, ky, claude: read, cv: undefined } })
+        // Tim's editable copy: clamp pins into the reachable area around the image
+        // (a wild read can fling a pin off-screen where it can't be grabbed).
+        // The frozen read (claude) keeps the raw values.
+        const reachable = pts.map((p) => ({ x: Math.min(1.12, Math.max(-0.12, p.x)), y: Math.min(1.06, Math.max(-0.06, p.y)) }))
+        setYours(reachable)
+        persist({ ...store, [url]: { score: 0, errPx: 0, yours: reachable, kx, ky, claude: read, cv: undefined } })
       } else if (r?.error) {
         alert(untouched
           ? `Auto-calibration: ${r.error}\n\nDrag the corners roughly onto the court, then press Snap again to finish setup.`
