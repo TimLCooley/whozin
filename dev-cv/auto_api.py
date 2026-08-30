@@ -206,9 +206,11 @@ def main():
         return int(cv2.bitwise_and(wm0, cv2.dilate(region, np.ones((21, 21), np.uint8))).sum() // 255)
     cand_b = auto2.blue_mask(img)
     # blue is the proven default; the color-agnostic region takes over only on a
-    # decisive paint ratio (3x) — mild "more paint" can mean two courts merged
+    # decisive paint ratio (3x) — and NEVER against a solid blue court: indoor
+    # gray floors are bright+low-S, so raw "paint" counts lie there (park bug)
     pb = paint_in(cand_b)
-    cand_c = court_region(img)
+    blue_solid = cand_b is not None and (cand_b > 0).mean() >= 0.08 and pb >= 3000
+    cand_c = None if blue_solid else court_region(img)
     blue = cand_c if cand_c is not None and paint_in(cand_c) > 3.0 * max(pb, 1) else cand_b
     if blue is None:
         print(json.dumps({'error': 'no court region found'})); return
@@ -269,9 +271,27 @@ def main():
             except Exception:
                 pass
     segs = vps.segments(img, blue)
+
+    def court_cy(q):
+        """Mean normalized y of the candidate's in-frame markers. The court is
+        ON THE GROUND (Tim's gravity prior): a court living in the top of the
+        frame is ceiling lights / fence tops / nonsense, never a court."""
+        import junctions as _jx
+        Hq, _ = cv2.findHomography(verify.CC, np.array(q, float) * [w, h])
+        if Hq is None: return None
+        ys = []
+        for mx, my, _t in _jx.MODEL_JUNCTIONS:
+            P = Hq @ [mx, my, 1.0]
+            if abs(P[2]) < 1e-9: continue
+            px, py = P[0] / P[2], P[1] / P[2]
+            if 0 <= px < w and 0 <= py < h: ys.append(py / h)
+        return float(np.mean(ys)) if ys else None
+
     best = None
     for q in pool:
         if not sane(q): continue
+        cy = court_cy(q)
+        if cy is None or cy < 0.30: continue  # court in top third of frame = not a court
         rsc, _ = verify.score(img, q.tolist())
         cov = auto4.coverage(img.shape, q * [w, h], court_px)
         iou = iou_blue(q.tolist(), blue, w, h)
@@ -279,7 +299,8 @@ def main():
         sa = seg_agree(q.tolist(), segs, w, h)
         # coverage dominates (most truth-correlated signal); tile-seam agreement
         # is the second-strongest (truth ~2x decoys); line-agreement weak tiebreak
-        key = rsc + 10.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 3.0 * sa - 0.2 * la
+        key = rsc + 10.0 * (1.0 - cov) + 4.0 * (1.0 - min(iou / 0.65, 1.0)) - 3.0 * sa - 0.2 * la \
+              + 12.0 * max(0.0, 0.50 - cy)  # gravity prior: penalize high-in-frame courts
         if best is None or key < best[0]: best = (key, q)
     if best is None:
         print(json.dumps({'error': 'no calibration found — needs manual corners'})); return

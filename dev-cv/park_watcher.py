@@ -60,12 +60,16 @@ def process(i, meta):
 def main():
     print('park watcher up — polling lab-live every 5s', flush=True)
     seen_err = 0
+    seen_saves = {}
     while True:
         try:
             ids = list_ids()
             print(f'tick: {len(ids)} metas', flush=True)
             for i in ids:
                 meta = get_meta(i) or {}
+                if meta.get('pinned_at') and seen_saves.get(i) != meta['pinned_at']:
+                    seen_saves[i] = meta['pinned_at']
+                    print(f"SAVED {i}: metric={meta.get('metric')}", flush=True)
                 if meta.get('status') == 'pending':
                     print(f'{i}: processing…', flush=True)
                     process(i, meta)
