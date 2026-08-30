@@ -267,7 +267,7 @@ export default function LabPage() {
               icon={<><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" fill="#ef4444" stroke="none" /></>} />
             <ModeCard onClick={() => uploadRef.current?.click()} accent="blue" title="Upload" desc="Analyze a clip you already have."
               icon={<><path d="M12 15V3M8 7l4-4 4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></>} />
-            <ModeCard accent="muted" title="Live" badge="Soon" desc="Real-time calls with an on-court overlay." disabled
+            <ModeCard onClick={() => router.push('/app/lab/live')} accent="muted" title="Live Sim" badge="Beta" desc="Courtside calibration — shoot, pin, compare vs Claude."
               icon={<><circle cx="12" cy="12" r="3" /><path d="M16.2 7.8a6 6 0 010 8.4M7.8 16.2a6 6 0 010-8.4M19 5a10 10 0 010 14M5 19A10 10 0 015 5" /></>} />
 
             <div className="bg-background border border-border/50 rounded-2xl p-4 space-y-1.5 mt-2">
