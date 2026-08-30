@@ -63,6 +63,7 @@ export default function LiveSim() {
   const [status, setStatus] = useState('Take a shot to start')
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'reading' | 'ready' | 'manual' | 'saved'>('idle')
   const [label, setLabel] = useState<'good' | 'unusable' | null>(null)
+  const [recRetake, setRecRetake] = useState(false)
   const [pollNonce, setPollNonce] = useState(0)
   const [busy, setBusy] = useState(false)
   const [natural, setNatural] = useState({ w: 1280, h: 720 })
@@ -110,8 +111,12 @@ export default function LiveSim() {
           // the read IS the starting point: green pins adopt it (clamped into
           // reach), then Tim moves them — auto-proposes, human corrects
           setYours(read.map((pt: Pt) => ({ x: Math.min(1.12, Math.max(-0.12, pt.x)), y: Math.min(1.06, Math.max(-0.06, pt.y)) })))
+          const off = read.some((pt: Pt) => pt.x < -0.05 || pt.x > 1.05 || pt.y < -0.05 || pt.y > 1.05)
+          setRecRetake(off)
           setPhase('ready')
-          setStatus('Read arrived — green pins set to my read; fix & Save')
+          setStatus(off
+            ? '⚠ My corners run OFF-SCREEN — I recommend 🚫 Retake (confirm, or fix pins to overrule me)'
+            : 'Read arrived — green pins set to my read; fix & Save')
           return // stop polling
         }
         if (r?.meta?.status === 'error') {
@@ -138,7 +143,7 @@ export default function LiveSim() {
       }).then((x) => x.json())
       if (r?.id) {
         setIds((s) => [r.id, ...s])
-        setCur(r.id); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS); setLabel(null)
+        setCur(r.id); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS); setLabel(null); setRecRetake(false)
         setPhase('reading'); setStatus('Mac is reading the court…')
       } else { setPhase('manual'); setStatus(`Upload failed: ${r?.error ?? '?'}`) }
     } catch (err) { setPhase('manual'); setStatus(`Upload failed: ${err}`) } finally { setBusy(false) }
@@ -252,7 +257,7 @@ export default function LiveSim() {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'retry', id: cur, seed: moved ? yours.map((pt) => [pt.x, pt.y]) : null }),
       })
-      setClaude(null); setPhase('reading')
+      setClaude(null); setPhase('reading'); setRecRetake(false)
       setStatus(moved ? 'Snapping from YOUR pins…' : 'Mac is re-reading the court…')
       setPollNonce((n) => n + 1)
     } finally { setBusy(false) }
@@ -327,18 +332,24 @@ export default function LiveSim() {
           ) : (
             <div className="text-muted text-[14px] px-8 text-center">📷 Tap <span className="font-bold">New shot</span>, photograph the court from your mount, and calibrate it live.</div>
           )}
-          {imgUrl && (
+          {imgUrl && (phase === 'uploading' || phase === 'reading') && (
+            <div className="absolute inset-0 rounded-lg bg-black/45 flex flex-col items-center justify-center z-20 pointer-events-none">
+              <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+              <p className="text-white text-[14px] font-bold mt-3">Claude is reading the court…</p>
+            </div>
+          )}
+          {imgUrl && phase !== 'uploading' && phase !== 'reading' && (
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
               <path d={courtPath(yours, 1)} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
               <path d={courtPath(yours, 1)} fill="none" stroke="#39FF14" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
               {claude && <path d={courtPath(claude, 1)} fill="none" stroke="#22d3ee" strokeWidth="2.3" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeDasharray="4 3" />}
             </svg>
           )}
-          {imgUrl && yours.map((c, i) => (
+          {imgUrl && phase !== 'uploading' && phase !== 'reading' && yours.map((c, i) => (
             <div key={i} className="absolute w-8 h-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary border-2 border-white shadow text-white text-[11px] font-bold flex items-center justify-center pointer-events-none"
               style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}>{i + 1}</div>
           ))}
-          {imgUrl && (() => {
+          {imgUrl && phase !== 'uploading' && phase !== 'reading' && (() => {
             const Ht = homographyFromCorners(COURT_CORNERS, yours)
             if (!Ht) return null
             return T_MARKS.map((m, i) => {
@@ -346,7 +357,7 @@ export default function LiveSim() {
               return <div key={`t${i}`} className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-black/50 shadow pointer-events-none" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, background: '#facc15' }} />
             })
           })()}
-          {imgUrl && claude && (() => {
+          {imgUrl && claude && phase !== 'uploading' && phase !== 'reading' && (() => {
             const Hm = homographyFromCorners(COURT_CORNERS, claude)
             if (!Hm) return null
             return ALL_MARKS.map((m, i) => {
@@ -373,7 +384,7 @@ export default function LiveSim() {
           className="px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 disabled:opacity-40"
           style={label === 'good' ? { background: '#00C853', borderColor: '#00C853', color: '#fff' } : { borderColor: '#00C853', color: '#00C853' }}>👍 Usable</button>
         <button type="button" onClick={() => setQuality('unusable')} disabled={!cur}
-          className="px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 disabled:opacity-40"
+          className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 disabled:opacity-40${recRetake && !label ? ' animate-pulse ring-2 ring-red-400' : ''}`}
           style={label === 'unusable' ? { background: '#ef4444', borderColor: '#ef4444', color: '#fff' } : { borderColor: '#ef4444', color: '#ef4444' }}>🚫 Retake</button>
         <button type="button" onClick={clearPins} disabled={!cur}
           className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↺ Clear</button>
