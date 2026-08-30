@@ -24,7 +24,21 @@ def main():
     lm = auto2.line_mask(img, blue)
     ref = auto2.polish(img, corners * [w, h], lm, bnd=0.05)
     rsc, _ = verify.score(img, np.asarray(ref).tolist())
-    print(json.dumps({'corners': np.round(np.asarray(ref), 5).tolist(), 'referee': round(rsc, 2)}))
+    out = {'corners': np.round(np.asarray(ref), 5).tolist(), 'referee': round(rsc, 2)}
+    # joint lens-distortion fit (division model) — Tim's kitchen warp test made
+    # quantitative: ultra-wide (0.5x/0.7x) captures become fittable; k~0 on 1x
+    try:
+        import refine_dist as rd
+        h2, w2 = img.shape[:2]
+        q1, k, rms = rd.refine_dist(lm, (np.asarray(ref) * [w2, h2]).astype(float))
+        out['k'] = round(float(k), 4)
+        out['fit_rms'] = round(rms, 2)
+        if abs(k) > 0.015 and rms < 3.5:
+            out['corners'] = np.round(q1 / [w2, h2], 5).tolist()
+            out['distortion_corrected'] = True
+    except Exception as e:
+        out['k_error'] = str(e)[:60]
+    print(json.dumps(out))
 
 if __name__ == '__main__':
     try:

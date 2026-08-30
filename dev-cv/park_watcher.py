@@ -58,7 +58,9 @@ def process(i, meta):
         r = {'error': p.stdout[-120:]}
     if 'corners' in r:
         meta.update(claude_pins=r['corners'], status='done', read_at=time.time())
-        print(f'{i}: read written', flush=True)
+        if 'k' in r: meta.update(claude_k=r['k'], claude_fit=r.get('fit_rms'))
+        kmsg = f" k={r['k']}" if r.get('distortion_corrected') else ''
+        print(f'{i}: read written{kmsg}', flush=True)
     else:
         meta.update(status='error', claude_error=r.get('error', '?'), read_at=time.time())
         print(f'{i}: reader error: {r.get("error","?")[:60]}', flush=True)
