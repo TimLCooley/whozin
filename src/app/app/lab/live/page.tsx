@@ -60,6 +60,8 @@ export default function LiveSim() {
   const [yours, setYours] = useState<Pt[]>(DEFAULT_GUESS)
   const [claude, setClaude] = useState<Pt[] | null>(null)
   const [status, setStatus] = useState('Take a shot to start')
+  const [phase, setPhase] = useState<'idle' | 'uploading' | 'reading' | 'ready' | 'manual' | 'saved'>('idle')
+  const [pollNonce, setPollNonce] = useState(0)
   const [busy, setBusy] = useState(false)
   const [natural, setNatural] = useState({ w: 1280, h: 720 })
   const [loupe, setLoupe] = useState<Pt | null>(null)
@@ -102,23 +104,30 @@ export default function LiveSim() {
         const cp = r?.meta?.claude_pins
         if (Array.isArray(cp) && cp.length === 4) {
           setClaude(cp.map((p: number[]) => ({ x: p[0], y: p[1] })))
-          setStatus('Claude read received — fix the green pins, then Save')
+          setPhase('ready')
+          setStatus('Read arrived — fix green pins, then Save')
           return // stop polling
         }
-        setStatus(r?.meta?.status === 'error' ? 'Reader errored — pin it manually' : 'Waiting for Claude read…')
+        if (r?.meta?.status === 'error') {
+          setPhase('manual')
+          setStatus('No auto read — place pins manually (or Re-read)')
+          return // stop polling; Re-read restarts it
+        }
+        setPhase('reading')
+        setStatus('Mac is reading the court…')
       } catch { /* retry */ }
       if (!stop) setTimeout(tick, 3000)
     }
     tick()
     return () => { stop = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cur])
+  }, [cur, pollNonce])
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f || busy) return
-    setBusy(true); setStatus('Uploading…')
+    setBusy(true); setPhase('uploading'); setStatus('Uploading…')
     try {
       const bmp = await createImageBitmap(f)
       const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
@@ -132,8 +141,8 @@ export default function LiveSim() {
       if (r?.id) {
         setIds((s) => [r.id, ...s])
         setCur(r.id); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS)
-        setStatus('Waiting for Claude read…')
-      } else setStatus(`Upload failed: ${r?.error ?? '?'}`)
+        setPhase('reading'); setStatus('Mac is reading the court…')
+      } else { setPhase('manual'); setStatus(`Upload failed: ${r?.error ?? '?'}`) }
     } catch (err) { setStatus(`Capture failed: ${err}`) } finally { setBusy(false) }
   }
 
@@ -146,8 +155,20 @@ export default function LiveSim() {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'pins', id: cur, pins: yours.map((p) => [p.x, p.y]), metric }),
       })
-      setStatus(metric ? `Saved · markers avg ${metric.avg}px worst ${metric.max}px` : 'Saved')
+      setPhase('saved')
+      setStatus(metric ? `Saved ✓ · markers avg ${metric.avg}px · worst ${metric.max}px` : 'Saved ✓')
     } catch { setStatus('Save failed') } finally { setBusy(false) }
+  }
+
+  function clearPins() { setYours(DEFAULT_GUESS); if (phase === 'saved') setPhase(claude ? 'ready' : 'manual') }
+  async function reread() {
+    if (!cur || busy) return
+    setBusy(true)
+    try {
+      await fetch('/api/lab/live', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'retry', id: cur }) })
+      setClaude(null); setPhase('reading'); setStatus('Mac is re-reading the court…')
+      setPollNonce((n) => n + 1)
+    } finally { setBusy(false) }
   }
 
   function ptFrom(e: React.PointerEvent) {
@@ -197,7 +218,9 @@ export default function LiveSim() {
       <AppHeader showBack />
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 flex-wrap">
         <span className="text-[10px] font-bold uppercase tracking-wide text-violet-700 bg-violet-100 px-2 py-0.5 rounded-full whitespace-nowrap">Live Sim · courtside</span>
-        <span className="text-[12px] text-muted truncate">{status}</span>
+        <span className="px-3 py-1 rounded-full text-[12px] font-bold text-white truncate"
+          style={{ background: phase === 'reading' || phase === 'uploading' ? '#f59e0b' : phase === 'ready' ? '#0891b2' : phase === 'manual' ? '#ef4444' : phase === 'saved' ? '#00C853' : '#64748b' }}>
+          {(phase === 'reading' || phase === 'uploading') ? '⏳ ' : ''}{status}</span>
         {metric && (
           <span className="px-3 py-1 rounded-full text-white text-[12px] font-bold whitespace-nowrap"
             style={{ background: metric.avg <= 5 ? '#00C853' : metric.avg <= 15 ? '#f59e0b' : '#ef4444' }}>
@@ -212,7 +235,7 @@ export default function LiveSim() {
           {imgUrl ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={imgUrl} alt="court" className="block rounded-lg pointer-events-none"
-              style={{ maxWidth: Math.max(240, Math.round(avail.w * 0.86)), maxHeight: Math.max(200, Math.round(avail.h * 0.94)) }}
+              style={{ maxWidth: Math.max(240, Math.round(avail.w * 0.76)), maxHeight: Math.max(180, Math.round(avail.h * 0.86)) }}
               onLoad={(e) => { const im = e.currentTarget; setNatural({ w: im.naturalWidth, h: im.naturalHeight }) }} />
           ) : (
             <div className="text-muted text-[14px] px-8 text-center">📷 Tap <span className="font-bold">New shot</span>, photograph the court from your mount, and calibrate it live.</div>
@@ -244,20 +267,25 @@ export default function LiveSim() {
               return <div key={`m${i}`} className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#22d3ee] pointer-events-none" style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }} />
             })
           })()}
-          {loupe && imgUrl && (
-            <div className="absolute w-32 h-32 rounded-full border-[3px] border-white shadow-xl pointer-events-none overflow-hidden z-10"
-              style={{ left: `calc(${loupe.x * 100}% - 64px)`, top: `calc(${loupe.y * 100}% - 160px)`, backgroundImage: `url(${imgUrl})`, backgroundRepeat: 'no-repeat', backgroundColor: '#000', backgroundSize: `${natural.w * 4}px ${natural.h * 4}px`, backgroundPosition: `${-loupe.x * natural.w * 4 + 64}px ${-loupe.y * natural.h * 4 + 64}px` }}>
-              <div className="absolute left-1/2 top-0 w-px h-full bg-red-500/80" />
-              <div className="absolute top-1/2 left-0 h-px w-full bg-red-500/80" />
-            </div>
-          )}
         </div>
+        {loupe && imgUrl && (
+          <div className="fixed right-2 rounded-2xl border-[3px] border-white shadow-xl pointer-events-none overflow-hidden z-50"
+            style={{ top: 56, width: 150, height: 150, backgroundImage: `url(${imgUrl})`, backgroundRepeat: 'no-repeat', backgroundColor: '#000', backgroundSize: `${natural.w * 4}px ${natural.h * 4}px`, backgroundPosition: `${-loupe.x * natural.w * 4 + 75}px ${-loupe.y * natural.h * 4 + 75}px` }}>
+            <div className="absolute left-1/2 top-0 w-px h-full bg-red-500/80" />
+            <div className="absolute top-1/2 left-0 h-px w-full bg-red-500/80" />
+          </div>
+        )}
+        <div style={{ display: 'none' }} />
       </div>
 
       <div className="px-3 pb-3 pt-1 flex items-center justify-center gap-2 flex-wrap">
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
           className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 New shot</button>
+        <button type="button" onClick={clearPins} disabled={!cur}
+          className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↺ Clear</button>
+        <button type="button" onClick={reread} disabled={busy || !cur}
+          className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
         <button type="button" onClick={save} disabled={busy || !cur}
           className="px-4 py-2.5 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">💾 Save</button>
         <button type="button" disabled={idxIn < 0 || idxIn >= ids.length - 1}
