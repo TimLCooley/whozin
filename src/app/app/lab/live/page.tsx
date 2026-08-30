@@ -236,8 +236,13 @@ export default function LiveSim() {
     if (!cur || busy) return
     setBusy(true)
     try {
-      await fetch('/api/lab/live', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'retry', id: cur }) })
-      setClaude(null); setPhase('reading'); setStatus('Mac is re-reading the court…')
+      const moved = JSON.stringify(yours) !== JSON.stringify(DEFAULT_GUESS)
+      await fetch('/api/lab/live', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'retry', id: cur, seed: moved ? yours.map((pt) => [pt.x, pt.y]) : null }),
+      })
+      setClaude(null); setPhase('reading')
+      setStatus(moved ? 'Snapping from YOUR pins…' : 'Mac is re-reading the court…')
       setPollNonce((n) => n + 1)
     } finally { setBusy(false) }
   }

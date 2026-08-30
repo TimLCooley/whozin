@@ -58,7 +58,8 @@ export async function POST(req: NextRequest) {
     // re-queue the capture for the Mac's reader (keeps any saved pins)
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
     const meta = (await readMeta(admin, id)) ?? {}
-    await writeMeta(admin, id, { ...meta, status: 'pending', claude_pins: null, retried_at: Date.now() })
+    const seed = Array.isArray(body?.seed) && body.seed.length === 4 ? body.seed : null
+    await writeMeta(admin, id, { ...meta, status: 'pending', claude_pins: null, seed_pins: seed, retried_at: Date.now() })
     return NextResponse.json({ ok: true })
   }
   if (action === 'pins') {

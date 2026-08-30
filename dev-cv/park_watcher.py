@@ -42,8 +42,15 @@ def process(i, meta):
     img = req('GET', f'/storage/v1/object/lab-live/{i}.jpg', raw=True)
     os.makedirs(f'{WT}/public/sim/live', exist_ok=True)
     open(f'{WT}/public/sim/live/park{i}.jpg', 'wb').write(img)
-    p = subprocess.run(['python3', f'{WT}/dev-cv/auto_api.py'],
-                       input=json.dumps({'court': f'live-park{i}'}), capture_output=True, text=True,
+    seed = meta.get('seed_pins')
+    if seed:
+        # Tim's hint pins: snap-polish from them (tap+snap) instead of full-auto
+        script, payload = 'snap_api.py', {'court': f'live-park{i}', 'corners': seed}
+        print(f'{i}: snapping from seed pins', flush=True)
+    else:
+        script, payload = 'auto_api.py', {'court': f'live-park{i}'}
+    p = subprocess.run(['python3', f'{WT}/dev-cv/{script}'],
+                       input=json.dumps(payload), capture_output=True, text=True,
                        cwd=f'{WT}/dev-cv', timeout=180)
     try:
         r = json.loads(p.stdout.strip().splitlines()[-1])
