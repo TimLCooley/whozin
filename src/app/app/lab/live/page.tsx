@@ -62,6 +62,7 @@ export default function LiveSim() {
   const [claude, setClaude] = useState<Pt[] | null>(null)
   const [status, setStatus] = useState('Take a shot to start')
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'reading' | 'ready' | 'manual' | 'saved'>('idle')
+  const [label, setLabel] = useState<'good' | 'unusable' | null>(null)
   const [pollNonce, setPollNonce] = useState(0)
   const [busy, setBusy] = useState(false)
   const [natural, setNatural] = useState({ w: 1280, h: 720 })
@@ -133,7 +134,7 @@ export default function LiveSim() {
       }).then((x) => x.json())
       if (r?.id) {
         setIds((s) => [r.id, ...s])
-        setCur(r.id); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS)
+        setCur(r.id); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS); setLabel(null)
         setPhase('reading'); setStatus('Mac is reading the court…')
       } else { setPhase('manual'); setStatus(`Upload failed: ${r?.error ?? '?'}`) }
     } catch (err) { setPhase('manual'); setStatus(`Upload failed: ${err}`) } finally { setBusy(false) }
@@ -231,6 +232,12 @@ export default function LiveSim() {
     } catch { setStatus('Save failed') } finally { setBusy(false) }
   }
 
+  async function setQuality(l: 'good' | 'unusable') {
+    if (!cur) return
+    setLabel(l)
+    await fetch('/api/lab/live', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'label', id: cur, label: l }) }).catch(() => {})
+    if (l === 'unusable') setStatus('Marked UNUSABLE — production would ask for a new photo. Next shot!')
+  }
   function clearPins() { setYours(DEFAULT_GUESS); if (phase === 'saved') setPhase(claude ? 'ready' : 'manual') }
   async function reread() {
     if (!cur || busy) return
@@ -358,6 +365,12 @@ export default function LiveSim() {
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <button type="button" onClick={openCam} disabled={busy}
           className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 New shot</button>
+        <button type="button" onClick={() => setQuality('good')} disabled={!cur}
+          className="px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 disabled:opacity-40"
+          style={label === 'good' ? { background: '#00C853', borderColor: '#00C853', color: '#fff' } : { borderColor: '#00C853', color: '#00C853' }}>👍 Usable</button>
+        <button type="button" onClick={() => setQuality('unusable')} disabled={!cur}
+          className="px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 disabled:opacity-40"
+          style={label === 'unusable' ? { background: '#ef4444', borderColor: '#ef4444', color: '#fff' } : { borderColor: '#ef4444', color: '#ef4444' }}>🚫 Retake</button>
         <button type="button" onClick={clearPins} disabled={!cur}
           className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↺ Clear</button>
         <button type="button" onClick={reread} disabled={busy || !cur}

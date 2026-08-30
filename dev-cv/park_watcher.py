@@ -74,6 +74,9 @@ def main():
             print(f'tick: {len(ids)} metas', flush=True)
             for i in ids:
                 meta = get_meta(i) or {}
+                if meta.get('labeled_at') and seen_saves.get(f'L{i}') != meta['labeled_at']:
+                    seen_saves[f'L{i}'] = meta['labeled_at']
+                    print(f"LABELED {i}: {meta.get('label')}", flush=True)
                 if meta.get('pinned_at') and seen_saves.get(i) != meta['pinned_at']:
                     seen_saves[i] = meta['pinned_at']
                     print(f"SAVED {i}: metric={meta.get('metric')}", flush=True)

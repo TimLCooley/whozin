@@ -62,6 +62,15 @@ export async function POST(req: NextRequest) {
     await writeMeta(admin, id, { ...meta, status: 'pending', claude_pins: null, seed_pins: seed, retried_at: Date.now() })
     return NextResponse.json({ ok: true })
   }
+  if (action === 'label') {
+    // data-quality verdict: 'good' (usable view) or 'unusable' (production
+    // would ask for a retake) — unusable captures train the reject gate
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const label = body?.label === 'unusable' ? 'unusable' : 'good'
+    const meta = (await readMeta(admin, id)) ?? {}
+    await writeMeta(admin, id, { ...meta, label, labeled_at: Date.now() })
+    return NextResponse.json({ ok: true })
+  }
   if (action === 'pins') {
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
     const meta = (await readMeta(admin, id)) ?? {}
