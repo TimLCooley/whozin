@@ -217,11 +217,20 @@ export default function SimGame() {
         const filtered: Record<string, Res> = {}
         for (const k of Object.keys(data)) if (IMAGES.includes(k)) filtered[k] = data[k]
         setStore(filtered)
-        // re-judge every stored round with the current algorithm, then flush to disk
+        // re-judge every stored round with the current algorithm, then flush to disk.
+        // Merge FUNCTIONALLY and skip courts the user touched meanwhile — this
+        // resolves seconds after load and must never clobber fresh play.
         rejudgeAll(filtered).then((next) => {
-          setStore(next)
-          try { localStorage.setItem(STORE, JSON.stringify(next)) } catch { /* ignore */ }
-          fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) }).catch(() => {})
+          setStore((cur) => {
+            const merged: Record<string, Res> = { ...cur }
+            for (const k of Object.keys(next)) {
+              if (cur[k] !== filtered[k]) continue // replayed since load — keep theirs
+              merged[k] = next[k]
+            }
+            try { localStorage.setItem(STORE, JSON.stringify(merged)) } catch { /* ignore */ }
+            fetch('/api/dev/sim-data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(merged) }).catch(() => {})
+            return merged
+          })
         })
       }
     } catch { /* ignore */ }
@@ -245,11 +254,18 @@ export default function SimGame() {
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
   }
   function onDown(e: React.PointerEvent) {
+    dragRef.current = null // never inherit a previous drag
     const r = boxRef.current!.getBoundingClientRect()
     const px = e.clientX - r.left, py = e.clientY - r.top
-    let hit = -1, best = 34
+    let hit = -1, best = 30
     yours.forEach((c, i) => { const d = Math.hypot(px - c.x * r.width, py - c.y * r.height); if (d < best) { best = d; hit = i } })
-    if (hit >= 0) { dragRef.current = hit; setLoupe(ptFrom(e)); (e.target as Element).setPointerCapture(e.pointerId) }
+    if (hit >= 0) {
+      dragRef.current = hit
+      setLoupe(ptFrom(e))
+      // capture on the CONTAINER (currentTarget) — capturing on e.target grabbed
+      // the pin's own div, which made the previously-dragged pin own later drags
+      e.currentTarget.setPointerCapture(e.pointerId)
+    }
   }
   function onMove(e: React.PointerEvent) {
     if (dragRef.current == null) return
@@ -423,7 +439,7 @@ export default function SimGame() {
               )}
             </svg>
             {yours.map((c, i) => (
-              <div key={i} className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary border-2 border-white shadow text-white text-[10px] font-bold flex items-center justify-center"
+              <div key={i} className="absolute w-7 h-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary border-2 border-white shadow text-white text-[10px] font-bold flex items-center justify-center pointer-events-none"
                 style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}>{i + 1}</div>
             ))}
             {loupe && (
