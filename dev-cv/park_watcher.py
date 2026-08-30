@@ -13,9 +13,10 @@ BASE = env['NEXT_PUBLIC_SUPABASE_URL'].strip()
 KEY = env['SUPABASE_SERVICE_ROLE_KEY'].strip()
 HDRS = {'Authorization': f'Bearer {KEY}', 'apikey': KEY}
 
-def req(method, path, body=None, headers=None, raw=False):
+def req(method, path, body=None, headers=None, raw=False, headers_extra=None):
     h = dict(HDRS)
     if headers: h.update(headers)
+    if headers_extra: h.update(headers_extra)
     data = body if isinstance(body, bytes) else (json.dumps(body).encode() if body is not None else None)
     if data is not None and not isinstance(body, bytes): h['Content-Type'] = 'application/json'
     r = urllib.request.Request(f'{BASE}{path}', data=data, headers=h, method=method)
@@ -28,12 +29,14 @@ def list_ids():
     return [r['name'][:-len('.json')] for r in rows if r['name'].endswith('.json')]
 
 def get_meta(i):
-    try: return json.loads(req('GET', f'/storage/v1/object/lab-live/{i}.json', raw=True))
+    # cache-bust: the storage CDN happily serves a stale 'pending' otherwise
+    try: return json.loads(req('GET', f'/storage/v1/object/lab-live/{i}.json?cb={int(time.time()*1000)}',
+                               headers_extra={'Cache-Control': 'no-cache'}, raw=True))
     except Exception: return None
 
 def put_meta(i, meta):
     req('PUT', f'/storage/v1/object/lab-live/{i}.json', json.dumps(meta).encode(),
-        headers={'Content-Type': 'application/json', 'x-upsert': 'true'})
+        headers={'Content-Type': 'application/json', 'x-upsert': 'true', 'cache-control': 'no-store'})
 
 def process(i, meta):
     img = req('GET', f'/storage/v1/object/lab-live/{i}.jpg', raw=True)

@@ -16,15 +16,23 @@ async function authed() {
   return user
 }
 
-async function readMeta(admin: ReturnType<typeof getAdminClient>, id: string) {
-  const { data } = await admin.storage.from(BUCKET).download(`${id}.json`)
-  if (!data) return null
-  try { return JSON.parse(await data.text()) } catch { return null }
+async function readMeta(_admin: ReturnType<typeof getAdminClient>, id: string) {
+  // direct fetch with cache-buster — the storage CDN serves stale JSON otherwise
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!.trim()
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
+  try {
+    const res = await fetch(`${base}/storage/v1/object/${BUCKET}/${id}.json?cb=${Date.now()}`, {
+      headers: { Authorization: `Bearer ${key}`, apikey: key, 'Cache-Control': 'no-cache' },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch { return null }
 }
 
 async function writeMeta(admin: ReturnType<typeof getAdminClient>, id: string, meta: object) {
   await admin.storage.from(BUCKET).upload(`${id}.json`, JSON.stringify(meta), {
-    contentType: 'application/json', upsert: true,
+    contentType: 'application/json', upsert: true, cacheControl: '0',
   })
 }
 
