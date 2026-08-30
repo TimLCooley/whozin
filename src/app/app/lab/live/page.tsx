@@ -105,9 +105,13 @@ export default function LiveSim() {
         if (r?.url && !imgUrl) setImgUrl(r.url)
         const cp = r?.meta?.claude_pins
         if (Array.isArray(cp) && cp.length === 4) {
-          setClaude(cp.map((p: number[]) => ({ x: p[0], y: p[1] })))
+          const read = cp.map((p: number[]) => ({ x: p[0], y: p[1] }))
+          setClaude(read)
+          // the read IS the starting point: green pins adopt it (clamped into
+          // reach), then Tim moves them — auto-proposes, human corrects
+          setYours(read.map((pt: Pt) => ({ x: Math.min(1.12, Math.max(-0.12, pt.x)), y: Math.min(1.06, Math.max(-0.06, pt.y)) })))
           setPhase('ready')
-          setStatus('Read arrived — fix green pins, then Save')
+          setStatus('Read arrived — green pins set to my read; fix & Save')
           return // stop polling
         }
         if (r?.meta?.status === 'error') {
