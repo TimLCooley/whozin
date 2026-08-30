@@ -267,6 +267,7 @@ export default function LiveSim() {
     const r = boxRef.current!.getBoundingClientRect()
     return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }
   }
+  const lastPtRef = useRef<{ x: number; y: number; t: number } | null>(null)
   function onDown(e: React.PointerEvent) {
     dragRef.current = null
     if (!imgUrl) return
@@ -276,20 +277,33 @@ export default function LiveSim() {
     yours.forEach((c, i) => { const d = Math.hypot(px - c.x * r.width, py - c.y * r.height); if (d < best) { best = d; hit = i } })
     if (hit >= 0) {
       const p = ptFrom(e)
-      dragRef.current = { i: hit, dx: yours[hit].x - p.x, dy: yours[hit].y - p.y }
+      dragRef.current = { i: hit, dx: 0, dy: 0 }
+      lastPtRef.current = { ...p, t: performance.now() }
       setLoupe({ x: yours[hit].x, y: yours[hit].y })
       e.currentTarget.setPointerCapture(e.pointerId)
     }
   }
   function onMove(e: React.PointerEvent) {
     const d = dragRef.current
-    if (d == null) return
+    const last = lastPtRef.current
+    if (d == null || last == null) return
     const p = ptFrom(e)
-    const np = { x: p.x + d.dx, y: p.y + d.dy }
-    setYours((cs) => cs.map((c, i) => (i === d.i ? np : c)))
-    setLoupe(np)
+    const r = boxRef.current!.getBoundingClientRect()
+    const now = performance.now()
+    // adaptive precision (Tim's ask): slow finger -> ~20% speed for pixel-level
+    // placement; fast finger -> full speed for coarse moves. Speed IS the mode.
+    const distPx = Math.hypot((p.x - last.x) * r.width, (p.y - last.y) * r.height)
+    const speed = distPx / Math.max(1, now - last.t) // px per ms
+    const gain = Math.min(1, 0.2 + speed * 0.5)
+    lastPtRef.current = { ...p, t: now }
+    setYours((cs) => cs.map((c, i) => {
+      if (i !== d.i) return c
+      const np = { x: c.x + (p.x - last.x) * gain, y: c.y + (p.y - last.y) * gain }
+      setLoupe(np)
+      return np
+    }))
   }
-  function onUp() { dragRef.current = null; setLoupe(null) }
+  function onUp() { dragRef.current = null; lastPtRef.current = null; setLoupe(null) }
 
   if (!mounted) return null
   if (!allowed) {
