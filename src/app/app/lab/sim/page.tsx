@@ -184,7 +184,9 @@ export default function SimGame() {
     ro.observe(areaEl)
     return () => ro.disconnect()
   }, [areaEl])
-  const dragRef = useRef<number | null>(null)
+  // drag = pin index + grab offset (pin center minus pointer at grab time), so
+  // pins move by DELTA — pressing near a pin never teleports it to the cursor
+  const dragRef = useRef<{ i: number; dx: number; dy: number } | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -260,16 +262,21 @@ export default function SimGame() {
     let hit = -1, best = 30
     yours.forEach((c, i) => { const d = Math.hypot(px - c.x * r.width, py - c.y * r.height); if (d < best) { best = d; hit = i } })
     if (hit >= 0) {
-      dragRef.current = hit
-      setLoupe(ptFrom(e))
+      const p = ptFrom(e)
+      dragRef.current = { i: hit, dx: yours[hit].x - p.x, dy: yours[hit].y - p.y }
+      setLoupe({ x: yours[hit].x, y: yours[hit].y })
       // capture on the CONTAINER (currentTarget) — capturing on e.target grabbed
       // the pin's own div, which made the previously-dragged pin own later drags
       e.currentTarget.setPointerCapture(e.pointerId)
     }
   }
   function onMove(e: React.PointerEvent) {
-    if (dragRef.current == null) return
-    const p = ptFrom(e); setYours((cs) => cs.map((c, i) => (i === dragRef.current ? p : c))); setLoupe(p)
+    const d = dragRef.current
+    if (d == null) return
+    const p = ptFrom(e)
+    const np = { x: p.x + d.dx, y: p.y + d.dy }
+    setYours((cs) => cs.map((c, i) => (i === d.i ? np : c)))
+    setLoupe(np) // loupe follows the PIN (the thing being placed), not the cursor
   }
   function onUp() { dragRef.current = null; setLoupe(null) }
 
