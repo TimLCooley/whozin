@@ -33,7 +33,7 @@ def main():
         q1, k, rms = rd.refine_dist(lm, (np.asarray(ref) * [w2, h2]).astype(float))
         out['k'] = round(float(k), 4)
         out['fit_rms'] = round(rms, 2)
-        if abs(k) > 0.015 and rms < 3.5:
+        if 0.015 < abs(k) < 0.5 and rms < 3.5:  # |k|>=0.5 = optimizer junk, never real lens
             out['corners'] = np.round(q1 / [w2, h2], 5).tolist()
             out['distortion_corrected'] = True
     except Exception as e:
