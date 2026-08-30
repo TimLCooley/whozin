@@ -25,7 +25,7 @@ def req(method, path, body=None, headers=None, raw=False):
 
 def list_ids():
     rows = req('POST', '/storage/v1/object/list/lab-live', {'prefix': '', 'limit': 300, 'sortBy': {'column': 'created_at', 'order': 'desc'}})
-    return [r['name'][:-4] for r in rows if r['name'].endswith('.json')]
+    return [r['name'][:-len('.json')] for r in rows if r['name'].endswith('.json')]
 
 def get_meta(i):
     try: return json.loads(req('GET', f'/storage/v1/object/lab-live/{i}.json', raw=True))
@@ -54,18 +54,24 @@ def process(i, meta):
         print(f'{i}: reader error: {r.get("error","?")[:60]}', flush=True)
     put_meta(i, meta)
 
-print('park watcher up — polling lab-live every 5s', flush=True)
-seen_err = 0
-while True:
-    try:
-        for i in list_ids():
-            meta = get_meta(i) or {}
-            if meta.get('status') == 'pending':
-                print(f'{i}: processing…', flush=True)
-                process(i, meta)
-        seen_err = 0
-    except Exception as e:
-        seen_err += 1
-        print(f'watcher error ({seen_err}): {e}', flush=True)
-        if seen_err > 50: time.sleep(60)
-    time.sleep(5)
+def main():
+    print('park watcher up — polling lab-live every 5s', flush=True)
+    seen_err = 0
+    while True:
+        try:
+            ids = list_ids()
+            print(f'tick: {len(ids)} metas', flush=True)
+            for i in ids:
+                meta = get_meta(i) or {}
+                if meta.get('status') == 'pending':
+                    print(f'{i}: processing…', flush=True)
+                    process(i, meta)
+            seen_err = 0
+        except Exception as e:
+            seen_err += 1
+            print(f'watcher error ({seen_err}): {e}', flush=True)
+            if seen_err > 50: time.sleep(60)
+        time.sleep(5)
+
+if __name__ == '__main__':
+    main()
