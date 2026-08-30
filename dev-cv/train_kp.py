@@ -13,7 +13,8 @@ BATCH = 16
 def gen_set(n, seed):
     rng = np.random.default_rng(seed)
     X = np.zeros((n, 3, 288, 512), np.uint8)
-    T = np.zeros((n, 12, kpnet.HM_H, kpnet.HM_W), np.float32)
+    K = np.zeros((n, 12, 2), np.float32)
+    V = np.zeros((n, 12), np.float32)
     i = 0
     t0 = time.time()
     while i < n:
@@ -21,10 +22,10 @@ def gen_set(n, seed):
         if s is None: continue
         img, kps, vis = s
         X[i] = img.transpose(2, 0, 1)
-        T[i] = kpnet.make_target(kps, vis)
+        K[i], V[i] = kps, vis
         i += 1
-        if i % 400 == 0: print(f'  gen {i}/{n} ({time.time()-t0:.0f}s)', flush=True)
-    return X, T
+        if i % 800 == 0: print(f'  gen {i}/{n} ({time.time()-t0:.0f}s)', flush=True)
+    return X, (K, V)
 
 print(f'device={DEV}; generating {N_TRAIN} train + 120 val...', flush=True)
 Xtr, Ttr = gen_set(N_TRAIN, 7)
@@ -40,14 +41,17 @@ def hm_loss(pred, t):
 print(f'params: {sum(p.numel() for p in net.parameters())/1e6:.2f}M', flush=True)
 
 def batches(X, T, shuffle=True):
+    K, V = T
     idx = np.random.permutation(len(X)) if shuffle else np.arange(len(X))
     for k in range(0, len(idx) - BATCH + 1, BATCH):
         j = idx[k:k + BATCH]
         x = torch.from_numpy(X[j]).float().div_(255.0)
-        # light photometric augmentation
-        if shuffle:
-            x = (x * np.random.uniform(0.8, 1.2) + np.random.uniform(-0.08, 0.08)).clamp(0, 1)
-        yield x.to(DEV), torch.from_numpy(T[j]).to(DEV)
+        if shuffle:  # photometric augmentation: per-channel gain, offset, noise
+            g = torch.tensor(np.random.uniform(0.7, 1.3, (len(j), 3, 1, 1)), dtype=torch.float32)
+            x = (x * g + np.random.uniform(-0.1, 0.1)).clamp(0, 1)
+            if np.random.rand() < 0.4: x = (x + torch.randn_like(x) * np.random.uniform(0.01, 0.05)).clamp(0, 1)
+        t = np.stack([kpnet.make_target(K[i2], V[i2]) for i2 in j])
+        yield x.to(DEV), torch.from_numpy(t).to(DEV)
 
 best = 1e9
 for ep in range(EPOCHS):
