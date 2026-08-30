@@ -145,6 +145,49 @@ def court_region(img):
             if best is None or paint > best[0]: best = (paint, comp)
     return best[1] if best and best[0] > 300 else None
 
+def refine_with_junctions(img, q, lm, det, court_px, w, h):
+    """PnLCalib-style points+lines finish: the winning candidate's 12 projected
+    model keypoints get matched to nearby DETECTED typed junctions; with 4+
+    matches the homography is re-solved from those point pairs and re-polished.
+    Anchors CORNERS (the pin metric) instead of trusting line-overlap alone —
+    line scoring lets corners drift, especially extrapolated ones."""
+    import junctions as jx
+    js = jx.detect_junctions(det, lm, w, h)
+    if not js: return q
+    Hm, _ = cv2.findHomography(verify.CC, np.array(q) * [w, h])
+    if Hm is None: return q
+    src, dst = [], []
+    for mx, my, mt in jx.MODEL_JUNCTIONS:
+        P = Hm @ [mx, my, 1.0]
+        if abs(P[2]) < 1e-9: continue
+        px, py = P[0] / P[2], P[1] / P[2]
+        if not (0 <= px < w and 0 <= py < h): continue
+        best = None
+        for jxp, jyp, jt, _ in js:
+            if jt == 'X': continue
+            if (mt == 'L') != (jt == 'L'): continue
+            dd = np.hypot(px - jxp, py - jyp)
+            if dd < 0.035 * min(w, h) and (best is None or dd < best[0]): best = (dd, jxp, jyp)
+        if best: src.append([mx, my]); dst.append([best[1], best[2]])
+    if len(src) < 4: return q
+    H2, _ = cv2.findHomography(np.array(src, float), np.array(dst, float))
+    if H2 is None: return q
+    C = np.array([[0, 0, 1], [20, 0, 1], [20, 44, 1], [0, 44, 1]], float)
+    Q = (H2 @ C.T).T
+    with np.errstate(all='ignore'):
+        Q = Q[:, :2] / Q[:, 2:3]
+    if not np.isfinite(Q).all() or np.any(np.abs(Q) > 6 * max(w, h)): return q
+    q2 = Q / [w, h]
+    if not sane(q2): return q
+    try:
+        q2 = np.asarray(auto2.polish(img, q2 * [w, h], lm, bnd=0.02))
+    except Exception:
+        return q
+    # accept only if the anchored fit still explains the paint
+    if auto4.coverage(img.shape, q2 * [w, h], court_px) < 0.85 * auto4.coverage(img.shape, np.array(q) * [w, h], court_px):
+        return q
+    return q2
+
 def main():
     req = json.load(sys.stdin)
     name = ''.join(ch for ch in str(req['court']) if ch.isalnum())
@@ -238,7 +281,8 @@ def main():
         if best is None or key < best[0]: best = (key, q)
     if best is None:
         print(json.dumps({'error': 'no calibration found — needs manual corners'})); return
-    print(json.dumps({'corners': np.round(best[1], 5).tolist()}))
+    final = refine_with_junctions(img, best[1], lm, det, court_px, w, h)
+    print(json.dumps({'corners': np.round(np.asarray(final), 5).tolist()}))
 
 if __name__ == '__main__':
     try:
