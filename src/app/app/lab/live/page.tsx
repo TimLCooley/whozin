@@ -38,17 +38,30 @@ function courtPath(corners: Pt[], a: number): string {
 
 function markerErr(mineC: Pt[], tims: Pt[], nw: number, nh: number): { avg: number; max: number } | null {
   const Hm = homographyFromCorners(COURT_CORNERS, mineC)
-  const Ht = homographyFromCorners(COURT_CORNERS, tims)
-  if (!Hm || !Ht) return null
-  const ds: number[] = []
-  for (const m of ALL_MARKS) {
-    const pt = applyHomography(Ht, m)
-    if (pt.x < -0.02 || pt.x > 1.02 || pt.y < -0.02 || pt.y > 1.02) continue
-    const pm = applyHomography(Hm, m)
-    ds.push(Math.hypot((pt.x - pm.x) * nw, (pt.y - pm.y) * nh))
+  if (!Hm) return null
+  // pin NUMBERING must never matter: try all 8 quad orderings of Tim's pins
+  // (4 rotations x 2 directions) and score the best correspondence
+  const orders: number[][] = []
+  for (let r = 0; r < 4; r++) {
+    orders.push([0, 1, 2, 3].map((k) => (k + r) % 4))
+    orders.push([0, 3, 2, 1].map((k) => (k + r) % 4))
   }
-  if (ds.length < 4) return null
-  return { avg: Math.round((ds.reduce((s, d) => s + d, 0) / ds.length) * 10) / 10, max: Math.round(Math.max(...ds) * 10) / 10 }
+  let best: { avg: number; max: number } | null = null
+  for (const ord of orders) {
+    const Ht = homographyFromCorners(COURT_CORNERS, ord.map((k) => tims[k]))
+    if (!Ht) continue
+    const ds: number[] = []
+    for (const m of ALL_MARKS) {
+      const pt = applyHomography(Ht, m)
+      if (pt.x < -0.02 || pt.x > 1.02 || pt.y < -0.02 || pt.y > 1.02) continue
+      const pm = applyHomography(Hm, m)
+      ds.push(Math.hypot((pt.x - pm.x) * nw, (pt.y - pm.y) * nh))
+    }
+    if (ds.length < 4) continue
+    const avg = ds.reduce((s, d) => s + d, 0) / ds.length
+    if (!best || avg < best.avg) best = { avg: Math.round(avg * 10) / 10, max: Math.round(Math.max(...ds) * 10) / 10 }
+  }
+  return best
 }
 
 export default function LiveSim() {
