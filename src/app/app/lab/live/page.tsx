@@ -107,6 +107,17 @@ export default function LiveSim() {
     })()
     return () => { cancelled = true }
   }, [router])
+  // load existing captures so server-added frames (e.g. broadcast stills) and
+  // past sessions appear in the deck
+  useEffect(() => {
+    if (allowed !== true) return
+    fetch('/api/lab/live').then((x) => x.json()).then((r) => {
+      if (Array.isArray(r?.ids) && r.ids.length) {
+        setIds(r.ids)
+        setCur((c) => c ?? r.ids[0])
+      }
+    }).catch(() => {})
+  }, [allowed])
   useEffect(() => {
     if (!areaEl) return
     const ro = new ResizeObserver(() => setAvail({ w: areaEl.clientWidth, h: areaEl.clientHeight }))
