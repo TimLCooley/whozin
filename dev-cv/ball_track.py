@@ -48,7 +48,7 @@ def main():
         # motion = |frame - slow background|; the mount is static so this is clean
         diff = cv2.absdiff(gray, bg.astype(np.uint8))
         cv2.accumulateWeighted(gray, bg, 0.05)
-        _, th = cv2.threshold(diff, 22, 255, cv2.THRESH_BINARY)
+        _, th = cv2.threshold(diff, 14, 255, cv2.THRESH_BINARY)  # low thresh: catch faint blurred ball
         th = cv2.bitwise_and(th, th, mask=cmask)
         th = cv2.morphologyEx(th, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         num, lab, stats, cents = cv2.connectedComponentsWithStats(th)
@@ -62,9 +62,9 @@ def main():
         for i in range(1, num):
             a = stats[i, cv2.CC_STAT_AREA]
             bw, bh = stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]
-            if not (4 <= a <= 500): continue          # ball-sized
-            if max(bw, bh) > 34: continue
-            if max(bw, bh) / max(1, min(bw, bh)) > 3.5: continue  # roundish
+            if not (3 <= a <= 500): continue          # ball-sized
+            if max(bw, bh) > 44: continue
+            if max(bw, bh) / max(1, min(bw, bh)) > 6.0: continue  # roundish OR motion streak
             cx0, cy0 = int(cents[i][0]), int(cents[i][1])
             if supp[min(cy0, supp.shape[0]-1), min(cx0, supp.shape[1]-1)]: continue  # near a player
             dets.append((idx, float(cents[i][0]), float(cents[i][1]), int(a)))
@@ -72,17 +72,27 @@ def main():
     cap.release()
     if idx == 0:
         print(json.dumps({'error': 'no frames'})); return
-    # link detections into tracks (nearest within gate, allow 2-frame gaps)
+    # link detections into tracks: constant-velocity prediction gate (a ball has
+    # momentum; noise doesn't), allow up to 4-frame gaps for blur dropouts
     tracks = []
     for d in sorted(dets):
         f, x, y, a = d
         best = None
         for t in tracks:
             lf, lx, ly = t[-1][0], t[-1][1], t[-1][2]
-            if 0 < f - lf <= 3:
-                dd = np.hypot(x - lx, y - ly)
-                if dd < 90 * (f - lf) and (best is None or dd < best[0]):
-                    best = (dd, t)
+            dt = f - lf
+            if not (0 < dt <= 4): continue
+            if len(t) >= 2:
+                pf, px2, py2 = t[-2]
+                vx = (lx - px2) / max(1, lf - pf); vy = (ly - py2) / max(1, lf - pf)
+                ex, ey = lx + vx * dt, ly + vy * dt
+                gate = 28.0 * dt + 8
+            else:
+                ex, ey = lx, ly
+                gate = 70.0 * dt
+            dd = np.hypot(x - ex, y - ey)
+            if dd < gate and (best is None or dd < best[0]):
+                best = (dd, t)
         if best: best[1].append((f, x, y))
         else: tracks.append([(f, x, y)])
     def med_speed(t):
