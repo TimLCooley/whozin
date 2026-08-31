@@ -55,6 +55,21 @@ export async function POST(req: NextRequest) {
     await writeMeta(admin, id, { status: 'pending', created: Date.now(), user: user.id, zoom })
     return NextResponse.json({ id })
   }
+  if (action === 'clip') {
+    // rally clip bound to a saved calibration — the ball pipeline's input
+    const b64 = String(body?.data ?? '').split(',').pop() ?? ''
+    const buf = Buffer.from(b64, 'base64')
+    if (buf.length < 10_000 || buf.length > 45_000_000) {
+      return NextResponse.json({ error: 'clip too small/large (keep it under ~15s)' }, { status: 400 })
+    }
+    const calib = String(body?.calib ?? '').replace(/[^a-z0-9]/gi, '')
+    if (!calib) return NextResponse.json({ error: 'no calibration bound' }, { status: 400 })
+    const id = `clip${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    const { error } = await admin.storage.from(BUCKET).upload(`${id}.mp4`, buf, { contentType: 'video/mp4' })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await writeMeta(admin, id, { type: 'clip', calib, status: 'pending', created: Date.now(), user: user.id })
+    return NextResponse.json({ id })
+  }
   if (action === 'retry') {
     // re-queue the capture for the Mac's reader (keeps any saved pins)
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
@@ -89,7 +104,12 @@ export async function GET(req: NextRequest) {
   if (id) {
     const meta = await readMeta(admin, id)
     const { data: signed } = await admin.storage.from(BUCKET).createSignedUrl(`${id}.jpg`, 3600)
-    return NextResponse.json({ id, meta, url: signed?.signedUrl ?? null })
+    let trackUrl: string | null = null
+    if (meta?.type === 'clip' && meta?.status === 'done') {
+      const { data: t } = await admin.storage.from(BUCKET).createSignedUrl(`${id}_track.jpg`, 3600)
+      trackUrl = t?.signedUrl ?? null
+    }
+    return NextResponse.json({ id, meta, url: signed?.signedUrl ?? null, track_url: trackUrl })
   }
   // list recent captures, newest first
   const { data } = await admin.storage.from(BUCKET).list('', { limit: 200, sortBy: { column: 'created_at', order: 'desc' } })

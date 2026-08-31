@@ -38,6 +38,35 @@ def put_meta(i, meta):
     req('PUT', f'/storage/v1/object/lab-live/{i}.json', json.dumps(meta).encode(),
         headers={'Content-Type': 'application/json', 'x-upsert': 'true', 'cache-control': 'no-store'})
 
+def process_clip(i, meta):
+    clip = req('GET', f'/storage/v1/object/lab-live/{i}.mp4', raw=True)
+    os.makedirs(f'{WT}/public/sim/live', exist_ok=True)
+    cp = f'{WT}/public/sim/live/{i}.mp4'
+    open(cp, 'wb').write(clip)
+    calib_pins = None
+    cid = meta.get('calib')
+    if cid:
+        cm = get_meta(cid) or {}
+        calib_pins = cm.get('tim_pins') or cm.get('claude_pins')
+    outp = f'{WT}/public/sim/live/{i}_track.jpg'
+    p = subprocess.run(['python3', f'{WT}/dev-cv/ball_track.py'],
+                       input=json.dumps({'clip': cp, 'calib': calib_pins, 'out': outp}),
+                       capture_output=True, text=True, cwd=f'{WT}/dev-cv', timeout=600)
+    try:
+        r = json.loads(p.stdout.strip().splitlines()[-1])
+    except Exception:
+        r = {'error': p.stdout[-120:] or p.stderr[-120:]}
+    if 'track' in r:
+        req('PUT', f'/storage/v1/object/lab-live/{i}_track.jpg', open(outp, 'rb').read(),
+            headers={'Content-Type': 'image/jpeg', 'x-upsert': 'true', 'cache-control': 'no-store'})
+        meta.update(status='done', frames=r['frames'], track_len=len(r['track']),
+                    n_tracks=r.get('n_tracks'), track=r['track'][:400], read_at=time.time())
+        print(f"CLIP {i}: tracked {len(r['track'])} pts over {r['frames']} frames ({r.get('n_tracks')} tracks)", flush=True)
+    else:
+        meta.update(status='error', claude_error=r.get('error', '?'), read_at=time.time())
+        print(f"CLIP {i}: error {r.get('error','?')[:60]}", flush=True)
+    put_meta(i, meta)
+
 def process(i, meta):
     img = req('GET', f'/storage/v1/object/lab-live/{i}.jpg', raw=True)
     os.makedirs(f'{WT}/public/sim/live', exist_ok=True)
@@ -92,8 +121,12 @@ def main():
                     remember()
                     print(f"SAVED {i}: metric={meta.get('metric')}", flush=True)
                 if meta.get('status') == 'pending':
-                    print(f'{i}: processing…', flush=True)
-                    process(i, meta)
+                    if meta.get('type') == 'clip':
+                        print(f'CLIP {i}: processing…', flush=True)
+                        process_clip(i, meta)
+                    else:
+                        print(f'{i}: processing…', flush=True)
+                        process(i, meta)
             seen_err = 0
         except Exception as e:
             seen_err += 1

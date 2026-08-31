@@ -78,6 +78,10 @@ export default function LiveSim() {
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'reading' | 'ready' | 'manual' | 'saved'>('idle')
   const [label, setLabel] = useState<'good' | 'unusable' | null>(null)
   const [zoomSel, setZoomSel] = useState<'0.5' | '0.7' | '1'>('1')
+  const [clipId, setClipId] = useState<string | null>(null)
+  const [clipStatus, setClipStatus] = useState<string>('')
+  const [trackUrl, setTrackUrl] = useState<string | null>(null)
+  const clipInputRef = useRef<HTMLInputElement>(null)
   const [recRetake, setRecRetake] = useState(false)
   const [pollNonce, setPollNonce] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -269,6 +273,45 @@ export default function LiveSim() {
     await fetch('/api/lab/live', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'label', id: cur, label: l }) }).catch(() => {})
     if (l === 'unusable') setStatus('Marked UNUSABLE — production would ask for a new photo. Next shot!')
   }
+  async function onClipFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f || !cur || busy) return
+    if (f.size > 45_000_000) { setClipStatus('Clip too big — keep it under ~15s'); return }
+    setBusy(true); setClipStatus('Uploading clip…'); setTrackUrl(null)
+    try {
+      const buf = await f.arrayBuffer()
+      let bin = ''
+      const bytes = new Uint8Array(buf)
+      const chunk = 0x8000
+      for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk))
+      const r = await fetch('/api/lab/live', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'clip', calib: cur, data: btoa(bin) }),
+      }).then((x) => x.json())
+      if (r?.id) {
+        setClipId(r.id)
+        setClipStatus('Mac is tracking the ball…')
+        pollClip(r.id)
+      } else setClipStatus(`Clip upload failed: ${r?.error ?? '?'}`)
+    } catch (err) { setClipStatus(`Clip failed: ${err}`) } finally { setBusy(false) }
+  }
+  function pollClip(id: string) {
+    const tick = async () => {
+      try {
+        const r = await fetch(`/api/lab/live?id=${id}`).then((x) => x.json())
+        if (r?.meta?.status === 'done') {
+          setClipStatus(`Tracked ${r.meta.track_len ?? '?'} ball points over ${r.meta.frames ?? '?'} frames`)
+          setTrackUrl(r.track_url ?? null)
+          return
+        }
+        if (r?.meta?.status === 'error') { setClipStatus(`Tracking failed: ${r.meta.claude_error ?? '?'}`); return }
+      } catch { /* retry */ }
+      setTimeout(tick, 4000)
+    }
+    tick()
+  }
+
   function clearPins() { setYours(DEFAULT_GUESS); if (phase === 'saved') setPhase(claude ? 'ready' : 'manual') }
   async function reread() {
     if (!cur || busy) return
@@ -381,6 +424,9 @@ export default function LiveSim() {
         <span className="px-3 py-1 rounded-full text-[12px] font-bold text-white truncate"
           style={{ background: phase === 'reading' || phase === 'uploading' ? '#f59e0b' : phase === 'ready' ? '#0891b2' : phase === 'manual' ? '#ef4444' : phase === 'saved' ? '#00C853' : '#64748b' }}>
           {(phase === 'reading' || phase === 'uploading') ? '⏳ ' : ''}{status}</span>
+        {clipStatus && (
+          <span className="px-3 py-1 rounded-full text-[12px] font-bold text-white bg-emerald-600 truncate">{clipStatus}</span>
+        )}
         {metric && (
           <span className="px-3 py-1 rounded-full text-white text-[12px] font-bold whitespace-nowrap"
             style={{ background: metric.avg <= 5 ? '#00C853' : metric.avg <= 15 ? '#f59e0b' : '#ef4444' }}>
@@ -465,6 +511,10 @@ export default function LiveSim() {
           className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↺ Clear</button>
         <button type="button" onClick={reread} disabled={busy || !cur}
           className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
+        <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
+        <button type="button" onClick={() => clipInputRef.current?.click()} disabled={busy || !cur || phase !== 'saved'}
+          title={phase !== 'saved' ? 'Save a calibration first — no calibration, no call' : 'Record/upload a short rally clip from this mount'}
+          className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🎾 Rally</button>
         <button type="button" onClick={save} disabled={busy || !cur}
           className="px-4 py-2.5 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">💾 Save</button>
         <button type="button" disabled={idxIn < 0 || idxIn >= ids.length - 1}
@@ -474,6 +524,13 @@ export default function LiveSim() {
           onClick={() => { const n = ids[idxIn - 1]; setCur(n); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS) }}
           className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">Newer →</button>
       </div>
+      {trackUrl && (
+        <div className="fixed inset-0 z-[190] bg-black/90 flex flex-col" onClick={() => setTrackUrl(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={trackUrl} alt="ball track" className="flex-1 min-h-0 object-contain" />
+          <p className="text-white/80 text-center text-[13px] py-3">🎾 {clipStatus} — tap to close</p>
+        </div>
+      )}
       {camOn && (
         <div className="fixed inset-0 z-[200] bg-black flex flex-col">
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
