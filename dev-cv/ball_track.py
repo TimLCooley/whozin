@@ -52,12 +52,21 @@ def main():
         th = cv2.bitwise_and(th, th, mask=cmask)
         th = cv2.morphologyEx(th, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         num, lab, stats, cents = cv2.connectedComponentsWithStats(th)
+        # suppression zone: dilated union of LARGE movers (players, paddles) —
+        # their fringes shed ball-sized fragments that hijack tracks
+        supp = np.zeros_like(th)
+        for i in range(1, num):
+            if stats[i, cv2.CC_STAT_AREA] > 600:
+                supp[lab == i] = 255
+        supp = cv2.dilate(supp, np.ones((41, 41), np.uint8))
         for i in range(1, num):
             a = stats[i, cv2.CC_STAT_AREA]
             bw, bh = stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]
-            if not (6 <= a <= 900): continue          # ball-sized, not player-sized
-            if max(bw, bh) > 42: continue
+            if not (4 <= a <= 500): continue          # ball-sized
+            if max(bw, bh) > 34: continue
             if max(bw, bh) / max(1, min(bw, bh)) > 3.5: continue  # roundish
+            cx0, cy0 = int(cents[i][0]), int(cents[i][1])
+            if supp[min(cy0, supp.shape[0]-1), min(cx0, supp.shape[1]-1)]: continue  # near a player
             dets.append((idx, float(cents[i][0]), float(cents[i][1]), int(a)))
         idx += 1
     cap.release()
@@ -76,8 +85,13 @@ def main():
                     best = (dd, t)
         if best: best[1].append((f, x, y))
         else: tracks.append([(f, x, y)])
-    tracks = [t for t in tracks if len(t) >= 6]
-    tracks.sort(key=lambda t: -len(t))
+    def med_speed(t):
+        if len(t) < 2: return 0.0
+        steps = [np.hypot(t[j+1][1]-t[j][1], t[j+1][2]-t[j][2]) / max(1, t[j+1][0]-t[j][0]) for j in range(len(t)-1)]
+        return float(np.median(steps))
+    # a ball MOVES: require sustained speed, not jitter
+    tracks = [t for t in tracks if len(t) >= 8 and med_speed(t) >= 4.0]
+    tracks.sort(key=lambda t: -(len(t) * med_speed(t)))
     track = tracks[0] if tracks else []
     # overlay: draw ALL kept tracks faint, the best one bold, over the last frame
     ov = last_frame.copy()
