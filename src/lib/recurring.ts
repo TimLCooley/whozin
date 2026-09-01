@@ -135,6 +135,7 @@ export async function spawnNextDraft(parentId: string): Promise<string | null> {
       followup_invite_enabled: parent.followup_invite_enabled,
       waitlist_enabled: parent.waitlist_enabled,
       waitlist_visible: parent.waitlist_visible,
+      waitlist_chat_access: parent.waitlist_chat_access,
       open_invite: parent.open_invite,
       // Tournament *configuration* carries over; runtime state (started_at,
       // current_round, teams) intentionally resets — the new occurrence hasn't
