@@ -2940,9 +2940,11 @@ function ActivityChat({ activity }: { activity: ActivityDetail }) {
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null)
 
-  // Chat is open to confirmed members, the host, and anyone granted chat access
-  // (e.g. a host who stepped out or handed off but stays to coordinate).
-  const isConfirmed = activity.my_status === 'confirmed' || activity.is_creator || !!activity.my_chat_access
+  // Chat is open to confirmed members, the host, anyone granted chat access
+  // (e.g. a host who stepped out or handed off but stays to coordinate), and
+  // waitlisted members when the host's "Wait list can chat" toggle is on.
+  const isConfirmed = activity.my_status === 'confirmed' || activity.is_creator || !!activity.my_chat_access ||
+    (activity.my_status === 'waitlist' && activity.waitlist_enabled && activity.waitlist_chat_access)
 
   // Load messages
   useEffect(() => {
