@@ -325,7 +325,8 @@ export default function AppHome() {
         ) : (
           <div className="space-y-3">
             {activities.map((activity, i) => {
-              const needsResponse = activity.my_status === 'tbd' || activity.my_status === 'waiting'
+              const isCancelled = activity.status === 'cancelled'
+              const needsResponse = !isCancelled && (activity.my_status === 'tbd' || activity.my_status === 'waiting')
               const showReminder = activity.reminder_enabled && activity.is_creator && activity.my_status === 'confirmed'
               const nextReminder = showReminder ? getNextReminderLabel(activity.activity_date, activity.activity_time) : null
               const isFull = activity.max_capacity != null && activity.confirmed_count >= activity.max_capacity
@@ -366,7 +367,11 @@ export default function AppHome() {
 
                       {/* Top badges */}
                       <div className="relative flex items-start justify-between p-3.5">
-                        {needsResponse ? (
+                        {isCancelled ? (
+                          <div className="flex items-center gap-1.5 bg-red-500/90 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                            <span className="text-[10px] font-bold text-white uppercase tracking-wide">Cancelled</span>
+                          </div>
+                        ) : needsResponse ? (
                           <div className="flex items-center gap-1.5 bg-primary/90 backdrop-blur-sm px-2.5 py-1 rounded-full">
                             <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                             <span className="text-[10px] font-bold text-white uppercase tracking-wide">Response needed</span>
@@ -480,7 +485,13 @@ export default function AppHome() {
                         </div>
 
                         {/* Buttons over image */}
-                        {isDraft ? (
+                        {isCancelled ? (
+                          <div className="flex gap-2 mt-3">
+                            <div className="flex-1 bg-red-500/80 backdrop-blur-sm text-white text-[13px] font-bold py-2.5 rounded-lg text-center">
+                              Cancelled — chat still open
+                            </div>
+                          </div>
+                        ) : isDraft ? (
                           <div className="flex gap-2 mt-3">
                             <button
                               onClick={(e) => { e.stopPropagation(); setDiscardConfirm({ id: activity.id, name: activity.activity_name }) }}
@@ -599,7 +610,14 @@ export default function AppHome() {
                     /* ── Standard card (no image) ── */
                     <div className="bg-background p-4">
                   {/* Needs response banner */}
-                  {needsResponse ? (
+                  {isCancelled ? (
+                    <div className="flex items-center gap-1.5 mb-2.5 pb-2.5 border-b border-red-200">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" /><path d="M15 9l-6 6M9 9l6 6" />
+                      </svg>
+                      <span className="text-[11px] font-bold text-red-600 uppercase tracking-wide">Cancelled</span>
+                    </div>
+                  ) : needsResponse ? (
                     <div className="flex items-center gap-1.5 mb-2.5 pb-2.5 border-b border-primary/15">
                       <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                       <span className="text-[11px] font-bold text-primary uppercase tracking-wide">Response needed</span>
@@ -714,7 +732,13 @@ export default function AppHome() {
                   </div>
 
                   {/* IN/OUT Response buttons */}
-                  {isDraft ? (
+                  {isCancelled ? (
+                    <div className="mt-3 pt-2.5 border-t border-red-100">
+                      <div className="w-full bg-red-50 text-red-600 text-[13px] font-bold py-2.5 rounded-lg text-center">
+                        Cancelled — chat still open
+                      </div>
+                    </div>
+                  ) : isDraft ? (
                     <div className="flex gap-2 mt-3 pt-2.5 border-t border-amber-200">
                       <button
                         onClick={(e) => { e.stopPropagation(); setDiscardConfirm({ id: activity.id, name: activity.activity_name }) }}

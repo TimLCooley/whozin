@@ -86,8 +86,10 @@ export async function GET(req: NextRequest) {
   if (tab === 'upcoming') {
     // Yesterday-in-UTC catches long-running activities that end today.
     // 'draft' surfaces here for the creator (non-creators have no member row).
+    // 'cancelled' stays in Upcoming (with a Cancelled label) until its end
+    // time passes — people still use the chat to regroup.
     query = query
-      .in('status', ['draft', 'open', 'full'])
+      .in('status', ['draft', 'open', 'full', 'cancelled'])
       .or(`activity_date.gte.${yesterdayUtc},activity_date.is.null`)
       .order('activity_date', { ascending: true, nullsFirst: false })
   } else {
@@ -128,7 +130,9 @@ export async function GET(req: NextRequest) {
   }
 
   const dateFilteredActivities = (activities ?? []).filter((a) => {
-    if (a.status === 'past' || a.status === 'cancelled') return tab === 'past'
+    // 'cancelled' falls through to the end-time split below: it stays in
+    // Upcoming until the activity would have ended, then moves to Past.
+    if (a.status === 'past') return tab === 'past'
     if (a.status === 'draft') {
       if (tab !== 'upcoming') return false
       // Hold a recurring draft until ~one interval before its date (around when

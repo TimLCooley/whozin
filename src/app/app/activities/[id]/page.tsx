@@ -1216,7 +1216,7 @@ export default function ActivityDetailPage() {
                     </p>
                   </div>
                 )}
-                {activity.my_status && activity.my_status !== 'tbd' && (
+                {activity.my_status && activity.my_status !== 'tbd' && activity.status !== 'cancelled' && (
                   <div className="bg-background border border-border/50 rounded-xl p-4">
                     <p className="text-[13px] font-medium text-foreground/70 mb-3">Your Response</p>
                     <div className="flex gap-3">
