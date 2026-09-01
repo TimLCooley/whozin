@@ -142,6 +142,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .eq('id', id)
     .single()
 
+  // A cancelled activity is frozen: everyone keeps the status they had (In,
+  // Out, wait list) — no responses, no promotions. Only the chat stays live.
+  if (activityBefore?.status === 'cancelled') {
+    return NextResponse.json({ error: 'This activity was cancelled' }, { status: 400 })
+  }
+
   // Compute fullness from actual confirmed count, not the cached status field —
   // the cached status can drift if max_capacity was bumped after the activity filled.
   const { count: confirmedBeforeCount } = await admin
