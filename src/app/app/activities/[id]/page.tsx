@@ -47,6 +47,7 @@ interface ActivityDetail {
   open_invite: boolean
   waitlist_enabled: boolean
   waitlist_visible: boolean
+  waitlist_chat_access: boolean
   auto_emergency_fill: boolean
   tournament_mode: boolean
   tournament_format: 'assigned' | 'round_robin' | null
@@ -874,7 +875,7 @@ export default function ActivityDetailPage() {
     { key: 'details', label: 'Activity Details' },
     ...(showGroupTab ? [{ key: 'group' as Tab, label: 'Group' }] : []),
     ...(showMatchTab ? [{ key: 'match' as Tab, label: 'Match' }] : []),
-    ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator || activity.my_chat_access) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
+    ...(activity.chat_enabled && (activity.my_status === 'confirmed' || activity.is_creator || activity.my_chat_access || (activity.my_status === 'waitlist' && activity.waitlist_enabled && activity.waitlist_chat_access)) ? [{ key: 'chat' as Tab, label: 'Chat' }] : []),
   ]
 
   return (
@@ -3423,6 +3424,7 @@ function SettingsToggles({
     { key: 'reminder_enabled', label: 'Reminders', pro: true },
     { key: 'waitlist_enabled', label: 'Wait List', pro: true },
     { key: 'waitlist_visible', label: 'Show wait list to members', indent: true, showWhen: (a) => !!a.waitlist_enabled },
+    { key: 'waitlist_chat_access', label: 'Wait list can chat', indent: true, showWhen: (a) => !!a.waitlist_enabled && !!a.chat_enabled },
     { key: 'auto_emergency_fill', label: 'Auto-Fill Dropouts' },
   ]
 

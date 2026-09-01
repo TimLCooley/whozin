@@ -339,6 +339,7 @@ export async function POST(req: NextRequest) {
     followup_invite_enabled,
     waitlist_enabled,
     waitlist_visible,
+    waitlist_chat_access,
     open_invite,
     tournament_mode,
     tournament_format,
@@ -415,6 +416,7 @@ export async function POST(req: NextRequest) {
       followup_invite_enabled: isPro ? (followup_invite_enabled ?? false) : false,
       waitlist_enabled: isPro ? (waitlist_enabled ?? false) : false,
       waitlist_visible: waitlist_visible ?? true,
+      waitlist_chat_access: isPro && waitlist_chat_access === true,
       open_invite: open_invite ?? false,
       tournament_mode: isPro && !!tournament_mode,
       tournament_format: isPro && tournament_mode && (tournament_format === 'assigned' || tournament_format === 'round_robin')

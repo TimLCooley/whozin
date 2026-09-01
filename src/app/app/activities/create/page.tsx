@@ -110,6 +110,7 @@ export default function CreateActivityPage() {
   const [followupInvite, setFollowupInvite] = useState(false)
   const [waitlistEnabled, setWaitlistEnabled] = useState(false)
   const [waitlistVisible, setWaitlistVisible] = useState(true)
+  const [waitlistChatAccess, setWaitlistChatAccess] = useState(false)
   const [openInvite, setOpenInvite] = useState(false)
   const [tournamentMode, setTournamentMode] = useState(false)
   const [tournamentTrackScores, setTournamentTrackScores] = useState(false)
@@ -196,6 +197,7 @@ export default function CreateActivityPage() {
         setFollowupInvite(data.followup_invite_enabled ?? false)
         setWaitlistEnabled(data.waitlist_enabled ?? false)
         setWaitlistVisible(data.waitlist_visible ?? true)
+        setWaitlistChatAccess(data.waitlist_chat_access ?? false)
         if (['weekly', 'biweekly', 'monthly'].includes(data.repeat_interval)) {
           setRepeatInterval(data.repeat_interval)
         }
@@ -380,6 +382,7 @@ export default function CreateActivityPage() {
       followup_invite_enabled: followupInvite,
       waitlist_enabled: waitlistEnabled,
       waitlist_visible: waitlistVisible,
+      waitlist_chat_access: waitlistChatAccess,
       open_invite: openInvite,
       tournament_mode: tournamentMode,
       tournament_format: tournamentMode ? tournamentFormat : null,
@@ -1820,6 +1823,22 @@ export default function CreateActivityPage() {
                       {waitlistVisible
                         ? 'Members can see how many people are waiting and their own spot in line.'
                         : 'Only you can see the wait list. Members just see that they’re on it.'}
+                    </p>
+                  </div>
+                )}
+
+                {waitlistEnabled && (
+                  <div className="mt-3 pt-3 border-t border-border/40">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[14px] font-semibold text-foreground">Wait list can chat</span>
+                      <Toggle checked={waitlistChatAccess} onChange={setWaitlistChatAccess} />
+                    </div>
+                    <p className="text-[12px] text-muted mt-1.5 leading-relaxed">
+                      {waitlistChatAccess
+                        ? chatEnabled
+                          ? 'People on the wait list can read and send messages in the activity chat.'
+                          : 'People on the wait list can join the chat once Allow Chat is turned on.'
+                        : 'Chat stays limited to confirmed players and the host.'}
                     </p>
                   </div>
                 )}

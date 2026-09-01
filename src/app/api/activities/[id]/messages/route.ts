@@ -30,12 +30,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('chat_enabled, creator_id')
+    .select('chat_enabled, creator_id, waitlist_enabled, waitlist_chat_access')
     .eq('id', activityId)
     .single()
 
   const canChat = activity?.creator_id === whozinUser.id ||
-    membership?.status === 'confirmed' || membership?.chat_access === true
+    membership?.status === 'confirmed' || membership?.chat_access === true ||
+    (membership?.status === 'waitlist' && activity?.waitlist_enabled === true && activity?.waitlist_chat_access === true)
   if (!canChat) {
     return NextResponse.json({ error: 'Only participants can access chat' }, { status: 403 })
   }
@@ -123,12 +124,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: activity } = await admin
     .from('whozin_activity')
-    .select('chat_enabled, creator_id, activity_name')
+    .select('chat_enabled, creator_id, activity_name, waitlist_enabled, waitlist_chat_access')
     .eq('id', activityId)
     .single()
 
   const canChat = activity?.creator_id === whozinUser.id ||
-    membership?.status === 'confirmed' || membership?.chat_access === true
+    membership?.status === 'confirmed' || membership?.chat_access === true ||
+    (membership?.status === 'waitlist' && activity?.waitlist_enabled === true && activity?.waitlist_chat_access === true)
   if (!canChat) {
     return NextResponse.json({ error: 'Only participants can send messages' }, { status: 403 })
   }
