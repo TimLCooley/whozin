@@ -173,9 +173,14 @@ export default function LiveSim() {
           const off = read.some((pt: Pt) => pt.x < -0.05 || pt.x > 1.05 || pt.y < -0.05 || pt.y > 1.05)
           setRecRetake(off)
           setPhase('ready')
-          setStatus(off
-            ? '⚠ My corners run OFF-SCREEN — I recommend 🚫 Retake (confirm, or fix pins to overrule me)'
-            : 'Read arrived — green pins set to my read; fix & Save')
+          if (off) {
+            // auto-reject: the loop is capture -> doesn't fit -> new Still
+            fetch('/api/lab/live', { method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ action: 'label', id: cur, label: 'unusable' }) }).catch(() => {})
+            setStatus('❌ Court runs off-screen — take a new 📷 Still (or fix pins + Save to overrule)')
+          } else {
+            setStatus('Read arrived — adjust pins if needed, then Save')
+          }
           return // stop polling
         }
         if (r?.meta?.status === 'error') {
@@ -302,6 +307,9 @@ export default function LiveSim() {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'pins', id: cur, pins: yours.map((p) => [p.x, p.y]), metric }),
       })
+      // saving IS approving: the quality label rides along automatically
+      fetch('/api/lab/live', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'label', id: cur, label: 'good' }) }).catch(() => {})
       setPhase('saved')
       setStatus(metric ? `Saved ✓ · markers avg ${metric.avg}px · worst ${metric.max}px` : 'Saved ✓')
     } catch { setStatus('Save failed') } finally { setBusy(false) }
@@ -999,21 +1007,16 @@ export default function LiveSim() {
         </div>
 
         {/* 2 · FIX & SAVE — once a capture is in hand */}
+        {/* Save IS the approval. Bad angles get auto-rejected when the read
+            arrives (corners off-screen) — no verdict buttons needed. */}
         {cur && phase !== 'idle' && phase !== 'uploading' && (
           <div className="flex items-center gap-2 flex-wrap" style={{ opacity: phase === 'saved' ? 0.55 : 1 }}>
-            <span className="text-[11px] font-black text-muted w-20 shrink-0">2 · FIX &amp; SAVE</span>
-            <button type="button" onClick={clearPins}
-              className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold">↺ Clear</button>
-            <button type="button" onClick={reread} disabled={busy}
-              className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
-            <button type="button" onClick={() => setQuality('good')}
-              className="px-3 py-2.5 rounded-xl text-[13px] font-bold border-2"
-              style={label === 'good' ? { background: '#00C853', borderColor: '#00C853', color: '#fff' } : { borderColor: '#00C853', color: '#00C853' }}>👍</button>
-            <button type="button" onClick={() => setQuality('unusable')}
-              className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2${recRetake && !label ? ' animate-pulse ring-2 ring-red-400' : ''}`}
-              style={label === 'unusable' ? { background: '#ef4444', borderColor: '#ef4444', color: '#fff' } : { borderColor: '#ef4444', color: '#ef4444' }}>🚫</button>
+            <span className="text-[11px] font-black text-muted w-20 shrink-0">2 · SAVE</span>
             <button type="button" onClick={save} disabled={busy || phase === 'saved'}
               className="px-5 py-2.5 rounded-xl bg-[#00C853] text-white text-[14px] font-black active:opacity-80 disabled:opacity-50">💾 Save</button>
+            {recRetake && (
+              <span className="text-[12px] font-bold text-red-600">❌ This angle doesn&apos;t fit — take a new 📷 Still</span>
+            )}
           </div>
         )}
 
