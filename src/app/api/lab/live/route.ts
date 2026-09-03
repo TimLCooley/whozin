@@ -48,11 +48,18 @@ export async function POST(req: NextRequest) {
     if (buf.length < 1000 || buf.length > 8_000_000) {
       return NextResponse.json({ error: 'bad image size' }, { status: 400 })
     }
-    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+    // anchor frames: continuous re-snap cycles from ⚓ Anchor mode — seeded
+    // with the current pins, prefixed 'anc' so the deck can filter them out
+    const anchor = body?.anchor === true
+    const seed = Array.isArray(body?.seed) && body.seed.length === 4 ? body.seed : null
+    const id = `${anchor ? 'anc' : ''}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
     const { error } = await admin.storage.from(BUCKET).upload(`${id}.jpg`, buf, { contentType: 'image/jpeg' })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const zoom = ['0.5', '0.7', '1'].includes(String(body?.zoom)) ? String(body.zoom) : null
-    await writeMeta(admin, id, { status: 'pending', created: Date.now(), user: user.id, zoom })
+    await writeMeta(admin, id, {
+      status: 'pending', created: Date.now(), user: user.id, zoom,
+      ...(anchor ? { anchor: true, seed_pins: seed } : {}),
+    })
     return NextResponse.json({ id })
   }
   if (action === 'clip') {

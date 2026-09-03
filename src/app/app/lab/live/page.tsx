@@ -113,8 +113,9 @@ export default function LiveSim() {
     if (allowed !== true) return
     fetch('/api/lab/live').then((x) => x.json()).then((r) => {
       if (Array.isArray(r?.ids) && r.ids.length) {
-        setIds(r.ids)
-        setCur((c) => c ?? r.ids[0])
+        const deck = r.ids.filter((i: string) => !i.startsWith('anc')) // anchor cycles aren't captures
+        setIds(deck)
+        setCur((c) => c ?? deck[0] ?? null)
       }
     }).catch(() => {})
   }, [allowed])
@@ -323,6 +324,106 @@ export default function LiveSim() {
     tick()
   }
 
+  // ⚓ Anchor — the AR design's runtime half, buildable today: live viewfinder
+  // with the calibration's court lines projected on it; a background loop
+  // re-snaps the lines to the paint every cycle (bump the tripod -> it
+  // re-locks). Confidence gate: a wild read (>80px drift) is REJECTED, not
+  // adopted — never let one bad snap trash a good calibration.
+  const anchorVideoRef = useRef<HTMLVideoElement>(null)
+  const anchorStreamRef = useRef<MediaStream | null>(null)
+  const anchorRunRef = useRef(false)
+  const anchorPinsRef = useRef<Pt[]>(DEFAULT_GUESS)
+  const [anchorOn, setAnchorOn] = useState(false)
+  const [anchorPins, setAnchorPins] = useState<Pt[]>(DEFAULT_GUESS)
+  const [anchorMsg, setAnchorMsg] = useState('')
+  const [anchorVid, setAnchorVid] = useState({ w: 16, h: 9 })
+
+  async function openAnchor() {
+    if (busy) return
+    try {
+      let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+      if (zoomSel !== '1') {
+        try {
+          const devs = await navigator.mediaDevices.enumerateDevices()
+          const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
+          if (uw) video = { deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        } catch { /* default lens */ }
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      anchorStreamRef.current = stream
+      anchorPinsRef.current = yours
+      setAnchorPins(yours)
+      setAnchorMsg('⚓ anchoring — hold the mount steady…')
+      setAnchorOn(true)
+      anchorRunRef.current = true
+      setTimeout(() => {
+        const v = anchorVideoRef.current
+        if (v) {
+          v.srcObject = stream
+          v.onloadedmetadata = () => setAnchorVid({ w: v.videoWidth || 16, h: v.videoHeight || 9 })
+          v.play().catch(() => {})
+        }
+        setTimeout(anchorCycle, 1500) // let exposure settle before the first snap
+      }, 50)
+    } catch (err) {
+      setStatus(`Anchor needs the live camera (${(err as DOMException)?.name ?? err}) — use Chrome if the app blocks it`)
+    }
+  }
+
+  async function anchorCycle() {
+    if (!anchorRunRef.current) return
+    const v = anchorVideoRef.current
+    if (!v || !v.videoWidth) { setTimeout(anchorCycle, 1000); return }
+    try {
+      const scale = Math.min(1, 1600 / Math.max(v.videoWidth, v.videoHeight))
+      const cw = Math.round(v.videoWidth * scale), ch = Math.round(v.videoHeight * scale)
+      const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch
+      cv.getContext('2d')!.drawImage(v, 0, 0, cw, ch)
+      const r = await fetch('/api/lab/live', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'upload', anchor: true, zoom: zoomSel,
+          data: cv.toDataURL('image/jpeg', 0.85), seed: anchorPinsRef.current.map((p) => [p.x, p.y]) }),
+      }).then((x) => x.json())
+      if (!r?.id) { setAnchorMsg(`⚠ upload failed: ${r?.error ?? '?'}`); setTimeout(anchorCycle, 4000); return }
+      setAnchorMsg('⚓ snapping to the paint…')
+      const started = Date.now()
+      const poll = async () => {
+        if (!anchorRunRef.current) return
+        try {
+          const g = await fetch(`/api/lab/live?id=${r.id}`).then((x) => x.json())
+          const cp = g?.meta?.claude_pins
+          if (Array.isArray(cp) && cp.length === 4) {
+            const read: Pt[] = cp.map((p: number[]) => ({ x: p[0], y: p[1] }))
+            const drift = markerErr(anchorPinsRef.current, read, cw, ch)
+            if (drift && drift.avg < 80) {
+              anchorPinsRef.current = read
+              setAnchorPins(read)
+              setAnchorMsg(drift.avg <= 4 ? `🔒 LOCKED · drift ${drift.avg}px` : `⚓ re-anchored · moved ${drift.avg}px`)
+            } else {
+              setAnchorMsg(`⚠ read rejected (${drift ? `${drift.avg}px off` : 'no fit'}) — keeping current lines`)
+            }
+            setTimeout(anchorCycle, 2000)
+            return
+          }
+          if (g?.meta?.status === 'error') { setAnchorMsg('⚠ snap failed this cycle — retrying'); setTimeout(anchorCycle, 2000); return }
+        } catch { /* retry */ }
+        if (Date.now() - started > 45000) { setAnchorMsg('⚠ Mac not responding — is the watcher up?'); setTimeout(anchorCycle, 5000); return }
+        setTimeout(poll, 2500)
+      }
+      poll()
+    } catch (err) { setAnchorMsg(`⚠ ${err}`); setTimeout(anchorCycle, 4000) }
+  }
+
+  function closeAnchor() {
+    anchorRunRef.current = false
+    anchorStreamRef.current?.getTracks().forEach((t) => t.stop())
+    anchorStreamRef.current = null
+    setAnchorOn(false)
+    // the anchored pins ARE the freshest calibration — adopt them
+    setYours(anchorPinsRef.current.map((p) => ({ ...p })))
+    setStatus('Anchor closed — pins updated to the last locked position (Save to keep)')
+  }
+
   function clearPins() { setYours(DEFAULT_GUESS); if (phase === 'saved') setPhase(claude ? 'ready' : 'manual') }
   async function reread() {
     if (!cur || busy) return
@@ -523,6 +624,9 @@ export default function LiveSim() {
         <button type="button" onClick={reread} disabled={busy || !cur}
           className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
         <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
+        <button type="button" onClick={openAnchor} disabled={busy || !cur || phase !== 'saved'}
+          title={phase !== 'saved' ? 'Save a calibration first — Anchor keeps it locked to the paint' : 'Live viewfinder: lines re-snap to the court every few seconds'}
+          className="px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">⚓ Anchor</button>
         <button type="button" onClick={() => clipInputRef.current?.click()} disabled={busy || !cur || phase !== 'saved'}
           title={phase !== 'saved' ? 'Save a calibration first — no calibration, no call' : 'Record/upload a short rally clip from this mount'}
           className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🎾 Rally</button>
@@ -540,6 +644,26 @@ export default function LiveSim() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={trackUrl} alt="ball track" className="flex-1 min-h-0 object-contain" />
           <p className="text-white/80 text-center text-[13px] py-3">🎾 {clipStatus} — tap to close</p>
+        </div>
+      )}
+      {anchorOn && (
+        <div className="fixed inset-0 z-[210] bg-black flex flex-col">
+          <div className="flex-1 min-h-0 flex items-center justify-center">
+            <div className="relative" style={{ aspectRatio: `${anchorVid.w}/${anchorVid.h}`, maxWidth: '100%', maxHeight: '100%', width: '100%' }}>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video ref={anchorVideoRef} playsInline muted className="absolute inset-0 w-full h-full" />
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                <path d={courtPath(anchorPins, 1)} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="4.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                <path d={courtPath(anchorPins, 1)} fill="none" stroke="#39FF14" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+              </svg>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-black">
+            <span className="px-3 py-1.5 rounded-full text-[13px] font-bold text-white truncate"
+              style={{ background: anchorMsg.startsWith('🔒') ? '#00C853' : anchorMsg.startsWith('⚠') ? '#ef4444' : '#0891b2' }}>
+              {anchorMsg || '⚓ anchoring…'}</span>
+            <button type="button" onClick={closeAnchor} className="px-5 py-2.5 rounded-xl bg-white/15 text-white text-[14px] font-bold shrink-0">Done</button>
+          </div>
         </div>
       )}
       {camOn && (
