@@ -315,11 +315,11 @@ export default function LiveSim() {
       try {
         let id: string | null = null
         for (let i = 0; i < nParts; i++) {
-          const u = await fetch('/api/lab/live', {
+          const u: { id?: string; token?: string; path?: string; error?: string } = await fetch('/api/lab/live', {
             method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ action: 'clip_url', calib: cur, id, part: i }),
           }).then((x) => x.json())
-          if (!u?.id || !u?.token) { setClipStatus(`Upload failed at part ${i + 1}: ${u?.error ?? '?'}`); return }
+          if (!u?.id || !u?.token || !u?.path) { setClipStatus(`Upload failed at part ${i + 1}: ${u?.error ?? '?'}`); return }
           id = u.id
           const slice = f.slice(i * PART, Math.min(f.size, (i + 1) * PART))
           const { error } = await createClient().storage.from('lab-live')
