@@ -135,6 +135,16 @@ export default function LiveSim() {
         const r = await fetch(`/api/lab/live?id=${cur}`).then((x) => x.json())
         if (stop) return
         if (r?.url && !imgUrl) setImgUrl(r.url)
+        // a SAVED calibration survives reloads: restore it and unlock Play
+        const tp = r?.meta?.tim_pins
+        if (Array.isArray(tp) && tp.length === 4) {
+          setYours(tp.map((p: number[]) => ({ x: p[0], y: p[1] })))
+          const cps = r?.meta?.claude_pins
+          if (Array.isArray(cps) && cps.length === 4) setClaude(cps.map((p: number[]) => ({ x: p[0], y: p[1] })))
+          setPhase('saved')
+          setStatus('Saved calibration loaded ✓ — ready to play')
+          return // stop polling
+        }
         const cp = r?.meta?.claude_pins
         if (Array.isArray(cp) && cp.length === 4) {
           const read = cp.map((p: number[]) => ({ x: p[0], y: p[1] }))
@@ -368,7 +378,10 @@ export default function LiveSim() {
   const anchorStreamRef = useRef<MediaStream | null>(null)
   const anchorRunRef = useRef(false)
   const anchorPinsRef = useRef<Pt[]>(DEFAULT_GUESS)
+  const anchorLockedRef = useRef(false)   // false until a first fix exists
+  const lastAnchorIdRef = useRef<string | null>(null)
   const [anchorOn, setAnchorOn] = useState(false)
+  const [anchorHasFix, setAnchorHasFix] = useState(false)
   const [anchorPins, setAnchorPins] = useState<Pt[]>(DEFAULT_GUESS)
   const [anchorMsg, setAnchorMsg] = useState('')
   const [anchorVid, setAnchorVid] = useState({ w: 16, h: 9 })
@@ -378,9 +391,14 @@ export default function LiveSim() {
     try {
       const stream = await getCamStream()
       anchorStreamRef.current = stream
+      // starting point: a calibration in hand seeds the snap; from scratch the
+      // first cycle runs FULL AUTO and the first fix is adopted unconditionally
+      const seeded = phase === 'saved' || phase === 'ready'
+      anchorLockedRef.current = seeded
+      setAnchorHasFix(seeded)
       anchorPinsRef.current = yours
       setAnchorPins(yours)
-      setAnchorMsg('⚓ anchoring — hold the mount steady…')
+      setAnchorMsg(seeded ? '⚓ anchoring — hold the mount steady…' : '⚓ acquiring the court (full auto)…')
       setAnchorOn(true)
       anchorRunRef.current = true
       setTimeout(() => {
@@ -409,10 +427,12 @@ export default function LiveSim() {
       const r = await fetch('/api/lab/live', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'upload', anchor: true, zoom: zoomSel,
-          data: cv.toDataURL('image/jpeg', 0.85), seed: anchorPinsRef.current.map((p) => [p.x, p.y]) }),
+          data: cv.toDataURL('image/jpeg', 0.85),
+          seed: anchorLockedRef.current ? anchorPinsRef.current.map((p) => [p.x, p.y]) : null }),
       }).then((x) => x.json())
       if (!r?.id) { setAnchorMsg(`⚠ upload failed: ${r?.error ?? '?'}`); setTimeout(anchorCycle, 4000); return }
-      setAnchorMsg('⚓ snapping to the paint…')
+      lastAnchorIdRef.current = r.id
+      setAnchorMsg(anchorLockedRef.current ? '⚓ snapping to the paint…' : '⚓ reading the court from scratch…')
       const started = Date.now()
       const poll = async () => {
         if (!anchorRunRef.current) return
@@ -421,13 +441,21 @@ export default function LiveSim() {
           const cp = g?.meta?.claude_pins
           if (Array.isArray(cp) && cp.length === 4) {
             const read: Pt[] = cp.map((p: number[]) => ({ x: p[0], y: p[1] }))
-            const drift = markerErr(anchorPinsRef.current, read, cw, ch)
-            if (drift && drift.avg < 80) {
+            if (!anchorLockedRef.current) {
+              // first fix from scratch: adopt it, gate from here on
+              anchorLockedRef.current = true
               anchorPinsRef.current = read
-              setAnchorPins(read)
-              setAnchorMsg(drift.avg <= 4 ? `🔒 LOCKED · drift ${drift.avg}px` : `⚓ re-anchored · moved ${drift.avg}px`)
+              setAnchorPins(read); setAnchorHasFix(true)
+              setAnchorMsg('⚓ court acquired — refining…')
             } else {
-              setAnchorMsg(`⚠ read rejected (${drift ? `${drift.avg}px off` : 'no fit'}) — keeping current lines`)
+              const drift = markerErr(anchorPinsRef.current, read, cw, ch)
+              if (drift && drift.avg < 80) {
+                anchorPinsRef.current = read
+                setAnchorPins(read)
+                setAnchorMsg(drift.avg <= 4 ? `🔒 LOCKED · drift ${drift.avg}px` : `⚓ re-anchored · moved ${drift.avg}px`)
+              } else {
+                setAnchorMsg(`⚠ read rejected (${drift ? `${drift.avg}px off` : 'no fit'}) — keeping current lines`)
+              }
             }
             setTimeout(anchorCycle, 2000)
             return
@@ -446,9 +474,16 @@ export default function LiveSim() {
     anchorStreamRef.current?.getTracks().forEach((t) => t.stop())
     anchorStreamRef.current = null
     setAnchorOn(false)
+    if (!anchorLockedRef.current) { setStatus('Anchor closed — no fix acquired'); return }
     // the anchored pins ARE the freshest calibration — adopt them
     setYours(anchorPinsRef.current.map((p) => ({ ...p })))
-    setStatus('Anchor closed — pins updated to the last locked position (Save to keep)')
+    if (!cur && lastAnchorIdRef.current) {
+      // anchor WAS the calibration flow: promote its last frame to the deck
+      setCur(lastAnchorIdRef.current)
+      setImgUrl(null); setClaude(null); setLabel(null)
+    }
+    setPhase('ready')
+    setStatus('⚓ Anchor locked — check the pins, then 💾 Save to unlock Play')
   }
 
   // 🔴 Live — the delayed ref: continuous recording in ~15s segments, each
@@ -842,48 +877,70 @@ export default function LiveSim() {
         <div style={{ display: 'none' }} />
       </div>
 
-      <div className="px-3 pb-3 pt-1 flex items-center justify-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1">
-          {(['0.5', '0.7', '1'] as const).map((z) => (
-            <button key={z} type="button" onClick={() => setZoomSel(z)}
-              className="px-2.5 py-1.5 rounded-full text-[12px] font-bold border-2"
-              style={zoomSel === z ? { background: '#7c3aed', borderColor: '#7c3aed', color: '#fff' } : { borderColor: '#7c3aed', color: '#7c3aed' }}>{z}x</button>
-          ))}
-        </div>
+      {/* Staged controls — the flow reads top to bottom: 1 Calibrate ->
+          2 Fix & Save -> 3 Play. Only the live stage's row shows big. */}
+      <div className="px-3 pb-3 pt-1 flex flex-col gap-1.5">
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
-        <button type="button" onClick={openCam} disabled={busy}
-          className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 New shot</button>
-        <button type="button" onClick={() => setQuality('good')} disabled={!cur}
-          className="px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 disabled:opacity-40"
-          style={label === 'good' ? { background: '#00C853', borderColor: '#00C853', color: '#fff' } : { borderColor: '#00C853', color: '#00C853' }}>👍 Usable</button>
-        <button type="button" onClick={() => setQuality('unusable')} disabled={!cur}
-          className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2 disabled:opacity-40${recRetake && !label ? ' animate-pulse ring-2 ring-red-400' : ''}`}
-          style={label === 'unusable' ? { background: '#ef4444', borderColor: '#ef4444', color: '#fff' } : { borderColor: '#ef4444', color: '#ef4444' }}>🚫 Retake</button>
-        <button type="button" onClick={clearPins} disabled={!cur}
-          className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↺ Clear</button>
-        <button type="button" onClick={reread} disabled={busy || !cur}
-          className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
         <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
-        <button type="button" onClick={openRecord} disabled={busy || !cur || phase !== 'saved'}
-          title={phase !== 'saved' ? 'Save a calibration first' : 'Record a take in-page; Stop ships it for calls'}
-          className="px-4 py-2.5 rounded-xl bg-rose-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">⏺ Record</button>
-        <button type="button" onClick={openLive} disabled={busy || !cur || phase !== 'saved'}
-          title={phase !== 'saved' ? 'Save a calibration first — no calibration, no calls' : 'Delayed ref: records 15s segments, shouts OUT ~30s behind reality'}
-          className="px-4 py-2.5 rounded-xl bg-red-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🔴 Live</button>
-        <button type="button" onClick={openAnchor} disabled={busy || !cur || phase !== 'saved'}
-          title={phase !== 'saved' ? 'Save a calibration first — Anchor keeps it locked to the paint' : 'Live viewfinder: lines re-snap to the court every few seconds'}
-          className="px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">⚓ Anchor</button>
-        <button type="button" onClick={() => clipInputRef.current?.click()} disabled={busy || !cur || phase !== 'saved'}
-          title={phase !== 'saved' ? 'Save a calibration first — no calibration, no call' : 'Record/upload a short rally clip from this mount'}
-          className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🎾 Rally</button>
-        <button type="button" onClick={save} disabled={busy || !cur}
-          className="px-4 py-2.5 rounded-xl bg-[#00C853] text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">💾 Save</button>
-        <button type="button" disabled={idxIn < 0 || idxIn >= ids.length - 1}
-          onClick={() => { const n = ids[idxIn + 1]; setCur(n); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS) }}
-          className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">← Older</button>
-        <button type="button" disabled={idxIn <= 0}
-          onClick={() => { const n = ids[idxIn - 1]; setCur(n); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS) }}
-          className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">Newer →</button>
+
+        {/* 1 · CALIBRATE — always the way in */}
+        <div className="flex items-center gap-2 flex-wrap" style={{ opacity: phase === 'saved' ? 0.55 : 1 }}>
+          <span className="text-[11px] font-black text-muted w-20 shrink-0">1 · CALIBRATE</span>
+          <div className="flex items-center gap-1">
+            {(['0.5', '0.7', '1'] as const).map((z) => (
+              <button key={z} type="button" onClick={() => setZoomSel(z)}
+                className="px-2.5 py-1.5 rounded-full text-[12px] font-bold border-2"
+                style={zoomSel === z ? { background: '#7c3aed', borderColor: '#7c3aed', color: '#fff' } : { borderColor: '#7c3aed', color: '#7c3aed' }}>{z}x</button>
+            ))}
+          </div>
+          <button type="button" onClick={openCam} disabled={busy}
+            className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 New shot</button>
+          <button type="button" onClick={openAnchor} disabled={busy}
+            title="Live viewfinder: auto-acquire the court and keep it snapped to the paint"
+            className="px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">⚓ Anchor</button>
+          <span className="flex-1" />
+          <button type="button" disabled={idxIn < 0 || idxIn >= ids.length - 1}
+            onClick={() => { const n = ids[idxIn + 1]; setCur(n); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS); setLabel(null); setPhase('idle') }}
+            className="px-2.5 py-1.5 rounded-lg bg-surface border border-border/50 text-[12px] font-bold disabled:opacity-40">←</button>
+          <button type="button" disabled={idxIn <= 0}
+            onClick={() => { const n = ids[idxIn - 1]; setCur(n); setImgUrl(null); setClaude(null); setYours(DEFAULT_GUESS); setLabel(null); setPhase('idle') }}
+            className="px-2.5 py-1.5 rounded-lg bg-surface border border-border/50 text-[12px] font-bold disabled:opacity-40">→</button>
+        </div>
+
+        {/* 2 · FIX & SAVE — once a capture is in hand */}
+        {cur && phase !== 'idle' && phase !== 'uploading' && (
+          <div className="flex items-center gap-2 flex-wrap" style={{ opacity: phase === 'saved' ? 0.55 : 1 }}>
+            <span className="text-[11px] font-black text-muted w-20 shrink-0">2 · FIX &amp; SAVE</span>
+            <button type="button" onClick={clearPins}
+              className="px-3 py-2.5 rounded-xl bg-surface border border-border/50 text-[13px] font-bold">↺ Clear</button>
+            <button type="button" onClick={reread} disabled={busy}
+              className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
+            <button type="button" onClick={() => setQuality('good')}
+              className="px-3 py-2.5 rounded-xl text-[13px] font-bold border-2"
+              style={label === 'good' ? { background: '#00C853', borderColor: '#00C853', color: '#fff' } : { borderColor: '#00C853', color: '#00C853' }}>👍</button>
+            <button type="button" onClick={() => setQuality('unusable')}
+              className={`px-3 py-2.5 rounded-xl text-[13px] font-bold border-2${recRetake && !label ? ' animate-pulse ring-2 ring-red-400' : ''}`}
+              style={label === 'unusable' ? { background: '#ef4444', borderColor: '#ef4444', color: '#fff' } : { borderColor: '#ef4444', color: '#ef4444' }}>🚫</button>
+            <button type="button" onClick={save} disabled={busy || phase === 'saved'}
+              className="px-5 py-2.5 rounded-xl bg-[#00C853] text-white text-[14px] font-black active:opacity-80 disabled:opacity-50">💾 Save</button>
+          </div>
+        )}
+
+        {/* 3 · PLAY — unlocked by Save */}
+        {phase === 'saved' && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-black text-emerald-600 w-20 shrink-0">3 · PLAY</span>
+            <button type="button" onClick={openRecord} disabled={busy}
+              title="Record a take in-page; Stop ships it for calls"
+              className="px-5 py-3 rounded-xl bg-rose-500 text-white text-[15px] font-black active:opacity-80 disabled:opacity-40">⏺ Record</button>
+            <button type="button" onClick={openLive} disabled={busy}
+              title="Delayed ref: rolling 15s segments, shouts OUT ~30s behind reality"
+              className="px-5 py-3 rounded-xl bg-red-600 text-white text-[15px] font-black active:opacity-80 disabled:opacity-40">🔴 Live</button>
+            <button type="button" onClick={() => clipInputRef.current?.click()} disabled={busy}
+              title="Upload an existing clip from this mount"
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🎾 Upload clip</button>
+          </div>
+        )}
       </div>
       {trackUrl && (
         <div className="fixed inset-0 z-[190] bg-black/90 flex flex-col" onClick={() => setTrackUrl(null)}>
@@ -949,10 +1006,12 @@ export default function LiveSim() {
             <div className="relative" style={{ aspectRatio: `${anchorVid.w}/${anchorVid.h}`, maxWidth: '100%', maxHeight: '100%', width: '100%' }}>
               {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <video ref={anchorVideoRef} playsInline muted className="absolute inset-0 w-full h-full" />
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
-                <path d={courtPath(anchorPins, 1)} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="4.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-                <path d={courtPath(anchorPins, 1)} fill="none" stroke="#39FF14" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-              </svg>
+              {anchorHasFix && (
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                  <path d={courtPath(anchorPins, 1)} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="4.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                  <path d={courtPath(anchorPins, 1)} fill="none" stroke="#39FF14" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                </svg>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-between gap-3 px-4 py-3 bg-black">
