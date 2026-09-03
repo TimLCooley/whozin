@@ -101,6 +101,18 @@ export async function POST(req: NextRequest) {
                                  ...(parts ? { parts } : {}) })
     return NextResponse.json({ ok: true })
   }
+  if (action === 'comment') {
+    // review-page comments: appended to <id>_comments.json, timestamped so the
+    // Mac-side analysis can read Tim's notes next session
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const t = Number(body?.t)
+    const text = String(body?.text ?? '').slice(0, 2000)
+    if (!id || !Number.isFinite(t) || !text.trim()) return NextResponse.json({ error: 'missing id/t/text' }, { status: 400 })
+    const cur = (await readMeta(admin, `${id}_comments`)) ?? { comments: [] }
+    cur.comments = [...(cur.comments ?? []), { t: Math.round(t * 10) / 10, text: text.trim(), at: Date.now() }]
+    await writeMeta(admin, `${id}_comments`, cur)
+    return NextResponse.json({ ok: true, n: cur.comments.length })
+  }
   if (action === 'retry') {
     // re-queue the capture for the Mac's reader (keeps any saved pins)
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
@@ -131,6 +143,15 @@ export async function GET(req: NextRequest) {
   const user = await authed()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const admin = getAdminClient()
+  const review = String(req.nextUrl.searchParams.get('review') ?? '').replace(/[^a-z0-9]/gi, '')
+  if (review) {
+    // review bundle: streamable video + the analysis log + Tim's comments
+    const { data: v } = await admin.storage.from(BUCKET).createSignedUrl(`${review}_review.mp4`, 43200)
+    const log = await readMeta(admin, `${review}_log`)
+    const comments = await readMeta(admin, `${review}_comments`)
+    return NextResponse.json({ id: review, video_url: v?.signedUrl ?? null,
+                               log: log ?? null, comments: comments?.comments ?? [] })
+  }
   const id = String(req.nextUrl.searchParams.get('id') ?? '').replace(/[^a-z0-9]/gi, '')
   if (id) {
     const meta = await readMeta(admin, id)
