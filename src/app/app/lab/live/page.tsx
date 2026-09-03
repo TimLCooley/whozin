@@ -82,6 +82,7 @@ export default function LiveSim() {
   const [clipStatus, setClipStatus] = useState<string>('')
   const [trackUrl, setTrackUrl] = useState<string | null>(null)
   const clipInputRef = useRef<HTMLInputElement>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null) // no capture: gallery picker
   const [recRetake, setRecRetake] = useState(false)
   const [pollNonce, setPollNonce] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -917,6 +918,7 @@ export default function LiveSim() {
       <div className="px-3 pb-3 pt-1 flex flex-col gap-1.5">
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
+        <input ref={uploadInputRef} type="file" accept="video/*" className="hidden" onChange={onClipFile} />
 
         {/* camera note — compact and dismissible; the native camcorder path
             covers Record either way, so this never needs to scream */}
@@ -988,8 +990,8 @@ export default function LiveSim() {
             <button type="button" onClick={openLive} disabled={busy}
               title="Delayed ref: rolling 15s segments, shouts OUT ~30s behind reality"
               className="px-5 py-3 rounded-xl bg-red-600 text-white text-[15px] font-black active:opacity-80 disabled:opacity-40">🔴 Live</button>
-            <button type="button" onClick={() => clipInputRef.current?.click()} disabled={busy}
-              title="Upload an existing clip from this mount"
+            <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={busy}
+              title="Upload an existing clip from your gallery"
               className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🎾 Upload clip</button>
           </div>
         )}
