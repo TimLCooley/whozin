@@ -324,6 +324,41 @@ export default function LiveSim() {
     tick()
   }
 
+  // Shared camera opener for Anchor/Live/Record: try the ideal constraints,
+  // then fall back progressively — a too-strict constraint set must never be
+  // the reason a feature "needs Chrome" when we're already on Chrome.
+  async function getCamStream(): Promise<MediaStream> {
+    const attempts: MediaTrackConstraints[] = []
+    if (zoomSel !== '1') {
+      try {
+        const devs = await navigator.mediaDevices.enumerateDevices()
+        const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
+        if (uw) attempts.push({ deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } })
+      } catch { /* labels hidden until permission granted */ }
+    }
+    attempts.push({ facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } })
+    attempts.push({ facingMode: 'environment' })
+    attempts.push(true as unknown as MediaTrackConstraints)
+    let lastErr: unknown = null
+    for (const video of attempts) {
+      try { return await navigator.mediaDevices.getUserMedia({ video, audio: false }) } catch (err) {
+        lastErr = err
+        // permission denials won't change on retry — stop and explain
+        const name = (err as DOMException)?.name
+        if (name === 'NotAllowedError' || name === 'SecurityError') break
+      }
+    }
+    throw lastErr
+  }
+  function camErrMsg(err: unknown): string {
+    const name = (err as DOMException)?.name ?? String(err)
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return 'Camera is BLOCKED for whozin.io — in Chrome tap the icon left of the address bar → Permissions → Camera → Allow, then reload'
+    }
+    if (name === 'NotReadableError') return 'Camera is busy — close other camera apps/tabs and retry'
+    return `Camera failed: ${name}`
+  }
+
   // ⚓ Anchor — the AR design's runtime half, buildable today: live viewfinder
   // with the calibration's court lines projected on it; a background loop
   // re-snaps the lines to the paint every cycle (bump the tripod -> it
@@ -341,15 +376,7 @@ export default function LiveSim() {
   async function openAnchor() {
     if (busy) return
     try {
-      let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-      if (zoomSel !== '1') {
-        try {
-          const devs = await navigator.mediaDevices.enumerateDevices()
-          const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
-          if (uw) video = { deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-        } catch { /* default lens */ }
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      const stream = await getCamStream()
       anchorStreamRef.current = stream
       anchorPinsRef.current = yours
       setAnchorPins(yours)
@@ -366,7 +393,7 @@ export default function LiveSim() {
         setTimeout(anchorCycle, 1500) // let exposure settle before the first snap
       }, 50)
     } catch (err) {
-      setStatus(`Anchor needs the live camera (${(err as DOMException)?.name ?? err}) — use Chrome if the app blocks it`)
+      setStatus(`⚓ ${camErrMsg(err)}`)
     }
   }
 
@@ -481,15 +508,7 @@ export default function LiveSim() {
   async function openLive() {
     if (busy || !cur) return
     try {
-      let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-      if (zoomSel !== '1') {
-        try {
-          const devs = await navigator.mediaDevices.enumerateDevices()
-          const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
-          if (uw) video = { deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-        } catch { /* default lens */ }
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      const stream = await getCamStream()
       liveStreamRef.current = stream
       const track = stream.getVideoTracks()[0]
       type TorchCaps = MediaTrackCapabilities & { torch?: boolean }
@@ -508,7 +527,7 @@ export default function LiveSim() {
         recordSegment()
       }, 60)
     } catch (err) {
-      setStatus(`Live needs the camera (${(err as DOMException)?.name ?? err}) — use Chrome if the app blocks it`)
+      setStatus(`🔴 ${camErrMsg(err)}`)
     }
   }
 
@@ -587,15 +606,7 @@ export default function LiveSim() {
   async function openRecord() {
     if (busy || !cur) return
     try {
-      let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-      if (zoomSel !== '1') {
-        try {
-          const devs = await navigator.mediaDevices.enumerateDevices()
-          const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
-          if (uw) video = { deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
-        } catch { /* default lens */ }
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      const stream = await getCamStream()
       recStreamRef.current = stream
       setRecElapsed(0); setRecOn(true)
       setTimeout(() => {
@@ -623,7 +634,7 @@ export default function LiveSim() {
         }), 1000)
       }, 60)
     } catch (err) {
-      setStatus(`Record needs the camera (${(err as DOMException)?.name ?? err}) — use Chrome if the app blocks it`)
+      setStatus(`⏺ ${camErrMsg(err)}`)
     }
   }
   function stopRecordUi() {
