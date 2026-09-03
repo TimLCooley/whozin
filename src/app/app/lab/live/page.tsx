@@ -334,6 +334,36 @@ export default function LiveSim() {
     tick()
   }
 
+  // Camera permission handling: a site can't open Chrome's settings, but it
+  // CAN trigger the official ask-dialog from a button tap (if not hard-blocked)
+  // and it can KNOW which state it's in via the Permissions API.
+  const [camPerm, setCamPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown')
+  useEffect(() => {
+    if (allowed !== true) return
+    let ps: PermissionStatus | null = null
+    ;(async () => {
+      try {
+        ps = await navigator.permissions.query({ name: 'camera' as PermissionName })
+        setCamPerm(ps.state)
+        ps.onchange = () => { if (ps) setCamPerm(ps.state) }
+      } catch { setCamPerm('unknown') }
+    })()
+    return () => { if (ps) ps.onchange = null }
+  }, [allowed])
+  async function grantCam() {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: true })
+      s.getTracks().forEach((t) => t.stop())
+      camBlockedRef.current = false
+      setCamPerm('granted')
+      setStatus('🎥 Camera enabled ✓ — all camera features unlocked')
+    } catch (err) {
+      const name = (err as DOMException)?.name
+      if (name === 'NotAllowedError' || name === 'SecurityError') setCamPerm('denied')
+      setStatus(camErrMsg(err))
+    }
+  }
+
   // Shared camera opener for Anchor/Live/Record: try the ideal constraints,
   // then fall back progressively — a too-strict constraint set must never be
   // the reason a feature "needs Chrome" when we're already on Chrome.
@@ -882,6 +912,29 @@ export default function LiveSim() {
       <div className="px-3 pb-3 pt-1 flex flex-col gap-1.5">
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
+
+        {/* camera permission gate — fix this first, everything needs it */}
+        {camPerm !== 'granted' && (
+          <div className="flex items-center gap-2 flex-wrap rounded-xl px-3 py-2"
+            style={{ background: camPerm === 'denied' ? 'rgba(239,68,68,0.12)' : 'rgba(8,145,178,0.10)' }}>
+            {camPerm === 'denied' ? (
+              <>
+                <span className="text-[12px] font-bold text-red-600">
+                  🎥 Chrome has the camera BLOCKED for whozin.io. Fix: tap <span className="font-black">⋮</span> (three dots, top-right)
+                  → Settings → Site settings → Camera → whozin.io → Allow. Then come back here.
+                </span>
+                <button type="button" onClick={grantCam}
+                  className="px-3 py-2 rounded-xl bg-red-600 text-white text-[13px] font-bold active:opacity-80">↻ I fixed it — try again</button>
+              </>
+            ) : (
+              <>
+                <span className="text-[12px] font-bold text-cyan-700">Camera permission needed — Chrome will ask, tap Allow:</span>
+                <button type="button" onClick={grantCam}
+                  className="px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-[14px] font-black active:opacity-80">🎥 Enable camera</button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* 1 · CALIBRATE — always the way in */}
         <div className="flex items-center gap-2 flex-wrap" style={{ opacity: phase === 'saved' ? 0.55 : 1 }}>
