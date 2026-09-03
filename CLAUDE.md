@@ -27,7 +27,10 @@
 - **API URL**: https://ooqdkonjcztjankkvejh.supabase.co
 - **Dashboard**: https://supabase.com/dashboard/project/ooqdkonjcztjankkvejh
 - **Auth providers config**: https://supabase.com/dashboard/project/ooqdkonjcztjankkvejh/auth/providers
-- The `SUPABASE_ACCESS_TOKEN` env var is set in `~/.bashrc`. If Supabase CLI commands fail with "Unauthorized", the token has expired — generate a new one at https://supabase.com/dashboard/account/tokens and update `~/.bashrc`.
+- The `SUPABASE_ACCESS_TOKEN` env var is set in `~/.bashrc` and `~/.zshrc`. Regenerated Sep 2 2026 with a 90-day expiry (**expires ~Dec 1 2026** — Supabase no longer offers non-expiring tokens). If Supabase CLI/management-API calls fail with "Unauthorized", generate a new one at https://supabase.com/dashboard/account/tokens and update both rc files.
+- Storage global file size limit raised to **5GB** (Sep 2 2026) for whole-match video uploads to the `lab-live` bucket.
+- Auth session settings (Sep 2 2026): refresh-token reuse interval 60s (was 10s — frozen-tab rotation races were logging Tim out mid-recording), leaked-password protection ON, no session timebox/inactivity limits, single-session enforcement OFF.
+- RLS enabled (Sep 2 2026) on server-only tables: `whozin_otp_codes`, `whozin_marketing_ideas`, `integration_health`, `app_builds`, `pending_auth_sessions`, `whozin_saved_locations` — all accessed exclusively via the service-role client, which bypasses RLS. Do NOT query these from browser clients; add policies first if that ever becomes necessary.
 
 ## Platform Credentials & Identifiers
 
