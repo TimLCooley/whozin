@@ -300,26 +300,40 @@ export default function LiveSim() {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f || !cur || busy) return
-    if (f.size > 700_000_000) { setClipStatus('Over 700MB — trim it down a bit first'); return }
+    await shipVideo(f)
+  }
+  async function shipVideo(f: Blob) {
+    if (!cur || busy) return
+    if (f.size > 8_000_000_000) { setClipStatus('Over 8GB — that is beyond even us. Trim it first'); return }
     if (f.size > 40_000_000) {
-      // big video: signed DIRECT upload to the bucket — no API body cap
-      setBusy(true); setClipStatus(`Uploading ${Math.round(f.size / 1e6)}MB video…`); setTrackUrl(null)
+      // big video: slice into ~38MB parts, each direct-uploaded to the bucket
+      // (per-object limit), reassembled byte-for-byte on the Mac
+      const PART = 38_000_000
+      const nParts = Math.ceil(f.size / PART)
+      setBusy(true); setTrackUrl(null)
+      setClipStatus(`Uploading ${Math.round(f.size / 1e6)}MB in ${nParts} parts…`)
       try {
-        const u = await fetch('/api/lab/live', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'clip_url', calib: cur }),
-        }).then((x) => x.json())
-        if (!u?.id || !u?.token) { setClipStatus(`Upload failed: ${u?.error ?? '?'}`); return }
-        const { error } = await createClient().storage.from('lab-live')
-          .uploadToSignedUrl(u.path, u.token, f, { contentType: 'video/mp4' })
-        if (error) { setClipStatus(`Upload failed: ${error.message}`); return }
+        let id: string | null = null
+        for (let i = 0; i < nParts; i++) {
+          const u = await fetch('/api/lab/live', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'clip_url', calib: cur, id, part: i }),
+          }).then((x) => x.json())
+          if (!u?.id || !u?.token) { setClipStatus(`Upload failed at part ${i + 1}: ${u?.error ?? '?'}`); return }
+          id = u.id
+          const slice = f.slice(i * PART, Math.min(f.size, (i + 1) * PART))
+          const { error } = await createClient().storage.from('lab-live')
+            .uploadToSignedUrl(u.path, u.token, slice, { contentType: 'application/octet-stream' })
+          if (error) { setClipStatus(`Upload failed at part ${i + 1}: ${error.message}`); return }
+          setClipStatus(`Uploading… part ${i + 1}/${nParts} done`)
+        }
         await fetch('/api/lab/live', {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'clip_meta', id: u.id, calib: cur }),
+          body: JSON.stringify({ action: 'clip_meta', id, calib: cur, parts: nParts }),
         })
-        setClipId(u.id)
+        setClipId(id)
         setClipStatus('Mac is scanning the whole video…')
-        pollClip(u.id)
+        pollClip(id!)
       } catch (err) { setClipStatus(`Upload failed: ${err}`) } finally { setBusy(false) }
       return
     }
@@ -641,6 +655,7 @@ export default function LiveSim() {
     rec.start()
     setLiveMsg(`🔴 LIVE — recording segment ${seg}…`)
     setTimeout(() => { if (rec.state !== 'inactive') rec.stop() }, 15_000)
+    // (live segments stay short — the OUT cue is only useful near-real-time)
   }
 
   async function shipSegment(seg: number, blob: Blob) {
@@ -719,7 +734,9 @@ export default function LiveSim() {
         }
         rec.start()
         recTimerRef.current = setInterval(() => setRecElapsed((s) => {
-          if (s + 1 >= 50 && rec.state !== 'inactive') rec.stop() // relay size cap
+          // whole-session takes welcome: parts upload handles any size.
+          // 40min safety stop protects phone memory
+          if (s + 1 >= 2400 && rec.state !== 'inactive') rec.stop()
           return s + 1
         }), 1000)
       }, 60)
@@ -742,19 +759,7 @@ export default function LiveSim() {
     else stopRecordUi()
   }
   async function shipRecording(blob: Blob) {
-    setBusy(true); setClipStatus('Uploading recording…'); setTrackUrl(null)
-    try {
-      const buf = await blob.arrayBuffer()
-      let bin = ''
-      const bytes = new Uint8Array(buf)
-      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-      const r = await fetch('/api/lab/live', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'clip', calib: cur, data: btoa(bin) }),
-      }).then((x) => x.json())
-      if (r?.id) { setClipId(r.id); setClipStatus('Mac is calling the rally…'); pollClip(r.id) }
-      else setClipStatus(`Upload failed: ${r?.error ?? '?'}`)
-    } catch (err) { setClipStatus(`Recording failed: ${err}`) } finally { setBusy(false) }
+    await shipVideo(blob) // parts path for long takes, JSON path for short ones
   }
 
   function clearPins() { setYours(DEFAULT_GUESS); if (phase === 'saved') setPhase(claude ? 'ready' : 'manual') }
@@ -1037,7 +1042,7 @@ export default function LiveSim() {
               </svg>
             </div>
             <span className="absolute left-3 top-3 px-3 py-1.5 rounded-full text-[13px] font-bold text-white bg-rose-600 animate-pulse">
-              ⏺ REC {Math.floor(recElapsed / 60)}:{String(recElapsed % 60).padStart(2, '0')}{recElapsed >= 40 ? ' · auto-stop at 0:50' : ''}</span>
+              ⏺ REC {Math.floor(recElapsed / 60)}:{String(recElapsed % 60).padStart(2, '0')}</span>
           </div>
           <div className="flex items-center justify-center py-4 bg-black">
             <button type="button" onClick={stopRecord}

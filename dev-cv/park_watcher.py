@@ -39,10 +39,18 @@ def put_meta(i, meta):
         headers={'Content-Type': 'application/json', 'x-upsert': 'true', 'cache-control': 'no-store'})
 
 def process_clip(i, meta):
-    clip = req('GET', f'/storage/v1/object/lab-live/{i}.mp4', raw=True)
     os.makedirs(f'{WT}/public/sim/live', exist_ok=True)
     cp = f'{WT}/public/sim/live/{i}.mp4'
-    open(cp, 'wb').write(clip)
+    parts = meta.get('parts')
+    if parts:
+        # multi-GB videos arrive as ~38MB slices — byte-concat restores the file
+        with open(cp, 'wb') as out:
+            for k in range(int(parts)):
+                print(f'CLIP {i}: fetching part {k + 1}/{parts}', flush=True)
+                out.write(req('GET', f'/storage/v1/object/lab-live/{i}.part{k}', raw=True))
+    else:
+        clip = req('GET', f'/storage/v1/object/lab-live/{i}.mp4', raw=True)
+        open(cp, 'wb').write(clip)
     calib_pins = None
     cid = meta.get('calib')
     if cid:

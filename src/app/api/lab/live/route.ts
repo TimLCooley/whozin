@@ -78,20 +78,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id })
   }
   if (action === 'clip_url') {
-    // big videos skip the JSON-body path: signed direct upload to the bucket
+    // big videos skip the JSON-body path: signed direct upload to the bucket.
+    // Multi-GB videos ship as ~38MB parts (per-object storage limit) that the
+    // Mac reassembles byte-for-byte: pass id+part for parts 1..n-1.
     const calib = String(body?.calib ?? '').replace(/[^a-z0-9]/gi, '')
     if (!calib) return NextResponse.json({ error: 'no calibration bound' }, { status: 400 })
-    const id = `clip${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-    const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(`${id}.mp4`)
+    const givenId = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const id = givenId || `clip${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    const part = Number.isInteger(body?.part) && body.part >= 0 && body.part < 400 ? body.part : null
+    const path = part !== null ? `${id}.part${part}` : `${id}.mp4`
+    const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(path)
     if (error || !data) return NextResponse.json({ error: error?.message ?? 'no url' }, { status: 500 })
-    return NextResponse.json({ id, token: data.token, path: `${id}.mp4` })
+    return NextResponse.json({ id, token: data.token, path })
   }
   if (action === 'clip_meta') {
     // client finished the direct upload: activate the clip for the watcher
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
     const calib = String(body?.calib ?? '').replace(/[^a-z0-9]/gi, '')
     if (!id || !calib) return NextResponse.json({ error: 'missing id/calib' }, { status: 400 })
-    await writeMeta(admin, id, { type: 'clip', calib, status: 'pending', created: Date.now(), user: user.id })
+    const parts = Number.isInteger(body?.parts) && body.parts > 0 && body.parts < 400 ? body.parts : null
+    await writeMeta(admin, id, { type: 'clip', calib, status: 'pending', created: Date.now(), user: user.id,
+                                 ...(parts ? { parts } : {}) })
     return NextResponse.json({ ok: true })
   }
   if (action === 'retry') {
