@@ -51,7 +51,7 @@ def process_clip(i, meta):
     outp = f'{WT}/public/sim/live/{i}_track.jpg'
     p = subprocess.run(['python3', f'{WT}/dev-cv/clip_call.py'],
                        input=json.dumps({'clip': cp, 'calib': calib_pins, 'out': outp}),
-                       capture_output=True, text=True, cwd=f'{WT}/dev-cv', timeout=600)
+                       capture_output=True, text=True, cwd=f'{WT}/dev-cv', timeout=2400)
     try:
         r = json.loads(p.stdout.strip().splitlines()[-1])
     except Exception:

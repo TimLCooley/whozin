@@ -77,6 +77,23 @@ export async function POST(req: NextRequest) {
     await writeMeta(admin, id, { type: 'clip', calib, status: 'pending', created: Date.now(), user: user.id })
     return NextResponse.json({ id })
   }
+  if (action === 'clip_url') {
+    // big videos skip the JSON-body path: signed direct upload to the bucket
+    const calib = String(body?.calib ?? '').replace(/[^a-z0-9]/gi, '')
+    if (!calib) return NextResponse.json({ error: 'no calibration bound' }, { status: 400 })
+    const id = `clip${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(`${id}.mp4`)
+    if (error || !data) return NextResponse.json({ error: error?.message ?? 'no url' }, { status: 500 })
+    return NextResponse.json({ id, token: data.token, path: `${id}.mp4` })
+  }
+  if (action === 'clip_meta') {
+    // client finished the direct upload: activate the clip for the watcher
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const calib = String(body?.calib ?? '').replace(/[^a-z0-9]/gi, '')
+    if (!id || !calib) return NextResponse.json({ error: 'missing id/calib' }, { status: 400 })
+    await writeMeta(admin, id, { type: 'clip', calib, status: 'pending', created: Date.now(), user: user.id })
+    return NextResponse.json({ ok: true })
+  }
   if (action === 'retry') {
     // re-queue the capture for the Mac's reader (keeps any saved pins)
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')

@@ -300,7 +300,29 @@ export default function LiveSim() {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f || !cur || busy) return
-    if (f.size > 45_000_000) { setClipStatus('Clip too big — keep it under ~15s'); return }
+    if (f.size > 700_000_000) { setClipStatus('Over 700MB — trim it down a bit first'); return }
+    if (f.size > 40_000_000) {
+      // big video: signed DIRECT upload to the bucket — no API body cap
+      setBusy(true); setClipStatus(`Uploading ${Math.round(f.size / 1e6)}MB video…`); setTrackUrl(null)
+      try {
+        const u = await fetch('/api/lab/live', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'clip_url', calib: cur }),
+        }).then((x) => x.json())
+        if (!u?.id || !u?.token) { setClipStatus(`Upload failed: ${u?.error ?? '?'}`); return }
+        const { error } = await createClient().storage.from('lab-live')
+          .uploadToSignedUrl(u.path, u.token, f, { contentType: 'video/mp4' })
+        if (error) { setClipStatus(`Upload failed: ${error.message}`); return }
+        await fetch('/api/lab/live', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'clip_meta', id: u.id, calib: cur }),
+        })
+        setClipId(u.id)
+        setClipStatus('Mac is scanning the whole video…')
+        pollClip(u.id)
+      } catch (err) { setClipStatus(`Upload failed: ${err}`) } finally { setBusy(false) }
+      return
+    }
     setBusy(true); setClipStatus('Uploading clip…'); setTrackUrl(null)
     try {
       const buf = await f.arrayBuffer()
