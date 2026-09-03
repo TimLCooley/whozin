@@ -77,7 +77,9 @@ export default function LiveSim() {
   const [status, setStatus] = useState('Take a shot to start')
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'reading' | 'ready' | 'manual' | 'saved'>('idle')
   const [label, setLabel] = useState<'good' | 'unusable' | null>(null)
-  const [zoomSel, setZoomSel] = useState<'0.5' | '0.7' | '1'>('1')
+  // camera doctrine: always 0.5x ultra-wide — the only lens that fits a court
+  // from behind the baseline (pills removed Sep 2026; revisit if ever needed)
+  const zoomSel = '0.5' as const
   const [clipId, setClipId] = useState<string | null>(null)
   const [clipStatus, setClipStatus] = useState<string>('')
   const [trackUrl, setTrackUrl] = useState<string | null>(null)
@@ -982,15 +984,8 @@ export default function LiveSim() {
         {/* 1 · CALIBRATE — always the way in */}
         <div className="flex items-center gap-2 flex-wrap" style={{ opacity: phase === 'saved' ? 0.55 : 1 }}>
           <span className="text-[11px] font-black text-muted w-20 shrink-0">1 · CALIBRATE</span>
-          <div className="flex items-center gap-1">
-            {(['0.5', '0.7', '1'] as const).map((z) => (
-              <button key={z} type="button" onClick={() => setZoomSel(z)}
-                className="px-2.5 py-1.5 rounded-full text-[12px] font-bold border-2"
-                style={zoomSel === z ? { background: '#7c3aed', borderColor: '#7c3aed', color: '#fff' } : { borderColor: '#7c3aed', color: '#7c3aed' }}>{z}x</button>
-            ))}
-          </div>
           <button type="button" onClick={openCam} disabled={busy}
-            className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 New shot</button>
+            className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">📷 Still</button>
           <button type="button" onClick={openAnchor} disabled={busy}
             title="Live viewfinder: auto-acquire the court and keep it snapped to the paint"
             className="px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-50">⚓ Anchor</button>
