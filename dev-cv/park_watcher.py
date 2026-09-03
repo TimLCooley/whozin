@@ -49,19 +49,20 @@ def process_clip(i, meta):
         cm = get_meta(cid) or {}
         calib_pins = cm.get('tim_pins') or cm.get('claude_pins')
     outp = f'{WT}/public/sim/live/{i}_track.jpg'
-    p = subprocess.run(['python3', f'{WT}/dev-cv/ball_track.py'],
+    p = subprocess.run(['python3', f'{WT}/dev-cv/clip_call.py'],
                        input=json.dumps({'clip': cp, 'calib': calib_pins, 'out': outp}),
                        capture_output=True, text=True, cwd=f'{WT}/dev-cv', timeout=600)
     try:
         r = json.loads(p.stdout.strip().splitlines()[-1])
     except Exception:
         r = {'error': p.stdout[-120:] or p.stderr[-120:]}
-    if 'track' in r:
+    if 'calls' in r:
         req('PUT', f'/storage/v1/object/lab-live/{i}_track.jpg', open(outp, 'rb').read(),
             headers={'Content-Type': 'image/jpeg', 'x-upsert': 'true', 'cache-control': 'no-store'})
-        meta.update(status='done', frames=r['frames'], track_len=len(r['track']),
-                    n_tracks=r.get('n_tracks'), track=r['track'][:400], read_at=time.time())
-        print(f"CLIP {i}: tracked {len(r['track'])} pts over {r['frames']} frames ({r.get('n_tracks')} tracks)", flush=True)
+        meta.update(status='done', frames=r['frames'], track_len=r['bounces'],
+                    n_tracks=r.get('n_tracks'), verdict=r.get('verdict'),
+                    calls=r['calls'][:40], read_at=time.time())
+        print(f"CLIP {i}: {r['bounces']} bounces, verdict: {r.get('verdict')}", flush=True)
     else:
         meta.update(status='error', claude_error=r.get('error', '?'), read_at=time.time())
         print(f"CLIP {i}: error {r.get('error','?')[:60]}", flush=True)

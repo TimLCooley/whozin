@@ -172,10 +172,19 @@ def find_bounces(tracks, movers, calib, gfx, dets):
                 if np.hypot(x - bx, (y - by_) * 0.5625) < 0.045: n += 1
         return n
 
+    # adaptive loiter threshold: measure the video's OWN background density
+    # (broadcast noise can exceed a fixed count everywhere) — a loiterer must
+    # be well above what any random spot sees
+    sample = dets[::max(1, len(dets) // 120)][:120]
+    base = float(np.median([loiter_count(f, x, y) for (f, x, y) in sample])) if sample else 0
+    loiter_thr = max(30.0, 3.0 * base)
+    print(f'loiter baseline {base:.0f} -> threshold {loiter_thr:.0f}', flush=True)
+
     bally = [t for t in tracks if is_bally(t)]
     by_start = {}
     for t in bally: by_start.setdefault(t[0][0], []).append(t)
     joins = []
+    vetoed = []   # kept for debugging: what we rejected and why
     n_hit_veto = n_phys_veto = n_edge_veto = n_net_veto = n_gfx_veto = n_loiter_veto = 0
     for A in bally:
         vxa, vya = vel(A, head=False)
@@ -189,19 +198,22 @@ def find_bounces(tracks, movers, calib, gfx, dets):
                 vxb, vyb = vel(B, head=True)
                 if vyb > -0.001: continue            # must start ascending
                 bx, by_ = (xe + xb) / 2, (ye + yb) / 2
+                def rej(why):
+                    vetoed.append({'frame': fe, 'bounce': (bx, by_), 'why': why,
+                                   'w': len(A) + len(B)})
                 # edge veto: track ends at the frame edge are balls leaving
                 # view or paddles poking in — not observable bounces
                 if not (0.04 < bx < 0.96 and 0.04 < by_ < 0.95):
-                    n_edge_veto += 1; continue
+                    n_edge_veto += 1; rej('edge'); continue
                 if hot[min(gh - 1, int(by_ * gh)), min(gw - 1, int(bx * gw))]:
                     n_gfx_veto += 1; continue
                 # net veto: a descent->ascent AT the net band is a net cord
                 # or a ball passing behind the mesh, not a ground bounce
                 ny = net_y_at(calib, bx)
                 if ny - 0.10 < by_ < ny + 0.02:
-                    n_net_veto += 1; continue
-                if loiter_count(fe, bx, by_) > 25:
-                    n_loiter_veto += 1; continue
+                    n_net_veto += 1; rej('net'); continue
+                if loiter_count(fe, bx, by_) > loiter_thr:
+                    n_loiter_veto += 1; rej('loiter'); continue
                 # geography veto: hits happen AT players
                 near_player = False
                 for fq in range(fe - 2, fe + 3):
@@ -210,17 +222,17 @@ def find_bounces(tracks, movers, calib, gfx, dets):
                             near_player = True; break
                     if near_player: break
                 if near_player:
-                    n_hit_veto += 1; continue
+                    n_hit_veto += 1; rej('near-player'); continue
                 # physics veto: a bounce loses vertical speed, keeps horizontal
                 if abs(vyb) > 0.95 * abs(vya):
-                    n_phys_veto += 1; continue
+                    n_phys_veto += 1; rej('physics-vy'); continue
                 if abs(vxa) > 2.5 / 960 and (vxb * vxa < 0 or abs(vxb) > 1.8 * abs(vxa)):
-                    n_phys_veto += 1; continue
+                    n_phys_veto += 1; rej('physics-vx'); continue
                 joins.append({'frame': fe, 'bounce': (bx, by_), 'w': len(A) + len(B)})
     print(f'{len(joins)} bounces kept ({n_hit_veto} hit, {n_phys_veto} physics, '
           f'{n_edge_veto} edge, {n_net_veto} net, {n_gfx_veto} graphics, '
           f'{n_loiter_veto} loiter vetoed)', flush=True)
-    return joins
+    return joins, vetoed
 
 def main():
     req = json.load(sys.stdin)
@@ -232,7 +244,7 @@ def main():
     print('pass 2: linking…', flush=True)
     tracks = link_all(dets)
     print(f'pass 2 done: {len(tracks)} tracks', flush=True)
-    joins = find_bounces(tracks, movers, calib, graphics_mask(dets, n_frames), dets)
+    joins, _ = find_bounces(tracks, movers, calib, graphics_mask(dets, n_frames), dets)
     cap = cv2.VideoCapture(req['video'])
     W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)); H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     events = []
