@@ -338,6 +338,7 @@ export default function LiveSim() {
   // CAN trigger the official ask-dialog from a button tap (if not hard-blocked)
   // and it can KNOW which state it's in via the Permissions API.
   const [camPerm, setCamPerm] = useState<'granted' | 'prompt' | 'denied' | 'unknown'>('unknown')
+  const [permDismissed, setPermDismissed] = useState(false)
   useEffect(() => {
     if (allowed !== true) return
     let ps: PermissionStatus | null = null
@@ -702,7 +703,7 @@ export default function LiveSim() {
     } catch (err) {
       // browser camera unavailable -> the phone's own camcorder still works:
       // the capture input opens the native video recorder and ships on OK
-      setStatus(`⏺ Browser camera blocked (${(err as DOMException)?.name ?? err}) — opening the phone's camcorder instead: record, hit OK, it uploads itself`)
+      setStatus('⏺ Using the phone’s camcorder — record, then hit OK')
       clipInputRef.current?.click()
     }
   }
@@ -848,7 +849,7 @@ export default function LiveSim() {
         {clipStatus && (
           <span className="px-3 py-1 rounded-full text-[12px] font-bold text-white bg-emerald-600 truncate">{clipStatus}</span>
         )}
-        {metric && (
+        {metric && (phase === 'ready' || phase === 'manual') && (
           <span className="px-3 py-1 rounded-full text-white text-[12px] font-bold whitespace-nowrap"
             style={{ background: metric.avg <= 5 ? '#00C853' : metric.avg <= 15 ? '#f59e0b' : '#ef4444' }}>
             avg {metric.avg}px · worst {metric.max}px
@@ -917,26 +918,20 @@ export default function LiveSim() {
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
         <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
 
-        {/* camera permission gate — fix this first, everything needs it */}
-        {camPerm !== 'granted' && (
-          <div className="flex items-center gap-2 flex-wrap rounded-xl px-3 py-2"
-            style={{ background: camPerm === 'denied' ? 'rgba(239,68,68,0.12)' : 'rgba(8,145,178,0.10)' }}>
-            {camPerm === 'denied' ? (
-              <>
-                <span className="text-[12px] font-bold text-red-600">
-                  🎥 Chrome has the camera BLOCKED for whozin.io. Fix: tap <span className="font-black">⋮</span> (three dots, top-right)
-                  → Settings → Site settings → Camera → whozin.io → Allow. Then come back here.
-                </span>
-                <button type="button" onClick={grantCam}
-                  className="px-3 py-2 rounded-xl bg-red-600 text-white text-[13px] font-bold active:opacity-80">↻ I fixed it — try again</button>
-              </>
-            ) : (
-              <>
-                <span className="text-[12px] font-bold text-cyan-700">Camera permission needed — Chrome will ask, tap Allow:</span>
-                <button type="button" onClick={grantCam}
-                  className="px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-[14px] font-black active:opacity-80">🎥 Enable camera</button>
-              </>
-            )}
+        {/* camera note — compact and dismissible; the native camcorder path
+            covers Record either way, so this never needs to scream */}
+        {camPerm !== 'granted' && !permDismissed && (
+          <div className="flex items-center gap-2 flex-wrap rounded-lg px-2.5 py-1.5 bg-surface border border-border/40">
+            <span className="text-[11px] text-muted">
+              {camPerm === 'denied'
+                ? '🎥 Browser camera blocked — Record uses the phone’s camcorder instead. Anchor/Live need it unblocked.'
+                : '🎥 Camera permission not granted yet.'}
+            </span>
+            <button type="button" onClick={grantCam}
+              className="px-2.5 py-1 rounded-lg bg-cyan-600 text-white text-[11px] font-bold active:opacity-80">
+              {camPerm === 'denied' ? '↻ Retry' : 'Enable'}</button>
+            <button type="button" onClick={() => setPermDismissed(true)}
+              className="px-2 py-1 rounded-lg text-[11px] font-bold text-muted">✕</button>
           </div>
         )}
 
