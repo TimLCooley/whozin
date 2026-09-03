@@ -573,6 +573,86 @@ export default function LiveSim() {
     setStatus('Live session ended — verdicts stay in the feed above')
   }
 
+  // ⏺ Record — manual take: start recording in-page, hit stop, the clip ships
+  // through the clip-call pipeline and the verdict overlay comes back. The
+  // recorder auto-stops at 50s to stay under the 45MB relay cap.
+  const recVideoRef = useRef<HTMLVideoElement>(null)
+  const recStreamRef = useRef<MediaStream | null>(null)
+  const recRecRef = useRef<MediaRecorder | null>(null)
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [recOn, setRecOn] = useState(false)
+  const [recElapsed, setRecElapsed] = useState(0)
+  const [recVid, setRecVid] = useState({ w: 16, h: 9 })
+
+  async function openRecord() {
+    if (busy || !cur) return
+    try {
+      let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+      if (zoomSel !== '1') {
+        try {
+          const devs = await navigator.mediaDevices.enumerateDevices()
+          const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
+          if (uw) video = { deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        } catch { /* default lens */ }
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      recStreamRef.current = stream
+      setRecElapsed(0); setRecOn(true)
+      setTimeout(() => {
+        const v = recVideoRef.current
+        if (v) {
+          v.srcObject = stream
+          v.onloadedmetadata = () => setRecVid({ w: v.videoWidth || 16, h: v.videoHeight || 9 })
+          v.play().catch(() => {})
+        }
+        const mime = ['video/mp4', 'video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m))
+        const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 })
+        recRecRef.current = rec
+        const chunks: Blob[] = []
+        rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+        rec.onstop = () => {
+          const blob = new Blob(chunks, { type: rec.mimeType })
+          stopRecordUi()
+          if (blob.size > 20_000) shipRecording(blob)
+          else setClipStatus('Recording too short — try again')
+        }
+        rec.start()
+        recTimerRef.current = setInterval(() => setRecElapsed((s) => {
+          if (s + 1 >= 50 && rec.state !== 'inactive') rec.stop() // relay size cap
+          return s + 1
+        }), 1000)
+      }, 60)
+    } catch (err) {
+      setStatus(`Record needs the camera (${(err as DOMException)?.name ?? err}) — use Chrome if the app blocks it`)
+    }
+  }
+  function stopRecordUi() {
+    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null }
+    recStreamRef.current?.getTracks().forEach((t) => t.stop())
+    recStreamRef.current = null
+    setRecOn(false)
+  }
+  function stopRecord() {
+    const rec = recRecRef.current
+    if (rec && rec.state !== 'inactive') rec.stop() // onstop ships the clip
+    else stopRecordUi()
+  }
+  async function shipRecording(blob: Blob) {
+    setBusy(true); setClipStatus('Uploading recording…'); setTrackUrl(null)
+    try {
+      const buf = await blob.arrayBuffer()
+      let bin = ''
+      const bytes = new Uint8Array(buf)
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      const r = await fetch('/api/lab/live', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'clip', calib: cur, data: btoa(bin) }),
+      }).then((x) => x.json())
+      if (r?.id) { setClipId(r.id); setClipStatus('Mac is calling the rally…'); pollClip(r.id) }
+      else setClipStatus(`Upload failed: ${r?.error ?? '?'}`)
+    } catch (err) { setClipStatus(`Recording failed: ${err}`) } finally { setBusy(false) }
+  }
+
   function clearPins() { setYours(DEFAULT_GUESS); if (phase === 'saved') setPhase(claude ? 'ready' : 'manual') }
   async function reread() {
     if (!cur || busy) return
@@ -773,6 +853,9 @@ export default function LiveSim() {
         <button type="button" onClick={reread} disabled={busy || !cur}
           className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
         <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
+        <button type="button" onClick={openRecord} disabled={busy || !cur || phase !== 'saved'}
+          title={phase !== 'saved' ? 'Save a calibration first' : 'Record a take in-page; Stop ships it for calls'}
+          className="px-4 py-2.5 rounded-xl bg-rose-500 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">⏺ Record</button>
         <button type="button" onClick={openLive} disabled={busy || !cur || phase !== 'saved'}
           title={phase !== 'saved' ? 'Save a calibration first — no calibration, no calls' : 'Delayed ref: records 15s segments, shouts OUT ~30s behind reality'}
           className="px-4 py-2.5 rounded-xl bg-red-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🔴 Live</button>
@@ -796,6 +879,26 @@ export default function LiveSim() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={trackUrl} alt="ball track" className="flex-1 min-h-0 object-contain" />
           <p className="text-white/80 text-center text-[13px] py-3">🎾 {clipStatus} — tap to close</p>
+        </div>
+      )}
+      {recOn && (
+        <div className="fixed inset-0 z-[230] bg-black flex flex-col">
+          <div className="flex-1 min-h-0 relative flex items-center justify-center">
+            <div className="relative" style={{ aspectRatio: `${recVid.w}/${recVid.h}`, maxWidth: '100%', maxHeight: '100%', width: '100%' }}>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video ref={recVideoRef} playsInline muted className="absolute inset-0 w-full h-full" />
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                <path d={courtPath(yours, 1)} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                <path d={courtPath(yours, 1)} fill="none" stroke="#39FF14" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <span className="absolute left-3 top-3 px-3 py-1.5 rounded-full text-[13px] font-bold text-white bg-rose-600 animate-pulse">
+              ⏺ REC {Math.floor(recElapsed / 60)}:{String(recElapsed % 60).padStart(2, '0')}{recElapsed >= 40 ? ' · auto-stop at 0:50' : ''}</span>
+          </div>
+          <div className="flex items-center justify-center py-4 bg-black">
+            <button type="button" onClick={stopRecord}
+              className="px-8 py-3.5 rounded-2xl bg-rose-600 text-white text-[16px] font-black active:opacity-80">⏹ Stop &amp; get the call</button>
+          </div>
         </div>
       )}
       {liveOn && (
