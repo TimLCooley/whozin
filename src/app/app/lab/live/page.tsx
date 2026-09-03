@@ -360,7 +360,8 @@ export default function LiveSim() {
     } catch (err) {
       const name = (err as DOMException)?.name
       if (name === 'NotAllowedError' || name === 'SecurityError') setCamPerm('denied')
-      setStatus(camErrMsg(err))
+      // show the RAW error too — we've been guessing at Chrome's reason
+      setStatus(`${camErrMsg(err)} [${name}: ${(err as DOMException)?.message || 'no detail'}]`)
     }
   }
 
@@ -699,7 +700,10 @@ export default function LiveSim() {
         }), 1000)
       }, 60)
     } catch (err) {
-      setStatus(`⏺ ${camErrMsg(err)}`)
+      // browser camera unavailable -> the phone's own camcorder still works:
+      // the capture input opens the native video recorder and ships on OK
+      setStatus(`⏺ Browser camera blocked (${(err as DOMException)?.name ?? err}) — opening the phone's camcorder instead: record, hit OK, it uploads itself`)
+      clipInputRef.current?.click()
     }
   }
   function stopRecordUi() {
