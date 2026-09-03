@@ -7,6 +7,9 @@
 import sys, json, re, subprocess, os, tempfile
 
 VERDICT_PATTERNS = [
+    # Tim's field protocol: "camera out"/"camera in" = deliberate calls for the log
+    (r"\bcamera[,!\s]+(is |was |says )?out\b", 'OUT'),
+    (r"\bcamera[,!\s]+(is |was |says )?in\b", 'IN'),
     (r"\b(that('| i)s |it('| i)s )?(way |just |barely )?out\b", 'OUT'),
     (r"\b(that('| i)s |it('| i)s )?(way |just |barely )?(in|good)\b", 'IN'),
     (r"\bwide\b", 'OUT'),

@@ -39,7 +39,14 @@ def detect_stream(path, calib, cache):
             m = np.zeros((H, W), np.uint8)
             q = np.array(calib, np.float32) * [W, H]
             c = q.mean(0); q = c + (q - c) * 1.18
-            cv2.fillPoly(m, [q.astype(np.int32)], 1)
+            # FLIGHT PRISM: the ball arcs ABOVE the court — from an elevated
+            # mount the quad hugs the ground and the arc exits its top edge,
+            # shattering tracks. Mask = hull of the court quad + the quad
+            # shifted up by ~60% of its own height (capped at 35% of frame).
+            qh = float(q[:, 1].max() - q[:, 1].min())
+            lift = min(0.6 * qh, 0.35 * H)
+            pts = np.vstack([q, q - [0, lift]]).astype(np.int32)
+            cv2.fillPoly(m, [cv2.convexHull(pts)], 1)
             cmask = m
         frame = cv2.resize(frame, (W, H))
         gray = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (5, 5), 0)
