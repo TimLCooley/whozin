@@ -95,12 +95,27 @@ export default function LiveSim() {
   const [avail, setAvail] = useState({ w: 900, h: 520 })
 
   useEffect(() => { setMounted(true) }, [])
+  // waking from a long camcorder trip: re-sync the session from cookies so the
+  // client never renews with a stale in-memory token (rotation-race logouts)
+  useEffect(() => {
+    const wake = () => { if (document.visibilityState === 'visible') createClient().auth.getSession().catch(() => {}) }
+    document.addEventListener('visibilitychange', wake)
+    return () => document.removeEventListener('visibilitychange', wake)
+  }, [])
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const { data: { user } } = await createClient().auth.getUser()
-        const ok = user?.email ? isSuperAdmin(user.email) : false
+        // resilient auth: cookie session first (no network), one refresh
+        // retry before bouncing — a stale token after 54min in the camcorder
+        // must NOT eject a mid-session field test
+        const supa = createClient()
+        let { data: { session } } = await supa.auth.getSession()
+        if (!session) {
+          const r = await supa.auth.refreshSession().catch(() => null)
+          session = r?.data?.session ?? null
+        }
+        const ok = session?.user?.email ? isSuperAdmin(session.user.email) : false
         if (cancelled) return
         setAllowed(ok)
         if (!ok) router.replace('/app')
