@@ -424,6 +424,155 @@ export default function LiveSim() {
     setStatus('Anchor closed — pins updated to the last locked position (Save to keep)')
   }
 
+  // 🔴 Live — the delayed ref: continuous recording in ~15s segments, each
+  // relayed through the clip-call pipeline; an OUT verdict fires the cue stack
+  // (loud "OUT!" + beeps + torch blink toward the court + red screen). Honest
+  // latency: ~20-40s behind reality (relay round trip) until on-device lands.
+  const liveVideoRef = useRef<HTMLVideoElement>(null)
+  const liveStreamRef = useRef<MediaStream | null>(null)
+  const liveRunRef = useRef(false)
+  const liveRecRef = useRef<MediaRecorder | null>(null)
+  const liveSegRef = useRef(0)
+  const [liveOn, setLiveOn] = useState(false)
+  const [liveMsg, setLiveMsg] = useState('')
+  const [liveCalls, setLiveCalls] = useState<string[]>([])
+  const [liveAlert, setLiveAlert] = useState<string | null>(null)
+  const [liveVid, setLiveVid] = useState({ w: 16, h: 9 })
+  const torchRef = useRef<MediaStreamTrack | null>(null)
+
+  function beep(freq: number, ms: number, when = 0) {
+    try {
+      type AudioWin = Window & { webkitAudioContext?: typeof AudioContext }
+      const Ctor = window.AudioContext ?? (window as AudioWin).webkitAudioContext
+      if (!Ctor) return
+      const ctx = new Ctor()
+      const o = ctx.createOscillator(); const g = ctx.createGain()
+      o.frequency.value = freq; o.connect(g); g.connect(ctx.destination)
+      g.gain.value = 0.6
+      o.start(ctx.currentTime + when / 1000); o.stop(ctx.currentTime + (when + ms) / 1000)
+      setTimeout(() => ctx.close().catch(() => {}), when + ms + 300)
+    } catch { /* no audio */ }
+  }
+  async function torchBlink(times: number) {
+    const t = torchRef.current
+    if (!t) return
+    type TorchConstraints = MediaTrackConstraintSet & { torch?: boolean }
+    for (let i = 0; i < times; i++) {
+      try {
+        await t.applyConstraints({ advanced: [{ torch: true } as TorchConstraints] })
+        await new Promise((r) => setTimeout(r, 260))
+        await t.applyConstraints({ advanced: [{ torch: false } as TorchConstraints] })
+        await new Promise((r) => setTimeout(r, 200))
+      } catch { return }
+    }
+  }
+  function cueOut(text: string) {
+    beep(1400, 140); beep(1400, 140, 220)                 // whistle-whistle…
+    try {
+      const u = new SpeechSynthesisUtterance('Out!')
+      u.rate = 0.9; u.pitch = 0.8; u.volume = 1
+      setTimeout(() => speechSynthesis.speak(u), 500)     // …then the call
+    } catch { /* no speech */ }
+    torchBlink(3)                                          // court-facing cue
+    setLiveAlert(text)                                     // your-side cue
+    setTimeout(() => setLiveAlert(null), 4000)
+  }
+
+  async function openLive() {
+    if (busy || !cur) return
+    try {
+      let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+      if (zoomSel !== '1') {
+        try {
+          const devs = await navigator.mediaDevices.enumerateDevices()
+          const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
+          if (uw) video = { deviceId: { exact: uw.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        } catch { /* default lens */ }
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false })
+      liveStreamRef.current = stream
+      const track = stream.getVideoTracks()[0]
+      type TorchCaps = MediaTrackCapabilities & { torch?: boolean }
+      torchRef.current = track && (track.getCapabilities?.() as TorchCaps)?.torch ? track : null
+      liveSegRef.current = 0
+      setLiveCalls([]); setLiveMsg('🔴 LIVE — recording segment 1…'); setLiveOn(true)
+      liveRunRef.current = true
+      beep(900, 80) // audio unlock on the user gesture — later cues can then play
+      setTimeout(() => {
+        const v = liveVideoRef.current
+        if (v) {
+          v.srcObject = stream
+          v.onloadedmetadata = () => setLiveVid({ w: v.videoWidth || 16, h: v.videoHeight || 9 })
+          v.play().catch(() => {})
+        }
+        recordSegment()
+      }, 60)
+    } catch (err) {
+      setStatus(`Live needs the camera (${(err as DOMException)?.name ?? err}) — use Chrome if the app blocks it`)
+    }
+  }
+
+  function recordSegment() {
+    if (!liveRunRef.current || !liveStreamRef.current) return
+    const seg = ++liveSegRef.current
+    let rec: MediaRecorder
+    try {
+      const mime = ['video/mp4', 'video/webm;codecs=vp8', 'video/webm']
+        .find((m) => MediaRecorder.isTypeSupported(m))
+      rec = new MediaRecorder(liveStreamRef.current, { mimeType: mime, videoBitsPerSecond: 6_000_000 })
+    } catch (err) { setLiveMsg(`⚠ recorder: ${err}`); return }
+    liveRecRef.current = rec
+    const chunks: Blob[] = []
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+    rec.onstop = () => {
+      const blob = new Blob(chunks, { type: rec.mimeType })
+      if (blob.size > 20_000) shipSegment(seg, blob)
+      if (liveRunRef.current) recordSegment() // roll straight into the next one
+    }
+    rec.start()
+    setLiveMsg(`🔴 LIVE — recording segment ${seg}…`)
+    setTimeout(() => { if (rec.state !== 'inactive') rec.stop() }, 15_000)
+  }
+
+  async function shipSegment(seg: number, blob: Blob) {
+    try {
+      const buf = await blob.arrayBuffer()
+      let bin = ''
+      const bytes = new Uint8Array(buf)
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      const r = await fetch('/api/lab/live', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'clip', calib: cur, data: btoa(bin) }),
+      }).then((x) => x.json())
+      if (!r?.id) { setLiveCalls((s) => [`seg ${seg}: upload failed (${r?.error ?? '?'})`, ...s].slice(0, 12)); return }
+      const started = Date.now()
+      const poll = async () => {
+        try {
+          const g = await fetch(`/api/lab/live?id=${r.id}`).then((x) => x.json())
+          if (g?.meta?.status === 'done') {
+            const verdict: string = g.meta.verdict ?? 'no bounce'
+            const nOut = (g.meta.calls ?? []).filter((c: { verdict?: string }) => c.verdict?.startsWith('OUT')).length
+            setLiveCalls((s) => [`seg ${seg}: ${verdict}${nOut > 1 ? ` (+${nOut - 1} more out)` : ''}`, ...s].slice(0, 12))
+            if (verdict.startsWith('OUT') || nOut > 0) cueOut(verdict)
+            return
+          }
+          if (g?.meta?.status === 'error') { setLiveCalls((s) => [`seg ${seg}: error`, ...s].slice(0, 12)); return }
+        } catch { /* retry */ }
+        if (Date.now() - started < 120_000) setTimeout(poll, 4000)
+      }
+      poll()
+    } catch (err) { setLiveCalls((s) => [`seg ${seg}: ${err}`, ...s].slice(0, 12)) }
+  }
+
+  function closeLive() {
+    liveRunRef.current = false
+    if (liveRecRef.current?.state !== 'inactive') liveRecRef.current?.stop()
+    liveStreamRef.current?.getTracks().forEach((t) => t.stop())
+    liveStreamRef.current = null; torchRef.current = null
+    setLiveOn(false)
+    setStatus('Live session ended — verdicts stay in the feed above')
+  }
+
   function clearPins() { setYours(DEFAULT_GUESS); if (phase === 'saved') setPhase(claude ? 'ready' : 'manual') }
   async function reread() {
     if (!cur || busy) return
@@ -624,6 +773,9 @@ export default function LiveSim() {
         <button type="button" onClick={reread} disabled={busy || !cur}
           className="px-3 py-2.5 rounded-xl bg-[#f59e0b] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40">🔁 Re-read</button>
         <input ref={clipInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={onClipFile} />
+        <button type="button" onClick={openLive} disabled={busy || !cur || phase !== 'saved'}
+          title={phase !== 'saved' ? 'Save a calibration first — no calibration, no calls' : 'Delayed ref: records 15s segments, shouts OUT ~30s behind reality'}
+          className="px-4 py-2.5 rounded-xl bg-red-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">🔴 Live</button>
         <button type="button" onClick={openAnchor} disabled={busy || !cur || phase !== 'saved'}
           title={phase !== 'saved' ? 'Save a calibration first — Anchor keeps it locked to the paint' : 'Live viewfinder: lines re-snap to the court every few seconds'}
           className="px-4 py-2.5 rounded-xl bg-cyan-600 text-white text-[14px] font-bold active:opacity-80 disabled:opacity-40">⚓ Anchor</button>
@@ -644,6 +796,37 @@ export default function LiveSim() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={trackUrl} alt="ball track" className="flex-1 min-h-0 object-contain" />
           <p className="text-white/80 text-center text-[13px] py-3">🎾 {clipStatus} — tap to close</p>
+        </div>
+      )}
+      {liveOn && (
+        <div className="fixed inset-0 z-[220] bg-black flex flex-col">
+          <div className="flex-1 min-h-0 relative flex items-center justify-center">
+            <div className="relative" style={{ aspectRatio: `${liveVid.w}/${liveVid.h}`, maxWidth: '100%', maxHeight: '100%', width: '100%' }}>
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video ref={liveVideoRef} playsInline muted className="absolute inset-0 w-full h-full" />
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+                <path d={courtPath(yours, 1)} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                <path d={courtPath(yours, 1)} fill="none" stroke="#39FF14" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+              </svg>
+            </div>
+            {/* the verdict feed — newest first, readable from your side */}
+            <div className="absolute left-2 top-2 max-w-[70%] flex flex-col gap-1 pointer-events-none">
+              {liveCalls.slice(0, 6).map((c, i) => (
+                <span key={i} className="px-2 py-1 rounded-lg text-[12px] font-bold text-white truncate"
+                  style={{ background: c.includes('OUT') ? 'rgba(220,38,38,0.9)' : c.includes('IN ') ? 'rgba(22,163,74,0.85)' : 'rgba(0,0,0,0.55)', opacity: i === 0 ? 1 : 0.7 }}>
+                  {c}</span>
+              ))}
+            </div>
+            {liveAlert && (
+              <div className="absolute inset-0 bg-red-600/80 flex items-center justify-center pointer-events-none animate-pulse">
+                <span className="text-white font-black text-[13vw] leading-none drop-shadow-lg">OUT</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-black">
+            <span className="px-3 py-1.5 rounded-full text-[13px] font-bold text-white bg-red-600 truncate">{liveMsg}</span>
+            <button type="button" onClick={closeLive} className="px-5 py-2.5 rounded-xl bg-white/15 text-white text-[14px] font-bold shrink-0">⏹ Stop</button>
+          </div>
         </div>
       )}
       {anchorOn && (
