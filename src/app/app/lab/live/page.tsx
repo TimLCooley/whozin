@@ -253,7 +253,7 @@ export default function LiveSim() {
     if (camBlockedRef.current) { fileRef.current?.click(); return } // known blocked: go straight to picker
     try {
       let video: MediaTrackConstraints = { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
-      if (zoomSel !== '1') {
+      { // always 0.5x: prefer the ultra-wide lens
         // best effort: pick the ultra-wide back camera when 0.5x/0.7x chosen
         try {
           const devs = await navigator.mediaDevices.enumerateDevices()
@@ -425,7 +425,7 @@ export default function LiveSim() {
   // the reason a feature "needs Chrome" when we're already on Chrome.
   async function getCamStream(): Promise<MediaStream> {
     const attempts: MediaTrackConstraints[] = []
-    if (zoomSel !== '1') {
+    { // always 0.5x: prefer the ultra-wide lens
       try {
         const devs = await navigator.mediaDevices.enumerateDevices()
         const uw = devs.find((dv) => dv.kind === 'videoinput' && /ultra|wide/i.test(dv.label) && !/front/i.test(dv.label))
