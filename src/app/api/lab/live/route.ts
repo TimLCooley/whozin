@@ -113,6 +113,27 @@ export async function POST(req: NextRequest) {
     await writeMeta(admin, `${id}_comments`, cur)
     return NextResponse.json({ ok: true, n: cur.comments.length })
   }
+  if (action === 'mark') {
+    // review-page ground-truth labels: verdict at a timestamp, optionally with
+    // the tapped landing spot (normalized video coords) — training gold
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const t = Number(body?.t)
+    const verdict = body?.verdict === 'OUT' ? 'OUT' : body?.verdict === 'IN' ? 'IN' : null
+    if (!id || !Number.isFinite(t) || !verdict) return NextResponse.json({ error: 'missing id/t/verdict' }, { status: 400 })
+    const x = Number.isFinite(Number(body?.x)) ? Math.round(Number(body.x) * 10000) / 10000 : null
+    const y = Number.isFinite(Number(body?.y)) ? Math.round(Number(body.y) * 10000) / 10000 : null
+    const cur = (await readMeta(admin, `${id}_marks`)) ?? { marks: [] }
+    cur.marks = [...(cur.marks ?? []), { t: Math.round(t * 10) / 10, verdict, x, y, at: Date.now() }]
+    await writeMeta(admin, `${id}_marks`, cur)
+    return NextResponse.json({ ok: true, n: cur.marks.length })
+  }
+  if (action === 'mark_undo') {
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const cur = (await readMeta(admin, `${id}_marks`)) ?? { marks: [] }
+    cur.marks = (cur.marks ?? []).slice(0, -1)
+    await writeMeta(admin, `${id}_marks`, cur)
+    return NextResponse.json({ ok: true, n: cur.marks.length })
+  }
   if (action === 'retry') {
     // re-queue the capture for the Mac's reader (keeps any saved pins)
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
@@ -149,8 +170,10 @@ export async function GET(req: NextRequest) {
     const { data: v } = await admin.storage.from(BUCKET).createSignedUrl(`${review}_review.mp4`, 43200)
     const log = await readMeta(admin, `${review}_log`)
     const comments = await readMeta(admin, `${review}_comments`)
+    const marks = await readMeta(admin, `${review}_marks`)
     return NextResponse.json({ id: review, video_url: v?.signedUrl ?? null,
-                               log: log ?? null, comments: comments?.comments ?? [] })
+                               log: log ?? null, comments: comments?.comments ?? [],
+                               marks: marks?.marks ?? [] })
   }
   const id = String(req.nextUrl.searchParams.get('id') ?? '').replace(/[^a-z0-9]/gi, '')
   if (id) {

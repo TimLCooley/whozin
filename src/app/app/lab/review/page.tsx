@@ -14,6 +14,7 @@ import { isSuperAdmin } from '@/lib/auth'
 
 type Entry = { t: number; kind: string; text: string }
 type Comment = { t: number; text: string; at: number }
+type Mark = { t: number; verdict: 'OUT' | 'IN'; x: number | null; y: number | null; at: number }
 
 const KIND_STYLE: Record<string, { bg: string; label: string }> = {
   call: { bg: '#7c3aed', label: 'CALL' },
@@ -39,6 +40,8 @@ function ReviewInner() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])
   const [comments, setComments] = useState<Comment[]>([])
+  const [marks, setMarks] = useState<Mark[]>([])
+  const [pendingVerdict, setPendingVerdict] = useState<'OUT' | 'IN' | null>(null)
   const [title, setTitle] = useState('Match Review')
   const [filter, setFilter] = useState<'all' | 'calls' | 'talk'>('all')
   const [now, setNow] = useState(0)
@@ -71,6 +74,7 @@ function ReviewInner() {
       if (r?.log?.entries) setEntries(r.log.entries)
       if (r?.log?.title) setTitle(r.log.title)
       setComments(r?.comments ?? [])
+      setMarks(r?.marks ?? [])
     }).catch(() => {})
   }, [allowed, id])
 
@@ -79,6 +83,38 @@ function ReviewInner() {
     if (!v) return
     v.currentTime = Math.max(0, t - 2)
     v.play().catch(() => {})
+  }
+  // Label mode: tap OUT/IN while watching -> video pauses -> tap the landing
+  // spot on the video (or Skip) -> resumes. Dense ground truth, fast.
+  function startMark(verdict: 'OUT' | 'IN') {
+    const v = videoRef.current
+    if (!v) return
+    v.pause()
+    setPendingVerdict(verdict)
+  }
+  async function commitMark(x: number | null, y: number | null) {
+    const v = videoRef.current
+    if (!v || !pendingVerdict) return
+    const mark: Mark = { t: Math.round(v.currentTime * 10) / 10, verdict: pendingVerdict, x, y, at: Date.now() }
+    setMarks((m) => [...m, mark])
+    setPendingVerdict(null)
+    v.play().catch(() => {})
+    await fetch('/api/lab/live', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'mark', id, t: mark.t, verdict: mark.verdict, x, y }),
+    }).catch(() => {})
+  }
+  async function undoMark() {
+    setMarks((m) => m.slice(0, -1))
+    await fetch('/api/lab/live', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'mark_undo', id }),
+    }).catch(() => {})
+  }
+  function onVideoTap(e: React.MouseEvent<HTMLDivElement>) {
+    if (!pendingVerdict) return
+    const r = e.currentTarget.getBoundingClientRect()
+    commitMark((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)
   }
   async function sendComment() {
     if (draftAt == null || !draft.trim()) return
@@ -91,7 +127,12 @@ function ReviewInner() {
     }).catch(() => {})
   }
 
-  const shown = entries.filter((e) =>
+  const markEntries: Entry[] = marks.map((m) => ({
+    t: m.t, kind: m.verdict === 'OUT' ? 'out' : 'in',
+    text: `🏷 YOU labeled ${m.verdict}${m.x != null ? ' (spot marked)' : ''}`,
+  }))
+  const merged = [...entries, ...markEntries].sort((a, b) => a.t - b.t)
+  const shown = merged.filter((e) =>
     filter === 'all' ? true :
     filter === 'calls' ? ['call', 'out', 'in', 'rally', 'score', 'note'].includes(e.kind) :
     e.kind === 'voice')
@@ -120,15 +161,45 @@ function ReviewInner() {
             {f === 'all' ? 'Everything' : f === 'calls' ? 'Calls & notes' : 'Transcript'}</button>
         ))}
       </div>
-      <div className="shrink-0 bg-black">
+      <div className="shrink-0 bg-black flex justify-center">
         {videoUrl ? (
-          /* eslint-disable-next-line jsx-a11y/media-has-caption */
-          <video ref={videoRef} src={videoUrl} controls playsInline preload="metadata"
-            className="w-full max-h-[42vh] object-contain"
-            onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
+          <div className="relative w-full" style={{ maxHeight: '40vh', aspectRatio: '16/9', maxWidth: 'calc(40vh * 16 / 9)' }}
+            onClick={onVideoTap}>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video ref={videoRef} src={videoUrl} controls={!pendingVerdict} playsInline preload="metadata"
+              className="absolute inset-0 w-full h-full"
+              onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
+            {marks.filter((m) => m.x != null && Math.abs(now - m.t) < 1.5).map((m, i) => (
+              <div key={i} className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] pointer-events-none"
+                style={{ left: `${(m.x ?? 0) * 100}%`, top: `${(m.y ?? 0) * 100}%`,
+                         borderColor: m.verdict === 'OUT' ? '#ef4444' : '#22c55e' }} />
+            ))}
+            {pendingVerdict && (
+              <div className="absolute inset-0 flex items-start justify-center pointer-events-none" style={{ cursor: 'crosshair' }}>
+                <span className="mt-2 px-3 py-1.5 rounded-full text-[13px] font-black text-white"
+                  style={{ background: pendingVerdict === 'OUT' ? '#ef4444' : '#16a34a' }}>
+                  🎯 Tap where the ball landed</span>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="text-white/70 text-[13px] p-6 text-center">Video still uploading — the log below works meanwhile</div>
         )}
+      </div>
+      {/* Label mode: dense ground truth while you watch */}
+      <div className="shrink-0 px-3 py-1.5 flex items-center gap-2 flex-wrap bg-surface border-b border-border/30">
+        <button type="button" onClick={() => startMark('OUT')}
+          className="px-5 py-2 rounded-xl bg-red-600 text-white text-[14px] font-black active:opacity-80">🔴 OUT</button>
+        <button type="button" onClick={() => startMark('IN')}
+          className="px-5 py-2 rounded-xl bg-green-600 text-white text-[14px] font-black active:opacity-80">🟢 IN</button>
+        {pendingVerdict && (
+          <button type="button" onClick={() => commitMark(null, null)}
+            className="px-3 py-2 rounded-xl bg-surface border border-border/50 text-[13px] font-bold">Skip spot</button>
+        )}
+        <span className="text-[11px] text-muted">{marks.length} labeled</span>
+        <span className="flex-1" />
+        <button type="button" onClick={undoMark} disabled={!marks.length}
+          className="px-3 py-2 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↩ Undo</button>
       </div>
       <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 flex flex-col gap-1">
         {shown.length === 0 && (
