@@ -152,13 +152,33 @@ function ReviewInner() {
     }).catch(() => {})
   }
 
+  // whisper timestamps wander on long files — user-tunable offset applied to
+  // every transcript-derived entry (voice, heard scores, 🎤 notes)
+  const [voiceOff, setVoiceOff] = useState<number>(() => {
+    try { return Number(localStorage.getItem('reviewVoiceOff') ?? 0) || 0 } catch { return 0 }
+  })
+  function nudgeVoice(d: number) {
+    const v = Math.round((voiceOff + d) * 10) / 10
+    setVoiceOff(v)
+    try { localStorage.setItem('reviewVoiceOff', String(v)) } catch { /* private mode */ }
+  }
   const markEntries: Entry[] = marks
     .filter((m) => m.verdict !== 'BALL') // ball-position marks are training data, not timeline events
     .map((m) => m.kind === 'score'
       ? { t: m.t, kind: 'score', text: `🏷 SCORE ${m.a}–${m.b}–${m.srv}` }
       : { t: m.t, kind: m.verdict === 'OUT' ? 'out' : m.verdict === 'IN' ? 'in' : 'net',
           text: `🏷 YOU labeled ${m.verdict}${m.x != null ? ' (spot marked)' : ''}` })
-  const merged = [...entries, ...markEntries].sort((a, b) => a.t - b.t)
+  const isVoiceDerived = (e: Entry) => e.kind === 'voice' || e.kind === 'score' || e.text.startsWith('🎤')
+  const shifted = entries.map((e) => (isVoiceDerived(e) ? { ...e, t: Math.max(0, e.t + voiceOff) } : e))
+  const merged = [...shifted, ...markEntries].sort((a, b) => a.t - b.t)
+  // OUT bookmarks: every out-moment (your labels, camera calls, machine outs)
+  const outTimes = merged.filter((e) => e.kind === 'out' || e.text.includes('CAMERA CALL: OUT')).map((e) => e.t)
+  function jumpOut(dir: 1 | -1) {
+    if (!outTimes.length) return
+    const t = dir === 1 ? (outTimes.find((x) => x > now + 2.5) ?? outTimes[0])
+                        : ([...outTimes].reverse().find((x) => x < now - 2.5) ?? outTimes[outTimes.length - 1])
+    seek(t)
+  }
   const shown = merged.filter((e) =>
     filter === 'all' ? true :
     filter === 'calls' ? ['call', 'out', 'in', 'rally', 'score', 'note'].includes(e.kind) :
@@ -180,6 +200,15 @@ function ReviewInner() {
       <AppHeader showBack />
       <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
         <span className="text-[10px] font-bold uppercase tracking-wide text-violet-700 bg-violet-100 px-2 py-0.5 rounded-full">{title}</span>
+        <button type="button" onClick={() => jumpOut(-1)}
+          className="px-2.5 py-1 rounded-full text-[11px] font-black bg-red-600 text-white active:opacity-70">⏮ OUT</button>
+        <button type="button" onClick={() => jumpOut(1)}
+          className="px-2.5 py-1 rounded-full text-[11px] font-black bg-red-600 text-white active:opacity-70">OUT ⏭</button>
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={() => nudgeVoice(-1)} className="px-1.5 py-1 rounded-lg text-[11px] font-bold bg-surface border border-border/50">🎤−1s</button>
+          <span className="text-[10px] text-muted tabular-nums w-8 text-center">{voiceOff > 0 ? '+' : ''}{voiceOff}s</span>
+          <button type="button" onClick={() => nudgeVoice(1)} className="px-1.5 py-1 rounded-lg text-[11px] font-bold bg-surface border border-border/50">🎤+1s</button>
+        </div>
         <span className="flex-1" />
         {(['all', 'calls', 'talk'] as const).map((f) => (
           <button key={f} type="button" onClick={() => setFilter(f)}
