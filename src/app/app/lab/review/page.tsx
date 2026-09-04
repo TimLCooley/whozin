@@ -14,7 +14,8 @@ import { isSuperAdmin } from '@/lib/auth'
 
 type Entry = { t: number; kind: string; text: string }
 type Comment = { t: number; text: string; at: number }
-type Mark = { t: number; verdict: 'OUT' | 'IN'; x: number | null; y: number | null; at: number }
+type Mark = { t: number; verdict?: 'OUT' | 'IN'; x?: number | null; y?: number | null;
+  kind?: string; a?: number; b?: number; srv?: number; at: number }
 
 const KIND_STYLE: Record<string, { bg: string; label: string }> = {
   call: { bg: '#7c3aed', label: 'CALL' },
@@ -116,6 +117,19 @@ function ReviewInner() {
     const r = e.currentTarget.getBoundingClientRect()
     commitMark((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height)
   }
+  // scoreboard: tap a team to give them the point — logs the new score at the
+  // current video time; the transcript's heard scores verify it later
+  const [score, setScore] = useState({ a: 0, b: 0, srv: 1 })
+  async function logScore(next: { a: number; b: number; srv: number }) {
+    setScore(next)
+    const v = videoRef.current
+    const t = Math.round((v?.currentTime ?? 0) * 10) / 10
+    setMarks((m) => [...m, { t, kind: 'score', a: next.a, b: next.b, srv: next.srv, at: Date.now() }])
+    await fetch('/api/lab/live', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'score_mark', id, t, a: next.a, b: next.b, srv: next.srv }),
+    }).catch(() => {})
+  }
   async function sendComment() {
     if (draftAt == null || !draft.trim()) return
     const text = draft.trim()
@@ -127,10 +141,10 @@ function ReviewInner() {
     }).catch(() => {})
   }
 
-  const markEntries: Entry[] = marks.map((m) => ({
-    t: m.t, kind: m.verdict === 'OUT' ? 'out' : 'in',
-    text: `🏷 YOU labeled ${m.verdict}${m.x != null ? ' (spot marked)' : ''}`,
-  }))
+  const markEntries: Entry[] = marks.map((m) => m.kind === 'score'
+    ? { t: m.t, kind: 'score', text: `🏷 SCORE ${m.a}–${m.b}–${m.srv}` }
+    : { t: m.t, kind: m.verdict === 'OUT' ? 'out' : 'in',
+        text: `🏷 YOU labeled ${m.verdict}${m.x != null ? ' (spot marked)' : ''}` })
   const merged = [...entries, ...markEntries].sort((a, b) => a.t - b.t)
   const shown = merged.filter((e) =>
     filter === 'all' ? true :
@@ -198,6 +212,19 @@ function ReviewInner() {
         )}
         <span className="text-[11px] text-muted">{marks.length} labeled</span>
         <span className="flex-1" />
+        {/* scoreboard: tap a side when they score; − fixes mistakes */}
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => logScore({ ...score, a: score.a + 1 })}
+            className="px-3 py-2 rounded-xl bg-blue-600 text-white text-[14px] font-black active:opacity-80">Us {score.a}</button>
+          <button type="button" onClick={() => logScore({ ...score, a: Math.max(0, score.a - 1) })}
+            className="px-1.5 py-2 rounded-lg text-[12px] font-bold text-blue-600">−</button>
+          <button type="button" onClick={() => logScore({ ...score, b: score.b + 1 })}
+            className="px-3 py-2 rounded-xl bg-amber-600 text-white text-[14px] font-black active:opacity-80">Them {score.b}</button>
+          <button type="button" onClick={() => logScore({ ...score, b: Math.max(0, score.b - 1) })}
+            className="px-1.5 py-2 rounded-lg text-[12px] font-bold text-amber-600">−</button>
+          <button type="button" onClick={() => logScore({ ...score, srv: score.srv === 1 ? 2 : 1 })}
+            className="px-2.5 py-2 rounded-xl bg-surface border border-border/50 text-[12px] font-bold">srv {score.srv}</button>
+        </div>
         <button type="button" onClick={undoMark} disabled={!marks.length}
           className="px-3 py-2 rounded-xl bg-surface border border-border/50 text-[13px] font-bold disabled:opacity-40">↩ Undo</button>
       </div>

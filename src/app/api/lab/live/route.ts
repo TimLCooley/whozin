@@ -127,6 +127,21 @@ export async function POST(req: NextRequest) {
     await writeMeta(admin, `${id}_marks`, cur)
     return NextResponse.json({ ok: true, n: cur.marks.length })
   }
+  if (action === 'score_mark') {
+    // scoreboard timeline: Tim confirms the score at a video timestamp
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const t = Number(body?.t)
+    const a = Number(body?.a); const b = Number(body?.b); const srv = Number(body?.srv)
+    if (!id || !Number.isFinite(t) || !Number.isFinite(a) || !Number.isFinite(b)) {
+      return NextResponse.json({ error: 'missing id/t/score' }, { status: 400 })
+    }
+    const cur = (await readMeta(admin, `${id}_marks`)) ?? { marks: [] }
+    cur.marks = [...(cur.marks ?? []), { t: Math.round(t * 10) / 10, kind: 'score',
+      a: Math.max(0, Math.min(99, Math.round(a))), b: Math.max(0, Math.min(99, Math.round(b))),
+      srv: srv === 2 ? 2 : 1, at: Date.now() }]
+    await writeMeta(admin, `${id}_marks`, cur)
+    return NextResponse.json({ ok: true, n: cur.marks.length })
+  }
   if (action === 'mark_undo') {
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
     const cur = (await readMeta(admin, `${id}_marks`)) ?? { marks: [] }
