@@ -14,7 +14,8 @@ import { isSuperAdmin } from '@/lib/auth'
 
 type Entry = { t: number; kind: string; text: string }
 type Comment = { t: number; text: string; at: number }
-type Mark = { t: number; verdict?: 'OUT' | 'IN'; x?: number | null; y?: number | null;
+type Verdict = 'OUT' | 'IN' | 'NET' | 'BALL'
+type Mark = { t: number; verdict?: Verdict; x?: number | null; y?: number | null;
   kind?: string; a?: number; b?: number; srv?: number; at: number }
 
 const KIND_STYLE: Record<string, { bg: string; label: string }> = {
@@ -25,6 +26,7 @@ const KIND_STYLE: Record<string, { bg: string; label: string }> = {
   score: { bg: '#d97706', label: 'SCORE' },
   voice: { bg: '#64748b', label: '🎤' },
   note: { bg: '#334155', label: 'NOTE' },
+  net: { bg: '#f97316', label: 'NET' },
 }
 
 function fmt(t: number) {
@@ -42,7 +44,7 @@ function ReviewInner() {
   const [entries, setEntries] = useState<Entry[]>([])
   const [comments, setComments] = useState<Comment[]>([])
   const [marks, setMarks] = useState<Mark[]>([])
-  const [pendingVerdict, setPendingVerdict] = useState<'OUT' | 'IN' | null>(null)
+  const [pendingVerdict, setPendingVerdict] = useState<Verdict | null>(null)
   const [title, setTitle] = useState('Match Review')
   const [filter, setFilter] = useState<'all' | 'calls' | 'talk'>('all')
   const [now, setNow] = useState(0)
@@ -87,19 +89,28 @@ function ReviewInner() {
   }
   // Label mode: tap OUT/IN while watching -> video pauses -> tap the landing
   // spot on the video (or Skip) -> resumes. Dense ground truth, fast.
-  function startMark(verdict: 'OUT' | 'IN') {
+  function startMark(verdict: Verdict) {
     const v = videoRef.current
     if (!v) return
     v.pause()
     setPendingVerdict(verdict)
   }
+  // frame stepping: nail the exact contact frame before tapping the spot
+  function step(frames: number) {
+    const v = videoRef.current
+    if (!v) return
+    v.pause()
+    v.currentTime = Math.max(0, v.currentTime + frames / 30)
+  }
   async function commitMark(x: number | null, y: number | null) {
     const v = videoRef.current
     if (!v || !pendingVerdict) return
-    const mark: Mark = { t: Math.round(v.currentTime * 10) / 10, verdict: pendingVerdict, x, y, at: Date.now() }
+    const mark: Mark = { t: Math.round(v.currentTime * 100) / 100, verdict: pendingVerdict, x, y, at: Date.now() }
     setMarks((m) => [...m, mark])
+    const wasBall = pendingVerdict === 'BALL'
     setPendingVerdict(null)
-    v.play().catch(() => {})
+    if (wasBall) setPendingVerdict('BALL') // stay in ball mode: step frames, keep tapping
+    else v.play().catch(() => {})
     await fetch('/api/lab/live', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'mark', id, t: mark.t, verdict: mark.verdict, x, y }),
@@ -141,10 +152,12 @@ function ReviewInner() {
     }).catch(() => {})
   }
 
-  const markEntries: Entry[] = marks.map((m) => m.kind === 'score'
-    ? { t: m.t, kind: 'score', text: `🏷 SCORE ${m.a}–${m.b}–${m.srv}` }
-    : { t: m.t, kind: m.verdict === 'OUT' ? 'out' : 'in',
-        text: `🏷 YOU labeled ${m.verdict}${m.x != null ? ' (spot marked)' : ''}` })
+  const markEntries: Entry[] = marks
+    .filter((m) => m.verdict !== 'BALL') // ball-position marks are training data, not timeline events
+    .map((m) => m.kind === 'score'
+      ? { t: m.t, kind: 'score', text: `🏷 SCORE ${m.a}–${m.b}–${m.srv}` }
+      : { t: m.t, kind: m.verdict === 'OUT' ? 'out' : m.verdict === 'IN' ? 'in' : 'net',
+          text: `🏷 YOU labeled ${m.verdict}${m.x != null ? ' (spot marked)' : ''}` })
   const merged = [...entries, ...markEntries].sort((a, b) => a.t - b.t)
   const shown = merged.filter((e) =>
     filter === 'all' ? true :
@@ -183,10 +196,12 @@ function ReviewInner() {
             <video ref={videoRef} src={videoUrl} controls={!pendingVerdict} playsInline preload="metadata"
               className="absolute inset-0 w-full h-full"
               onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
-            {marks.filter((m) => m.x != null && Math.abs(now - m.t) < 1.5).map((m, i) => (
-              <div key={i} className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] pointer-events-none"
+            {marks.filter((m) => m.x != null && Math.abs(now - m.t) < (m.verdict === 'BALL' ? 0.12 : 1.5)).map((m, i) => (
+              <div key={i} className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] pointer-events-none"
                 style={{ left: `${(m.x ?? 0) * 100}%`, top: `${(m.y ?? 0) * 100}%`,
-                         borderColor: m.verdict === 'OUT' ? '#ef4444' : '#22c55e' }} />
+                         width: m.verdict === 'BALL' ? 14 : 24, height: m.verdict === 'BALL' ? 14 : 24,
+                         borderColor: m.verdict === 'OUT' ? '#ef4444' : m.verdict === 'IN' ? '#22c55e'
+                                    : m.verdict === 'NET' ? '#f97316' : '#eab308' }} />
             ))}
             {pendingVerdict && (
               <div className="absolute inset-0 flex items-start justify-center pointer-events-none" style={{ cursor: 'crosshair' }}>
@@ -206,7 +221,19 @@ function ReviewInner() {
           className="px-5 py-2 rounded-xl bg-red-600 text-white text-[14px] font-black active:opacity-80">🔴 OUT</button>
         <button type="button" onClick={() => startMark('IN')}
           className="px-5 py-2 rounded-xl bg-green-600 text-white text-[14px] font-black active:opacity-80">🟢 IN</button>
-        {pendingVerdict && (
+        <button type="button" onClick={() => startMark('NET')}
+          className="px-3 py-2 rounded-xl bg-orange-500 text-white text-[13px] font-black active:opacity-80">🥅 NET</button>
+        <button type="button" onClick={() => (pendingVerdict === 'BALL' ? (setPendingVerdict(null), videoRef.current?.play().catch(() => {})) : startMark('BALL'))}
+          className="px-3 py-2 rounded-xl text-[13px] font-black active:opacity-80"
+          style={pendingVerdict === 'BALL' ? { background: '#eab308', color: '#000' } : { background: '#fef08a', color: '#713f12' }}>
+          {pendingVerdict === 'BALL' ? '🎾 done' : '🎾 BALL'}</button>
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={() => step(-30)} className="px-2 py-2 rounded-lg bg-surface border border-border/50 text-[12px] font-bold">−1s</button>
+          <button type="button" onClick={() => step(-1)} className="px-2 py-2 rounded-lg bg-surface border border-border/50 text-[12px] font-bold">‹f</button>
+          <button type="button" onClick={() => step(1)} className="px-2 py-2 rounded-lg bg-surface border border-border/50 text-[12px] font-bold">f›</button>
+          <button type="button" onClick={() => step(30)} className="px-2 py-2 rounded-lg bg-surface border border-border/50 text-[12px] font-bold">+1s</button>
+        </div>
+        {pendingVerdict && pendingVerdict !== 'BALL' && (
           <button type="button" onClick={() => commitMark(null, null)}
             className="px-3 py-2 rounded-xl bg-surface border border-border/50 text-[13px] font-bold">Skip spot</button>
         )}

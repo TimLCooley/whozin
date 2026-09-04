@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     // the tapped landing spot (normalized video coords) — training gold
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
     const t = Number(body?.t)
-    const verdict = body?.verdict === 'OUT' ? 'OUT' : body?.verdict === 'IN' ? 'IN' : null
+    const verdict = ['OUT', 'IN', 'NET', 'BALL'].includes(body?.verdict) ? body.verdict : null
     if (!id || !Number.isFinite(t) || !verdict) return NextResponse.json({ error: 'missing id/t/verdict' }, { status: 400 })
     const x = Number.isFinite(Number(body?.x)) ? Math.round(Number(body.x) * 10000) / 10000 : null
     const y = Number.isFinite(Number(body?.y)) ? Math.round(Number(body.y) * 10000) / 10000 : null
