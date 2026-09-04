@@ -29,6 +29,7 @@ const EV_STYLE: Record<string, { bg: string; label: string }> = {
   bookmark: { bg: '#9333ea', label: '🔖' },
   note: { bg: '#334155', label: 'NOTE' },
   ball: { bg: '#eab308', label: '🎾' },
+  game: { bg: '#7c3aed', label: 'GAME' },
 }
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`
 
@@ -325,7 +326,8 @@ function FilmRoom() {
         <button type="button" onClick={() => startSpot('out')} className="px-4 py-2 rounded-xl bg-red-600 text-white text-[14px] font-black active:opacity-80">🔴 OUT</button>
         <button type="button" onClick={markNet} className="px-3 py-2 rounded-xl bg-red-400 text-white text-[13px] font-black active:opacity-80">🥅 net-out</button>
         <button type="button" onClick={markServe} className="px-3 py-2 rounded-xl bg-cyan-600 text-white text-[13px] font-black active:opacity-80">▶ serve</button>
-        <button type="button" onClick={() => startSpot('in')} className="px-3 py-2 rounded-xl bg-green-600 text-white text-[13px] font-bold active:opacity-80">👀 close-in</button>
+        <button type="button" onClick={() => putEvent({ t: tNow(), type: 'game', cause: 'start' })} className="px-3 py-2 rounded-xl bg-violet-600 text-white text-[13px] font-black active:opacity-80">🎮 game</button>
+        <button type="button" onClick={() => putEvent({ t: tNow(), type: 'game', cause: 'end' })} className="px-3 py-2 rounded-xl bg-violet-400 text-white text-[13px] font-black active:opacity-80">🏁 end</button>
         <button type="button" onClick={markBookmark} className="px-3 py-2 rounded-xl bg-purple-600 text-white text-[13px] font-black active:opacity-80">🔖</button>
         {pending && pending !== 'ball' && (
           <button type="button" onClick={() => commitSpot(null, null)} className="px-2.5 py-2 rounded-xl bg-surface border border-border/50 text-[12px] font-bold">Skip spot</button>
@@ -385,6 +387,7 @@ function FilmRoom() {
             const desc = e.type === 'score' ? `${e.a}–${e.b}–${e.srv}`
               : e.type === 'out' ? `${e.cause === 'net' ? 'net' : 'out of bounds'}${spotDesc(calib, e.x, e.y)}`
               : e.type === 'serve' ? (rallyOf(e) ?? '')
+              : e.type === 'game' ? (e.cause === 'end' ? '🏁 GAME OVER' : '🎮 GAME START')
               : e.type === 'in' ? `close ball stayed in${spotDesc(calib, e.x, e.y)}`
               : e.text ?? ''
             return (

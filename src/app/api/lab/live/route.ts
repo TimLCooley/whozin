@@ -118,12 +118,12 @@ export async function POST(req: NextRequest) {
     const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
     const ev = body?.event
     if (!id || !ev || !Number.isFinite(Number(ev.t))) return NextResponse.json({ error: 'missing id/event' }, { status: 400 })
-    const type = ['serve', 'out', 'in', 'score', 'bookmark', 'ball', 'note'].includes(ev.type) ? ev.type : null
+    const type = ['serve', 'out', 'in', 'score', 'bookmark', 'ball', 'note', 'game'].includes(ev.type) ? ev.type : null
     if (!type) return NextResponse.json({ error: 'bad type' }, { status: 400 })
     const clean = {
       eid: String(ev.eid ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`).slice(0, 24),
       t: Math.round(Number(ev.t) * 100) / 100, type,
-      cause: ['line', 'net'].includes(ev.cause) ? ev.cause : undefined,
+      cause: ['line', 'net', 'start', 'end'].includes(ev.cause) ? ev.cause : undefined,
       x: Number.isFinite(Number(ev.x)) ? Math.round(Number(ev.x) * 10000) / 10000 : undefined,
       y: Number.isFinite(Number(ev.y)) ? Math.round(Number(ev.y) * 10000) / 10000 : undefined,
       a: Number.isFinite(Number(ev.a)) ? Math.round(Number(ev.a)) : undefined,
