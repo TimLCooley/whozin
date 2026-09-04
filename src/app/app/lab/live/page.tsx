@@ -896,6 +896,8 @@ export default function LiveSim() {
       <AppHeader showBack />
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 flex-wrap">
         <span className="text-[10px] font-bold uppercase tracking-wide text-violet-700 bg-violet-100 px-2 py-0.5 rounded-full whitespace-nowrap">Live Sim · courtside</span>
+        <button type="button" onClick={() => router.push('/app/lab/review')}
+          className="px-3 py-1 rounded-full text-[12px] font-bold border-2 border-violet-500 text-violet-600 active:opacity-70">📋 Review</button>
         <span className="px-3 py-1 rounded-full text-[12px] font-bold text-white truncate"
           style={{ background: phase === 'reading' || phase === 'uploading' ? '#f59e0b' : phase === 'ready' ? '#0891b2' : phase === 'manual' ? '#ef4444' : phase === 'saved' ? '#00C853' : '#64748b' }}>
           {(phase === 'reading' || phase === 'uploading') ? '⏳ ' : ''}{status}</span>
