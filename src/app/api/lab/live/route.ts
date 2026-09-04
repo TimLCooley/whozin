@@ -113,6 +113,50 @@ export async function POST(req: NextRequest) {
     await writeMeta(admin, `${id}_comments`, cur)
     return NextResponse.json({ ok: true, n: cur.comments.length })
   }
+  if (action === 'event_put') {
+    // Film Room events: the single editable truth stream. Upsert by eid.
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const ev = body?.event
+    if (!id || !ev || !Number.isFinite(Number(ev.t))) return NextResponse.json({ error: 'missing id/event' }, { status: 400 })
+    const type = ['serve', 'out', 'in', 'score', 'bookmark', 'ball', 'note'].includes(ev.type) ? ev.type : null
+    if (!type) return NextResponse.json({ error: 'bad type' }, { status: 400 })
+    const clean = {
+      eid: String(ev.eid ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`).slice(0, 24),
+      t: Math.round(Number(ev.t) * 100) / 100, type,
+      cause: ['line', 'net'].includes(ev.cause) ? ev.cause : undefined,
+      x: Number.isFinite(Number(ev.x)) ? Math.round(Number(ev.x) * 10000) / 10000 : undefined,
+      y: Number.isFinite(Number(ev.y)) ? Math.round(Number(ev.y) * 10000) / 10000 : undefined,
+      a: Number.isFinite(Number(ev.a)) ? Math.round(Number(ev.a)) : undefined,
+      b: Number.isFinite(Number(ev.b)) ? Math.round(Number(ev.b)) : undefined,
+      srv: ev.srv === 2 ? 2 : ev.srv === 1 ? 1 : undefined,
+      text: typeof ev.text === 'string' ? ev.text.slice(0, 500) : undefined,
+      src: ev.src === 'machine' ? 'machine' : 'tim',
+      at: Date.now(),
+    }
+    const cur = (await readMeta(admin, `${id}_events`)) ?? { events: [] }
+    const events = (cur.events ?? []).filter((e: { eid?: string }) => e.eid !== clean.eid)
+    events.push(clean)
+    events.sort((a: { t: number }, b: { t: number }) => a.t - b.t)
+    await writeMeta(admin, `${id}_events`, { events })
+    return NextResponse.json({ ok: true, eid: clean.eid, n: events.length })
+  }
+  if (action === 'review_calib') {
+    // court pins placed on the review video itself — labels project to feet
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const pins = Array.isArray(body?.pins) && body.pins.length === 4 ? body.pins : null
+    if (!id || !pins) return NextResponse.json({ error: 'missing id/pins' }, { status: 400 })
+    await writeMeta(admin, `${id}_calib`, { pins, at: Date.now() })
+    return NextResponse.json({ ok: true })
+  }
+  if (action === 'event_del') {
+    const id = String(body?.id ?? '').replace(/[^a-z0-9]/gi, '')
+    const eid = String(body?.eid ?? '').slice(0, 24)
+    if (!id || !eid) return NextResponse.json({ error: 'missing id/eid' }, { status: 400 })
+    const cur = (await readMeta(admin, `${id}_events`)) ?? { events: [] }
+    const events = (cur.events ?? []).filter((e: { eid?: string }) => e.eid !== eid)
+    await writeMeta(admin, `${id}_events`, { events })
+    return NextResponse.json({ ok: true, n: events.length })
+  }
   if (action === 'mark') {
     // review-page ground-truth labels: verdict at a timestamp, optionally with
     // the tapped landing spot (normalized video coords) — training gold
@@ -185,10 +229,27 @@ export async function GET(req: NextRequest) {
     const { data: v } = await admin.storage.from(BUCKET).createSignedUrl(`${review}_review.mp4`, 43200)
     const log = await readMeta(admin, `${review}_log`)
     const comments = await readMeta(admin, `${review}_comments`)
-    const marks = await readMeta(admin, `${review}_marks`)
+    let evfile = await readMeta(admin, `${review}_events`)
+    if (!evfile) {
+      // one-time migration: old marks become Film Room events (net = out/net,
+      // Tim's grammar: rallies are serve->out spans, IN is a close-ball note)
+      const marks = (await readMeta(admin, `${review}_marks`))?.marks ?? []
+      type OldMark = { t: number; verdict?: string; kind?: string; x?: number; y?: number; a?: number; b?: number; srv?: number }
+      const events = (marks as OldMark[]).map((m, i) => {
+        const eid = `mig${i}`
+        if (m.kind === 'score') return { eid, t: m.t, type: 'score', a: m.a, b: m.b, srv: m.srv, src: 'tim', at: Date.now() }
+        if (m.verdict === 'OUT') return { eid, t: m.t, type: 'out', cause: 'line', x: m.x, y: m.y, src: 'tim', at: Date.now() }
+        if (m.verdict === 'NET') return { eid, t: m.t, type: 'out', cause: 'net', x: m.x, y: m.y, src: 'tim', at: Date.now() }
+        if (m.verdict === 'IN') return { eid, t: m.t, type: 'in', x: m.x, y: m.y, src: 'tim', at: Date.now() }
+        return { eid, t: m.t, type: 'ball', x: m.x, y: m.y, src: 'tim', at: Date.now() }
+      })
+      evfile = { events }
+      await writeMeta(admin, `${review}_events`, evfile)
+    }
+    const calib = await readMeta(admin, `${review}_calib`)
     return NextResponse.json({ id: review, video_url: v?.signedUrl ?? null,
                                log: log ?? null, comments: comments?.comments ?? [],
-                               marks: marks?.marks ?? [] })
+                               events: evfile?.events ?? [], calib: calib?.pins ?? null })
   }
   const id = String(req.nextUrl.searchParams.get('id') ?? '').replace(/[^a-z0-9]/gi, '')
   if (id) {
